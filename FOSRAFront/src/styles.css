@@ -1,0 +1,277 @@
+@import 'tailwindcss';
+@import "tw-animate-css";
+
+/* Custom variant for dark mode */
+@custom-variant dark (&:is(.dark *));
+
+/* Base border color for all elements */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(#4C482A);
+  }
+}
+
+/* Enable native color scheme switching */
+html {
+  color-scheme: light dark;
+}
+
+/* Global element styles with debug colors */
+* {
+  /* biome-ignore lint: Tailwind syntax required */
+  @apply border-b-neutral-50 dark:border-orange-400;
+}
+body {
+  /* biome-ignore lint: Tailwind syntax required */
+  @apply bg-gray-50 text-gray-950 dark:bg-gray-900 dark:text-gray-200;
+}
+
+/* Source streamdown components */
+@source "../node_modules/streamdown/dist/*.js";
+
+/* Map base CSS variables to Tailwind color tokens */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* MAIN: oklch(0.73 0.16 59)
+/* SECONDARY: oklch(0.90 0.03 100)
+/* TERTIARY: oklch(0.78 0.03 90)
+ * QUARTENARY: oklch(0.66 0.23 34)
+ * CONTRAST:oklch(0.43 0.01 85)
+ *
+/* Light mode - High contrast debug colors */
+:root {
+  --radius: 0.625rem;
+  
+  /* Light mode - High contrast debug colors */
+  --background: #E2DFCA;        /* Bright cyan */
+  --foreground: #5C562B;        /* Deep purple */
+  --card: #4C482A;              /* Bright yellow */
+  --card-foreground: #3D3310;
+  --popover: #E2DFCA;           /* Hot pink */
+  --popover-foreground: #260A1F;
+  --primary: #D5D1B3;           /* Vivid blue */
+  --primary-foreground: #FAFCFE;
+  --secondary: #C5C096;         /* Lime green */
+  --secondary-foreground: #1F3D10;
+  --muted: #F5954D;             /* Lavender */
+  --muted-foreground: #3D3310;
+  --accent: #C5C096;            /* Orange */
+  --accent-foreground: #261A0A;
+  --destructive: #F54D4D;       /* Bright red */
+  --border: #C5C096;            /* Teal */
+  --input: #C5C096;             /* Magenta */
+  --ring: #FAFCFE;              /* Gold */
+  
+  /* Charts */
+  --chart-1: #F5554D;           /* Red */
+  --chart-2: #4DF5C5;           /* Turquoise */
+  --chart-3: #4D5DF5;           /* Blue */
+  --chart-4: #C5F54D;           /* Yellow-green */
+  --chart-5: #F5954D;           /* Orange-red */
+  
+  /* Sidebar */
+  --sidebar: #BEB7A4;
+  --sidebar-foreground: #3D2D5A;
+  --sidebar-primary: #F5954D;
+  --sidebar-primary-foreground: #F5F0FA;
+  --sidebar-accent: #D5D1B3;
+  --sidebar-accent-foreground: #4D3D6B;
+  --sidebar-border: #6D4DF5;
+  --sidebar-ring: #C5C096;
+}
+
+.dark {
+  /* Dark mode - Different high contrast debug colors */
+  --background: #1A2D5A;        /* Deep navy */
+  --foreground: #5DD5F5;        /* Bright cyan */
+  --card: #2D5A5A;              /* Dark teal */
+  --card-foreground: #85E5E5;
+  --popover: #3D1A3D;           /* Dark magenta */
+  --popover-foreground: #E595E5;
+  --primary: #95F57A;           /* Bright lime */
+  --primary-foreground: #1A2610;
+  --secondary: #F5A54D;         /* Bright orange */
+  --secondary-foreground: #261A0A;
+  --muted: #3D2D5A;             /* Dark purple */
+  --muted-foreground: #B595D5;
+  --accent: #F54DB8;            /* Hot pink */
+  --accent-foreground: #260A1F;
+  --destructive: #F5854D;       /* Bright coral */
+  --border: #95F57A;            /* Yellow-green */
+  --input: #5DA5F5;             /* Sky blue */
+  --ring: #E5F54D;              /* Electric yellow */
+  
+  /* Charts */
+  --chart-1: #F54DB8;           /* Hot pink */
+  --chart-2: #4DF5C5;           /* Bright turquoise */
+  --chart-3: #E5F54D;           /* Bright yellow */
+  --chart-4: #B54DF5;           /* Electric purple */
+  --chart-5: #F5754D;           /* Bright orange */
+  
+  /* Sidebar */
+  --sidebar: #3D5A2D;
+  --sidebar-foreground: #95E585;
+  --sidebar-primary: #95F57A;
+  --sidebar-primary-foreground: #1A2610;
+  --sidebar-accent: #4D6B3D;
+  --sidebar-accent-foreground: #95E585;
+  --sidebar-border: #6B9555;
+  --sidebar-ring: #A5F585;
+}
+/* Apply theme variables to base elements */
+@layer base {
+  * {
+    /* biome-ignore lint: Tailwind syntax required */
+    @apply border-border outline-ring/50;
+  }
+  body {
+    /* biome-ignore lint: Tailwind syntax required */
+    @apply bg-background text-foreground;
+  }
+}
+
+
+
+/* DEBUG COLORS /*
+
+/* :root { */
+/*   --radius: 0.625rem; */
+/**/
+/*   /* Light mode - High contrast debug colors */ 
+/*   --background: #5DD5F5;        /* Bright cyan */ 
+/*   --foreground: #4D2D7A;        /* Deep purple */ 
+/*   --card: #F5E84D;              /* Bright yellow */ 
+/*   --card-foreground: #3D3310; */
+/*   --popover: #F54DB8;           /* Hot pink */ 
+/*   --popover-foreground: #260A1F; */
+/*   --primary: #2D4DF5;           /* Vivid blue */ 
+/*   --primary-foreground: #FAFCFE; */
+/*   --secondary: #7AF54D;         /* Lime green */ 
+/*   --secondary-foreground: #1F3D10; */
+/*   --muted: #C57AF5;             /* Lavender */ 
+/*   --muted-foreground: #6B4D8A; */
+/*   --accent: #F5A54D;            /* Orange */ 
+/*   --accent-foreground: #261A0A; */
+/*   --destructive: #F54D4D;       /* Bright red */ 
+/*   --border: #4DD5D5;            /* Teal */ 
+/*   --input: #F54DE8;             /* Magenta */ 
+/*   --ring: #E8F54D;              /* Gold */ 
+/**/
+/*   /* Charts */ 
+/*   --chart-1: #F5554D;           /* Red */ 
+/*   --chart-2: #4DF5C5;           /* Turquoise */ 
+/*   --chart-3: #4D5DF5;           /* Blue */ 
+/*   --chart-4: #C5F54D;           /* Yellow-green */ 
+/*   --chart-5: #F5954D;           /* Orange-red */ 
+/**/
+/*   /* Sidebar */ 
+/*   --sidebar: #B57AF5; */
+/*   --sidebar-foreground: #3D2D5A; */
+/*   --sidebar-primary: #6D4DF5; */
+/*   --sidebar-primary-foreground: #F5F0FA; */
+/*   --sidebar-accent: #C595F5; */
+/*   --sidebar-accent-foreground: #4D3D6B; */
+/*   --sidebar-border: #9565E5; */
+/*   --sidebar-ring: #8555F5; */
+/* } */
+/**/
+/* .dark { */
+/*   /* Dark mode - Different high contrast debug colors */ 
+/*   --background: #1A2D5A;        /* Deep navy */ 
+/*   --foreground: #5DD5F5;        /* Bright cyan */ 
+/*   --card: #2D5A5A;              /* Dark teal */ 
+/*   --card-foreground: #85E5E5; */
+/*   --popover: #3D1A3D;           /* Dark magenta */ 
+/*   --popover-foreground: #E595E5; */
+/*   --primary: #95F57A;           /* Bright lime */ 
+/*   --primary-foreground: #1A2610; */
+/*   --secondary: #F5A54D;         /* Bright orange */ 
+/*   --secondary-foreground: #261A0A; */
+/*   --muted: #3D2D5A;             /* Dark purple */ 
+/*   --muted-foreground: #B595D5; */
+/*   --accent: #F54DB8;            /* Hot pink */ 
+/*   --accent-foreground: #260A1F; */
+/*   --destructive: #F5854D;       /* Bright coral */ 
+/*   --border: #95F57A;            /* Yellow-green */ 
+/*   --input: #5DA5F5;             /* Sky blue */ 
+/*   --ring: #E5F54D;              /* Electric yellow */ 
+/**/
+/*   /* Charts */ 
+/*   --chart-1: #F54DB8;           /* Hot pink */ 
+/*   --chart-2: #4DF5C5;           /* Bright turquoise */ 
+/*   --chart-3: #E5F54D;           /* Bright yellow */ 
+/*   --chart-4: #B54DF5;           /* Electric purple */ 
+/*   --chart-5: #F5754D;           /* Bright orange */ 
+/**/
+/*   /* Sidebar */ 
+/*   --sidebar: #3D5A2D; */
+/*   --sidebar-foreground: #95E585; */
+/*   --sidebar-primary: #95F57A; */
+/*   --sidebar-primary-foreground: #1A2610; */
+/*   --sidebar-accent: #4D6B3D; */
+/*   --sidebar-accent-foreground: #95E585; */
+/*   --sidebar-border: #6B9555; */
+/*   --sidebar-ring: #A5F585; */
+/* } */
+
+.scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Also target any child scrollable divs */
+.scrollbar-none * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none *::-webkit-scrollbar {
+  display: none;
+}

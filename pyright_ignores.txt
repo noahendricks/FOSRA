@@ -1,0 +1,2 @@
+
+# pyright: strict ,reportExplicitAny=none,reportAny=information,reportImplicitOverride=none, reportIgnoreCommentWithoutRule=none, reportUnannotatedClassAttribute=none
