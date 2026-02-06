@@ -1,84 +1,151 @@
-
+                                
+ <pre>
+<p align="center">
 ███████╗ ██████╗ ███████╗██████╗  █████╗ 
 ██╔════╝██╔═══██╗██╔════╝██╔══██╗██╔══██╗
-█████╗  ██║   ██║███████╗██████╔╝███████║
-██╔══╝  ██║   ██║╚════██║██╔══██╗██╔══██║
+███████╗██║   ██║███████╗██████╔╝███████║
+██╔════╝██║   ██║╚════██║██╔══██╗██╔══██║
 ██║     ╚██████╔╝███████║██║  ██║██║  ██║
 ╚═╝      ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
+<b>F</b>lexible <b>O</b>pen <b>S</b>ource <b>R</b>etrieval <b>A</b>ugmented Generation System
+</pre>
+</p>
+
+<p align="center">
+◆ ◆ ◆
+</p>
+
+<p align="center">
+<b>Pre-Alpha Stage</b>: Currently backend-focused with un-styled working interface. Not yet MVP.
+</p>
+
+<p align="center">
 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
-**F**lexible **O**pen **S**ource **R**etrieval **A**ugmented Generation System
+</p>
+<p align="center">
+FOSRA is a next-gen RAG and internet search interface built for <b>maximum modularity</b>.<br>
+FOSRA lets you choose, customize, and swap every component of your RAG pipeline—<br>
+from document ingestion to final output generation.
+</p>
 
-> !! **Pre-Alpha Stage**: Currently backend-focused with un-styled working interface. Not yet MVP.
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
 
----
-╭─────────────────────────────────────────────────────────────────╮
-╰─────────────────────────────────────────────────────────────────╯
+<p align="center">
+<b>Architecture</b>
+</p>
 
-## Vision
+<p align="center">
+<b>Deployment Modes</b><br>
+Docker • Containerized deployment for server environments<br>
+Tauri • Native desktop application wrapper
+</p>
 
-FOSRA is a next-gen RAG and internet search interface built for **maximum interoperability**. FOSRA lets you choose, customize, and swap every component of your RAG pipeline—from document ingestion to final output generation.
+<p align="center">
+  <b>Tech Stack</b>
+</p>
 
-**Core Philosophy**: Intelligence through modularity. Every step of retrieval, search, and output generation is transparent, configurable, and optimized.
+<table align="center">
+  <thead>
+    <tr>
+      <th align="center">Layer</th>
+      <th align="center">Technology</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center">Backend</td>
+      <td align="center">Python 3.13+, FastAPI, Async-first (uvloop)</td>
+    </tr>
+    <tr>
+      <td align="center">Frontend</td>
+      <td align="center">React 19, TypeScript, Tailwind CSS 4, Vite</td>
+    </tr>
+    <tr>
+      <td align="center">State</td>
+      <td align="center">Zustand, TanStack Query + Router</td>
+    </tr>
+    <tr>
+      <td align="center">UI</td>
+      <td align="center">Radix UI primitives, shadcn/ui patterns</td>
+    </tr>
+    <tr>
+      <td align="center">Vector DB</td>
+      <td align="center">Qdrant, Elasticsearch</td>
+    </tr>
+    <tr>
+      <td align="center">Processing</td>
+      <td align="center">Docling, Unstructured, Chonkie</td>
+    </tr>
+    <tr>
+      <td align="center">LLM Gateway</td>
+      <td align="center">LiteLLM (universal model access)</td>
+    </tr>
+    <tr>
+      <td align="center">Observability</td>
+      <td align="center">Logfire, OpenTelemetry</td>
+    </tr>
+  </tbody>
+</table>
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
 
----
-╭─────────────────────────────────────────────────────────────────╮
-╰─────────────────────────────────────────────────────────────────╯
-## Architecture
+<p align="center">
+<b>Key Features (In Development)</b>
+</p>
 
-### Deployment Modes
-- **Docker**: Containerized deployment for server environments
-- **Tauri**: Native desktop application wrapper
+<p align="center">
+<b>◆ Modular Pipeline </b>
+</p>
 
-### Tech Stack
+<p align="center">
+Ingestion • Pluggable document processors (PDF, Office, web, media)<br>
+Chunking • Multiple strategies (semantic, fixed, hierarchical)<br>
+Embedding • FastEmbed, Sentence Transformers, or remote APIs<br>
+Retrieval • Vector search, keyword, hybrid, reranking<br>
+Generation • Any LLM via LiteLLM (OpenAI, Anthropic, local, etc.)
+</p>
 
-| Layer | Technology |
-|-------|------------|
-| **Backend** | Python 3.13+, FastAPI, Async-first (uvloop) |
-| **Frontend** | React 19, TypeScript, Tailwind CSS 4, Vite  |
-| **State** | Zustand, TanStack Query + Router |
-| **UI** | Radix UI primitives, shadcn/ui patterns |
-| **Vector DB** | Qdrant, Elasticsearch |
-| **Processing** | Docling, Unstructured, Chonkie |
-| **LLM Gateway** | LiteLLM (universal model access) |
-| **Observability** | Logfire, OpenTelemetry |
+<p align="center">
+<b>◆ Intelligent Retrieval </b>
+</p>
 
-╭─────────────────────────────────────────────────────────────────╮
-╰─────────────────────────────────────────────────────────────────╯
+<p align="center">
+Context-aware search routing<br>
+Automatic query decomposition and Expansion<br>
+Multi-hop reasoning support<br>
+Dynamic reranking (FlashRank, cross-encoders)
+</p>
 
----
+<p align="center">
+<b> Internet Search Integration ◆</b>
+</p>
 
-## Key Features (In Development)
+<p align="center">
+Firecrawl • Tavily • Exa • Linkup • Custom Search • GitHub code search
+</p>
 
-### **Modular Pipeline**
-- **Ingestion**: Pluggable document processors (PDF, Office, web, media)
-- **Chunking**: Multiple strategies (semantic, fixed, hierarchical)
-- **Embedding**: FastEmbed, Sentence Transformers, or remote APIs
-- **Retrieval**: Vector search, keyword, hybrid, reranking
-- **Generation**: Any LLM via LiteLLM (OpenAI, Anthropic, local, etc.)
+<p align="center">
+<b>Advanced Capabilities ◆</b>
+</p>
 
-### **Intelligent Retrieval**
-- Context-aware search routing
-- Automatic query decomposition and Expansion
-- Multi-hop reasoning support
-- Dynamic reranking (FlashRank, cross-encoders)
+<p align="center">
+Async-first architecture throughout<br>
+Distributed task processing (Celery/Taskiq)<br>
+Real-time streaming responses<br>
+Full observability with tracing<br>
+Agentic workflows (LangGraph, DeepAgents)
+</p>
 
-### **Internet Search Integration**
-- Firecrawl, Tavily, Exa, Linkup + More
-- GitHub code search
-- Custom Search
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
 
-### **Advanced Capabilities**
-- Async-first architecture throughout
-- Distributed task processing (Celery/Taskiq)
-- Real-time streaming responses
-- Full observability with tracing
-- Agentic workflows (LangGraph, DeepAgents)
-
----
-╭─────────────────────────────────────────────────────────────────╮
-╰─────────────────────────────────────────────────────────────────╯
-
-## Project Structure
+<p align="center">
+<b>Project Structure</b>
+</p>
 
 ```
 fosra/
@@ -98,60 +165,83 @@ fosra/
     ├── lib/api/          # Generated API client (@tanstack, core, client)
     └── routes/           # TanStack Router routes
 ```
-```
-```
-```
-```
----
-╭─────────────────────────────────────────────────────────────────╮
-╰─────────────────────────────────────────────────────────────────╯
 
-## Development Status
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
 
-### Implemented
-- Core async backend infrastructure
-- Document parsing (Docling, Unstructured)
-- Vector database abstractions (Qdrant, Elasticsearch)
-- API endpoints (OpenAPI-generated)
-- Minimal frontend interface
+<p align="center">
+<b>Development Status</b>
+</p>
 
+<p align="center">
+<b>[ Implemented ]</b>
+</p>
 
-### In Progress
-- Pipeline orchestration UI 
-- Search provider integrations 
-- Docker production builds
+<p align="center">
+Core async backend infrastructure<br>
+Document parsing (Docling, Unstructured)<br>
+Vector database abstractions (Qdrant, Elasticsearch)<br>
+API endpoints (OpenAPI-generated)<br>
+Minimal frontend interface
+</p>
 
-### Planned
-- Multi-tenant architecture
-- Advanced agent workflows
-- Collaborative features
-- Plugin marketplace
-- Tauri desktop wrapper
+<p align="center">
+<b>[ In Progress ]</b>
+</p>
 
----
-╭─────────────────────────────────────────────────────────────────╮
-╰─────────────────────────────────────────────────────────────────╯
+<p align="center">
+Pipeline orchestration UI<br>
+Search provider integrations<br>
+Docker production builds
+</p>
 
-## Quick Start
+<p align="center">
+<b>[ Planned ]</b>
+</p>
 
-> **Note**: Pre-alpha setup requires manual configuration.
-> **Note**: No Compose Yet: Docker Containers for Qdrant,Postgres,Redis needed
+<p align="center">
+Multi-tenant architecture • Advanced agent workflows<br>
+Collaborative features • Plugin marketplace • Tauri desktop wrapper
+</p>
 
-### Backend
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
+
+<p align="center">
+<b>Quick Start</b>
+</p>
+
+<p align="center">
+<i>Note: Pre-alpha setup requires manual configuration.</i><br>
+<i>No Compose Yet: Docker Containers for Qdrant, Postgres, Redis needed</i>
+</p>
+
+<p align="center">
+<b>Backend</b>
+</p>
+
 ```bash
 cd backend
 uv sync
 fastapi dev src/main.py
 ```
 
-### Frontend
+<p align="center">
+<b>Frontend</b>
+</p>
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### Environment Variables
+<p align="center">
+<b>Environment Variables</b>
+</p>
+
 ```bash
 # Required
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost/FOSRA
@@ -165,45 +255,101 @@ TAVILY_API_KEY=...
 FIRECRAWL_API_KEY=...
 ```
 
----
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
 
-## Dependencies Highlights
+<p align="center">
+<b>Dependencies Highlights</b>
+</p>
 
-### Backend (Python)
-- **FastAPI** + **uvicorn**: High-performance async API
-- **LangChain/LangGraph**: LLM orchestration and agent workflows
-- **Docling + Unstructured**: Enterprise-grade document parsing
-- **Chonkie**: Intelligent chunking with semantic boundaries
-- **FastEmbed**: Efficient local embeddings
-- **Taskiq**: Distributed task queues
+<p align="center">
+<b>Backend (Python)</b>
+</p>
 
-### Frontend (TypeScript/React)
-- **TanStack ecosystem**: Query, Router, Form, Virtual
-- **Radix UI**: Accessible, unstyled primitives
-- **Zustand**: Lightweight state management
-- **AI SDK**: Streaming LLM interactions
-- **React Hook Form + Zod**: Type-safe forms
+<p align="center">
+FastAPI + uvicorn • High-performance async API<br>
+LangChain/LangGraph • LLM orchestration and agent workflows<br>
+Docling + Unstructured • Enterprise-grade document parsing<br>
+Chonkie • Intelligent chunking with semantic boundaries<br>
+FastEmbed • Efficient local embeddings<br>
+Taskiq • Distributed task queues
+</p>
 
----
+<p align="center">
+<b>Frontend (TypeScript/React)</b>
+</p>
 
-## Roadmap
+<p align="center">
+TanStack ecosystem • Query, Router, Form, Virtual<br>
+Radix UI • Accessible, unstyled primitives<br>
+Zustand • Lightweight state management<br>
+AI SDK • Streaming LLM interactions<br>
+React Hook Form + Zod • Type-safe forms
+</p>
 
-| Phase | Target | Goals |
-|-------|--------|-------|
-| **Alpha** | Q1 2026 | MVP with core RAG, basic UI, Docker |
-| **Beta** | Q2 2026 | Tauri app, advanced search, plugins |
-| **1.0** | Q3 2026 | Production-ready, marketplace, cloud |
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
 
----
-## Contributing
+<p align="center">
+  <b>Roadmap</b>
+</p>
 
-FOSRA is in early development. Contributions, feedback, and issue reports are welcome as the architecture is shaped.
+<table align="center">
+  <thead>
+    <tr>
+      <th align="center">Phase</th>
+      <th align="center">Target</th>
+      <th align="center">Goals</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center">Alpha</td>
+      <td align="center">Q1 2026</td>
+      <td align="center">MVP with full RAG and search, UI, Docker</td>
+    </tr>
+    <tr>
+      <td align="center">Beta</td>
+      <td align="center">Q2 2026</td>
+      <td align="center">Tauri app, advanced search, plugins</td>
+    </tr>
+    <tr>
+      <td align="center">1.0</td>
+      <td align="center">Q3 2026</td>
+      <td align="center">Production-ready, cloud / domain deployment</td>
+    </tr>
+  </tbody>
+</table>
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
 
----
+<p align="center">
+<b>Contributing</b>
+</p>
 
-## License
+<p align="center">
+FOSRA is in early development. Contributions, feedback, and issue reports<br>
+are welcome as the architecture is shaped.
+</p>
 
+<p align="center">
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+</p>
+
+<p align="center">
+<b>License</b>
+</p>
+
+<p align="center">
 [License TBD - likely Apache 2.0 or MIT]
+</p>
+
+<p align="center">
+◆ ◆ ◆
+</p>
 
 ---
 
