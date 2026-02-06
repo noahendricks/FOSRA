@@ -1,7 +1,7 @@
 [project]
-name = "esra-mini"
-version = "0.1.0"
-description = "Add your description here"
+name = "FOSRA"
+version = "0.2.0"
+description = """FOSRA — A modular RAG and internet search interface"""
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -67,7 +67,6 @@ dependencies = [
   "uuid7>=0.1.0",
   "validators>=0.34.0",
   "xxhash>=3.6.0",
-  "celery>=5.5.3",
   "blake3>=1.0.8",
   "mypy>=1.18.2",
   "aider>=0.2.6",
@@ -85,7 +84,6 @@ dependencies = [
   "code2flow>=2.5.1",
   "graphviz>=0.21",
   "taskiq>=0.12.1",
-  "logfire[fastapi,httpx,sqlalchemy]>=4.16.0",
   "msgspec>=0.20.0",
   "opentelemetry-exporter-otlp>=1.39.1",
   "taskiq-fastapi>=0.4.0",
@@ -105,13 +103,9 @@ dependencies = [
 ]
 
 [project.scripts]
-esra-mini = "ESRAmini.src.main:main"
-esra-tui = "ESRAmini.tui.main:main"
-sanity = "ESRAmini.src.sanity:cli"
 
 [dependency-groups]
 dev = [
-    "marimo>=0.18.4",
     "py2puml>=0.10.0",
     "pylyzer>=0.0.82",
     "pytest>=8.4.2",
@@ -122,7 +116,7 @@ dev = [
 package = true
 
 [tool.setuptools.packages.find]
-include = ["ESRAmini*"]
+include = ["FOSRA*"]
 
 
 
