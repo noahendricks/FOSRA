@@ -81,7 +81,6 @@ class VectorStoreConfigRequest(BaseServiceConfig):
 
     collection_name: str = "test"
     include_metadata: bool = True
-    metadata: dict = {}
     store_type: VectorStoreType | str = VectorStoreType.QDRANT
     host: str | None = None
     port: int | None = None
@@ -232,9 +231,6 @@ class StorageConfigRequest(BaseServiceConfig):
             "backend_options": self.backend_options,
         }
 
-        if self.base_path:
-            config["base_path"] = self.base_path
-
         return config
 
 
@@ -283,13 +279,15 @@ class ToolConfig(_BaseModelFlex):
     updated_at: str
 
 
-class WorkspacePreferencesAPI(_BaseModelFlex):
+class PreferencesAPI(_BaseModelFlex):
     llms: dict[ConfigRole, LLMConfigRequest] = Field(default_factory=dict)
 
     parser: ParserConfigRequest = Field(default_factory=ParserConfigRequest)
+
     vector_store: VectorStoreConfigRequest = Field(
         default_factory=VectorStoreConfigRequest
     )
+
     embedder: EmbedderConfigRequest = Field(default_factory=EmbedderConfigRequest)
     reranker: RerankerConfigRequest = Field(default_factory=RerankerConfigRequest)
     storage: StorageConfigRequest = Field(default_factory=StorageConfigRequest)

@@ -6,7 +6,6 @@ from typing import Any, TYPE_CHECKING, Optional
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict
 
-from sqlalchemy import ARRAY, DDL, event
 from sqlalchemy import (
     String,
     DateTime,
@@ -20,14 +19,12 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
     Column,
-    text,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
     mapped_column,
     relationship,
-    validates,
 )
 from ulid import ULID
 
@@ -81,46 +78,9 @@ source_workspace_association = Table(
         primary_key=True,
     ),
 )
-
-config_workspace_association = Table(
-    "config_workspace_association",
-    Base.metadata,
-    Column(
-        "config_id",
-        String,
-        ForeignKey("sources.source_id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-    Column(
-        "workspace_id",
-        String,
-        ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-)
-
-config_convo_association = Table(
-    "config_convo_association",
-    Base.metadata,
-    Column(
-        "config_id",
-        String,
-        ForeignKey("user_tool_configs.config_id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-    Column(
-        "convo_id",
-        String,
-        ForeignKey("convos.convo_id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-)
-
-
 # ============================================================================
 # Enums & Constants
 # ============================================================================
-
 
 ROLE_TO_CATEGORY_MAP: dict[ConfigRole, ToolCategory] = {
     # llM Roles
@@ -170,9 +130,6 @@ class UserORM(Base):
     convos: Mapped[list["ConvoORM"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    tool_configs: Mapped[list["UserToolConfigORM"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
 
 
 # ============================================================================
@@ -205,9 +162,7 @@ class WorkspaceORM(Base):
         back_populates="workspace", cascade="all, delete-orphan"
     )
 
-    configs: Mapped["UserToolConfigORM"] = relationship(
-        back_populates="workspace", cascade="all, delete-orphan", nullable=True
-    )
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=None, nullable=True)
 
     sources: Mapped[list["SourceORM"]] = relationship(
         secondary=source_workspace_association,
@@ -290,72 +245,6 @@ class ChunkORM(Base):
 
 
 # ============================================================================
-# Config System
-# ============================================================================
-
-
-class UserToolConfigORM(Base):
-    """
-    structure varies by category:
-    - llm: {"api_key": "...", "temperature": 0.7, "max_tokens": 1000}
-    - storage: {"backend_type": "s3", "bucket_name": "...", "chunk_size": 8192}
-
-    parse into pydantic objects with validation for specific types
-    """
-
-    __tablename__ = "user_tool_configs"
-
-    config_id: Mapped[str] = mapped_column(
-        String(26), primary_key=True, default=ulid_factory
-    )
-
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-
-    description: Mapped[str | None] = mapped_column(String(500))
-
-    category: Mapped[ToolCategory] = mapped_column(String(50), nullable=False)
-
-    provider: Mapped[str] = mapped_column(String(50), nullable=False)
-
-    model: Mapped[str] = mapped_column(
-        String(100)
-    )  # optional for storage, parser, etc.
-
-    role: Mapped[ConfigRole] = mapped_column(String(50), nullable=False)
-
-    # (JSON)
-
-    details: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        MutableDict.as_mutable(JSONB)
-    )
-
-    # timestamps
-    created_at: Mapped[datetime] = mapped_column(default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now)
-
-    # Relationships
-    user: Mapped["UserORM"] = relationship(back_populates="tool_configs")
-
-    workspaces: Mapped[list["WorkspaceORM"]] = relationship(
-        secondary=config_workspace_association, back_populates="configs"
-    )
-
-    convos: Mapped[list["ConvoORM"]] = relationship(
-        secondary=config_convo_association, back_populates="configs"
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<UserToolConfig(id={self.config_id}, name={self.name}, "
-            f"category={self.category}, provider={self.provider})>"
-        )
-
-
-# ============================================================================
 # Conversation & Message ORM
 # ============================================================================
 
@@ -384,8 +273,8 @@ class ConvoORM(Base):
         MutableDict.as_mutable(JSONB)
     )
 
-    configs: Mapped[list["UserToolConfigORM"]] = relationship(
-        secondary=config_convo_association, back_populates="convos"
+    convo_config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=None, nullable=True
     )
 
     # Timestamps

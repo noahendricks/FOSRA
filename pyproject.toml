@@ -7,7 +7,6 @@ requires-python = ">=3.13"
 dependencies = [
   "aioresult>=1.2",
   "aiosqlite>=0.21.0",
-  "alembic>=1.16.5",
   "anyio>=4.11.0",
   "asyncpg>=0.30.0",
   "chonkie[all,st]>=1.4.0",
@@ -100,6 +99,7 @@ dependencies = [
   "deepagents>=0.3.8",
   "markdown>=3.10.1",
   "pympler>=1.1",
+  "alembic>=1.18.3",
 ]
 
 [project.scripts]
@@ -116,7 +116,7 @@ dev = [
 package = true
 
 [tool.setuptools.packages.find]
-include = ["FOSRA*"]
+include = ["backend*"]
 
 
 

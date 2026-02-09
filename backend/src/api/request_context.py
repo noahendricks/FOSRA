@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.orm import Bundle
 
 from backend.src.api.schemas.config_api_schemas import (
     EmbedderConfigRequest,
     LLMConfigRequest,
     ParserConfigRequest,
+    PreferencesAPI,
     RerankerConfigRequest,
     StorageConfigRequest,
     VectorStoreConfigRequest,
@@ -20,10 +22,10 @@ from backend.src.domain.exceptions import StorageError
 
 
 from backend.src.storage.models import (
-    ConfigAssignmentORM,
     ConfigRole,
+    ConvoORM,
     ToolCategory,
-    UserToolConfigORM,
+    WorkspaceORM,
 )
 
 
@@ -99,34 +101,40 @@ class RequestContext(BaseModel):
         logger.error(
             f"Loading preferences for user={user_id}, workspace={workspace_id}"
         )
+
         try:
             from sqlalchemy import select, or_
             from sqlalchemy.orm import selectinload
 
-            query = (
-                select(ConfigAssignmentORM)
-                .options(selectinload(ConfigAssignmentORM.tool_config))
-                .where(
-                    or_(
-                        ConfigAssignmentORM.workspace_id == workspace_id,
-                        ConfigAssignmentORM.convo_id == convo_id,
-                    )
+
+            #get and check workspace config exists
+            workspace = await session.get(WorkspaceORM, workspace_id)
+            ws_config = PreferencesAPI(**workspace.config) if workspace and workspace.config else PreferencesAPI()
+
+            # Get convo config (override)
+            convo = await session.get(ConvoORM, convo_id)
+
+            cnv_config = PreferencesAPI(**convo.convo_config) if convo and convo.convo_config else None
+
+            # Merge: convo overrides workspace
+            if cnv_config:
+                merged_config = ws_config.model_copy(
+                    update=cnv_config.model_dump(exclude_unset=True)
                 )
-            )
+            else:
+                merged_config = ws_config 
+                pass
+                if convo:
+                    #get convo config
+                    pass
+                else:
+                    pass
+                    #set all config as none
+        
 
-            result = await session.execute(query)
-            assignments = result.scalars().all()
 
-            workspace_map = {
-                a.role: a.tool_config
-                for a in assignments
-                if a.workspace_id == workspace_id
-            }
-            convo_map = {
-                a.role: a.tool_config for a in assignments if a.convo_id == convo_id
-            }
-
-            effective_configs = {**workspace_map, **convo_map}
+                        
+            effective_configs = {}
 
             for role, config in effective_configs.items():
                 if not config:
