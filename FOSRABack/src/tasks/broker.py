@@ -11,8 +11,7 @@ async def startup(state: TaskiqState):
     """Initialize heavy singletons ONCE when the worker starts."""
     infra = Infrastructure(settings)
 
-    # NOTE: Removed init call
-    # Store the infra instance in state
+    # Store the infra instance in taskiq state
     state.infra = infra
 
     logger.success("Taskiq startup successful")

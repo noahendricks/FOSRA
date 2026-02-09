@@ -9,17 +9,13 @@ from FOSRABack.src.api.lifecycle import global_infra
 from FOSRABack.src.tasks.broker import broker
 from FOSRABack.src.settings.observe import setup_telemetry
 import taskiq_fastapi
-import logfire
 
 from FOSRABack.src.api.routes.user import router as user_router
-from FOSRABack.src.api.routes.files import router as file_router
 from FOSRABack.src.api.routes.workspace import router as workspace_router
 from FOSRABack.src.api.routes.test_routes import router as test_router
 from FOSRABack.src.api.routes.llm import router as stream_router
 from FOSRABack.src.api.routes.config import router as config_router
 import warnings
-
-import litellm
 
 from rich.traceback import install
 
@@ -31,11 +27,11 @@ from asyncio import CancelledError
 from FOSRABack.src.api.exception_handlers import register_exception_handlers
 
 
-logfire.configure(
-    service_name="FOSRA",
-    send_to_logfire=False,
-)
-
+# logfire.configure(
+#     service_name="FOSRA",
+#     send_to_logfire=False,
+# )
+#
 
 taskiq_fastapi.init(broker, "FOSRABack.src.main:app")
 
@@ -83,7 +79,6 @@ async def lifespan(app: FastAPI):
             await broker.shutdown()
             logger.info("✓ Taskiq broker stopped")
 
-        logfire.shutdown()
         logger.info("✓ Logfire shutdown")
 
         await global_infra.close()
@@ -98,7 +93,6 @@ app = FastAPI(lifespan=lifespan)
 register_exception_handlers(app=app)
 
 app.include_router(user_router)
-app.include_router(file_router)
 app.include_router(workspace_router)
 app.include_router(test_router)
 app.include_router(stream_router)
@@ -135,8 +129,6 @@ async def rich_exception_handler(request, exc):
     )
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
-
-logfire.instrument_fastapi(app)
 
 if __name__ == "__main__":
     import uvicorn

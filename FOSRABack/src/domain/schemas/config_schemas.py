@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     pass
 
 
-# NOTE: Current default
 class ChunkerConfig(DomainStruct):
     """Configuration for chunker behavior."""
 

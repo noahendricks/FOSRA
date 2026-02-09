@@ -82,6 +82,40 @@ source_workspace_association = Table(
     ),
 )
 
+config_workspace_association = Table(
+    "config_workspace_association",
+    Base.metadata,
+    Column(
+        "config_id",
+        String,
+        ForeignKey("sources.source_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "workspace_id",
+        String,
+        ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+config_convo_association = Table(
+    "config_convo_association",
+    Base.metadata,
+    Column(
+        "config_id",
+        String,
+        ForeignKey("user_tool_configs.config_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "convo_id",
+        String,
+        ForeignKey("convos.convo_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
 
 # ============================================================================
 # Enums & Constants
@@ -89,12 +123,12 @@ source_workspace_association = Table(
 
 
 ROLE_TO_CATEGORY_MAP: dict[ConfigRole, ToolCategory] = {
-    # LLM Roles
+    # llM Roles
     ConfigRole.PRIMARY_LLM: ToolCategory.LLM,
     ConfigRole.FAST_LLM: ToolCategory.LLM,
     ConfigRole.HEAVY_LLM: ToolCategory.LLM,
     ConfigRole.STRATEGIC_LLM: ToolCategory.LLM,
-    # Pipeline Roles
+    # pipeline Roles
     ConfigRole.DEFAULT_VECTOR_STORE: ToolCategory.VECTOR_STORE,
     ConfigRole.DEFAULT_EMBEDDER: ToolCategory.EMBEDDER,
     ConfigRole.DEFAULT_PARSER: ToolCategory.PARSER,
@@ -161,22 +195,23 @@ class WorkspaceORM(Base):
         String(26), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
     )
 
-    # Metadata
-
     archived_convos: Mapped[Optional[dict[str, Any]]] = mapped_column(
         MutableDict.as_mutable(JSONB)
     )
     # Relationships
     user: Mapped["UserORM"] = relationship(back_populates="workspaces")
+
     convos: Mapped[list["ConvoORM"]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan"
     )
+
+    configs: Mapped["UserToolConfigORM"] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan", nullable=True
+    )
+
     sources: Mapped[list["SourceORM"]] = relationship(
         secondary=source_workspace_association,
         back_populates="workspaces",
-    )
-    config_assignments: Mapped[list["ConfigAssignmentORM"]] = relationship(
-        back_populates="workspace", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
@@ -261,183 +296,62 @@ class ChunkORM(Base):
 
 class UserToolConfigORM(Base):
     """
-    Master library of tool configurations.
+    structure varies by category:
+    - llm: {"api_key": "...", "temperature": 0.7, "max_tokens": 1000}
+    - storage: {"backend_type": "s3", "bucket_name": "...", "chunk_size": 8192}
 
-    Stores reusable configs for LLMs, embedders, parsers, storage, etc.
-    Each config can be assigned to multiple workspaces/convos.
+    parse into pydantic objects with validation for specific types
     """
 
     __tablename__ = "user_tool_configs"
 
-    # Identity
-    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=ulid_factory)
+    config_id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=ulid_factory
+    )
+
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    # Metadata
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+
     description: Mapped[str | None] = mapped_column(String(500))
 
-    # Classification
     category: Mapped[ToolCategory] = mapped_column(String(50), nullable=False)
 
-    # Provider details
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
+
     model: Mapped[str] = mapped_column(
         String(100)
-    )  # Optional for storage, parser, etc.
+    )  # optional for storage, parser, etc.
 
-    # Flexible configuration (JSON)
-    # Structure varies by category:
-    # - LLM: {"api_key": "...", "temperature": 0.7, "max_tokens": 1000}
-    # - Storage: {"backend_type": "s3", "bucket_name": "...", "chunk_size": 8192}
+    role: Mapped[ConfigRole] = mapped_column(String(50), nullable=False)
+
+    # (JSON)
 
     details: Mapped[Optional[dict[str, Any]]] = mapped_column(
         MutableDict.as_mutable(JSONB)
     )
-    # System defaults
-    is_system_default: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Timestamps
+    # timestamps
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now)
 
     # Relationships
     user: Mapped["UserORM"] = relationship(back_populates="tool_configs")
-    assignments: Mapped[list["ConfigAssignmentORM"]] = relationship(
-        back_populates="tool_config", cascade="all, delete-orphan"
+
+    workspaces: Mapped[list["WorkspaceORM"]] = relationship(
+        secondary=config_workspace_association, back_populates="configs"
     )
 
-    __table_args__ = (
-        Index(
-            "uix_system_default_category",
-            category,
-            unique=True,
-            postgresql_where=text("is_system_default = true"),
-        ),
-        Index("ix_tool_configs_user_category", "user_id", "category"),
-        Index("ix_tool_configs_system_defaults", "is_system_default", "category"),
+    convos: Mapped[list["ConvoORM"]] = relationship(
+        secondary=config_convo_association, back_populates="configs"
     )
 
     def __repr__(self) -> str:
         return (
-            f"<UserToolConfig(id={self.id}, name={self.name}, "
+            f"<UserToolConfig(id={self.config_id}, name={self.name}, "
             f"category={self.category}, provider={self.provider})>"
-        )
-
-
-class ConfigAssignmentORM(Base):
-    """
-    Assignment of configs to scopes (workspace or conversation).
-
-    Links a UserToolConfig to a workspace or conversation,
-    defining what role that config plays in that context.
-
-    Examples:
-    - Workspace 'ws-123' uses config 'gpt4-turbo' as PRIMARY_LLM
-    - Conversation 'conv-456' overrides with 'claude-opus' as PRIMARY_LLM
-    """
-
-    __tablename__ = "config_assignments"
-
-    # Identity
-    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=ulid_factory)
-
-    # Role definition
-    role: Mapped[ConfigRole] = mapped_column(String(50), nullable=False)
-
-    # Config reference
-    tool_config_id: Mapped[str] = mapped_column(
-        ForeignKey("user_tool_configs.id", ondelete="CASCADE"), nullable=False
-    )
-
-    # Polymorphic scope - EXACTLY ONE must be set
-    workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.workspace_id", ondelete="CASCADE")
-    )
-    convo_id: Mapped[str | None] = mapped_column(
-        ForeignKey("convos.convo_id", ondelete="CASCADE")  # FIXED: was "convo.convo_id"
-    )
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(default=utc_now)
-
-    # Relationships
-    tool_config: Mapped["UserToolConfigORM"] = relationship(
-        back_populates="assignments",
-        lazy="joined",  # Eager load for preference resolution
-    )
-    workspace: Mapped["WorkspaceORM | None"] = relationship(
-        back_populates="config_assignments"
-    )
-    convo: Mapped["ConvoORM | None"] = relationship(back_populates="config_assignments")
-
-    __table_args__ = (
-        # No duplicate roles per workspace
-        Index(
-            "uix_workspace_role",
-            "workspace_id",
-            "role",
-            unique=True,
-            postgresql_where=text("workspace_id IS NOT NULL"),
-        ),
-        # 2. No duplicate roles per conversation (ignoring nulls)
-        Index(
-            "uix_convo_role",
-            "convo_id",
-            "role",
-            unique=True,
-            postgresql_where=text("convo_id IS NOT NULL"),
-        ),  # Exactly one scope must be set
-        CheckConstraint(
-            "(workspace_id IS NOT NULL AND convo_id IS NULL) OR "
-            "(workspace_id IS NULL AND convo_id IS NOT NULL)",
-            name="check_exactly_one_scope",
-        ),
-        # Indexes for common queries
-        Index("ix_assignments_workspace_role", "workspace_id", "role"),
-        Index("ix_assignments_convo_role", "convo_id", "role"),
-        Index("ix_assignments_config", "tool_config_id"),
-    )
-
-    @validates("role")
-    def validate_role_category_match(self, key: str, role: ConfigRole) -> ConfigRole:
-        """Ensure assigned tool category matches role requirements."""
-        if not hasattr(self, "tool_config") or self.tool_config is None:
-            return role
-
-        expected_category = ROLE_TO_CATEGORY_MAP.get(role)
-        if expected_category and self.tool_config.category != expected_category:
-            raise ValueError(
-                f"Cannot assign {self.tool_config.category} config "
-                f"to {role} role (expected {expected_category})"
-            )
-        return role
-
-    def __repr__(self) -> str:
-        scope = (
-            f"workspace={self.workspace_id}"
-            if self.workspace_id
-            else f"convo={self.convo_id}"
-        )
-        return f"<ConfigAssignment(role={self.role}, {scope})>"
-
-
-# =============================================================================
-# SQLAlchemy Events for Additional Validation
-# =============================================================================
-
-
-@event.listens_for(ConfigAssignmentORM, "before_insert")
-@event.listens_for(ConfigAssignmentORM, "before_update")
-def validate_assignment_on_save(mapper, connection, target: ConfigAssignmentORM):
-    """Additional validation before insert/update."""
-    expected_category = ROLE_TO_CATEGORY_MAP.get(target.role)
-    if expected_category and target.tool_config.category != expected_category:
-        raise ValueError(
-            f"Role {target.role} requires category {expected_category}, "
-            f"but config has category {target.tool_config.category}"
         )
 
 
@@ -470,6 +384,10 @@ class ConvoORM(Base):
         MutableDict.as_mutable(JSONB)
     )
 
+    configs: Mapped[list["UserToolConfigORM"]] = relationship(
+        secondary=config_convo_association, back_populates="convos"
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
@@ -484,11 +402,6 @@ class ConvoORM(Base):
         back_populates="convo",  # FIXED: was "convos"
         cascade="all, delete-orphan",
     )
-    config_assignments: Mapped[list["ConfigAssignmentORM"]] = relationship(
-        back_populates="convo",  # FIXED: was "convos"
-        cascade="all, delete-orphan",
-    )
-
     __table_args__ = (Index("ix_convo_user_workspace", "user_id", "workspace_id"),)
 
 

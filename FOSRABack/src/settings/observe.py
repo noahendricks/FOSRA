@@ -2,11 +2,8 @@ import os
 import logging
 import sys
 from loguru import logger
-import logfire
 from opentelemetry import _logs
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs import LoggerProvider
 
 
 def patch_fosra_errors(record):
@@ -68,12 +65,12 @@ def setup_telemetry():
         _log.propagate = False
 
     # 5. Instrumentation
-    logfire.instrument_pydantic(record="failure")
-    logfire.instrument_sqlalchemy()
-    logfire.instrument_httpx()
+    # logfire.instrument_pydantic(record="failure")
+    # logfire.instrument_sqlalchemy()
+    # logfire.instrument_httpx()
 
     return patched_logger
 
 
-def instrument_app(app):
-    logfire.instrument_fastapi(app)
+# def instrument_app(app):
+#     logfire.instrument_fastapi(app)

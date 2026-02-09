@@ -6,7 +6,6 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import litellm
-import logfire
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_community.chat_models import ChatLiteLLM
 from loguru import logger
@@ -37,9 +36,7 @@ from FOSRABack.src.domain.schemas import (
 from FOSRABack.src.domain.enums import LLMRole
 from FOSRABack.src.domain.schemas.config_schemas import UserPreferences
 from FOSRABack.src.domain.schemas.source_schemas import ChunkWithScore, SourceGroup
-from FOSRABack.src.services.conversation.utils.prompt.default_prompts import (
-    DEFAULT_QNA_NO_DOCUMENTS_PROMPT,
-)
+from FOSRABack.src.services.conversation.prompts import FOSRA_CITATION_INSTRUCTIONS 
 
 if TYPE_CHECKING:
     pass
@@ -108,11 +105,6 @@ def build_model_string(
 
 class LLMService:
     @staticmethod
-    @logfire.instrument(
-        "Validating LLM configuration",
-        extract_args=True,
-        span_name="LLM Config Validation",
-    )
     async def validate_config(
         llm_config: LLMConfig,
         timeout: int = 30,

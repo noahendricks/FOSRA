@@ -212,7 +212,6 @@ export class FastAPITransport extends HttpChatTransport<MyUIMessage> {
 
                 for (const line of lines) {
                   // Source Events
-                  //NOTE: Source Handling -
                   //WARN: Ensure sources hitting here, type may fallthrough
                   if (line.startsWith("source:")) {
                     const jsonStr = line.slice(7).trim(); // Remove "source:" prefix

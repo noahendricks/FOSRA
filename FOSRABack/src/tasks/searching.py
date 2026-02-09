@@ -41,7 +41,6 @@ async def search_vector_store(
 ) -> RerankResult:
     """Search Vector Store"""
 
-    # NOTE:
     try:
         pass
         embedded_query = await embed_query(
