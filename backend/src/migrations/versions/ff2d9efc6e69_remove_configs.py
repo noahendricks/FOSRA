@@ -1,8 +1,8 @@
-"""change attached_files to jsonb
+"""remove configs
 
-Revision ID: ffef6ad4becb
+Revision ID: ff2d9efc6e69
 Revises: 
-Create Date: 2026-01-28 19:51:36.063448
+Create Date: 2026-02-09 13:39:35.936152
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'ffef6ad4becb'
+revision: str = 'ff2d9efc6e69'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -58,31 +58,13 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('chunk_id')
     )
     op.create_index('ix_chunks_source_id', 'chunks', ['source_id'], unique=False)
-    op.create_table('user_tool_configs',
-    sa.Column('id', sa.String(length=26), nullable=False),
-    sa.Column('user_id', sa.String(length=26), nullable=False),
-    sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('description', sa.String(length=500), nullable=True),
-    sa.Column('category', sa.String(length=50), nullable=False),
-    sa.Column('provider', sa.String(length=50), nullable=False),
-    sa.Column('model', sa.String(length=100), nullable=False),
-    sa.Column('details', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('is_system_default', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_tool_configs_system_defaults', 'user_tool_configs', ['is_system_default', 'category'], unique=False)
-    op.create_index('ix_tool_configs_user_category', 'user_tool_configs', ['user_id', 'category'], unique=False)
-    op.create_index(op.f('ix_user_tool_configs_user_id'), 'user_tool_configs', ['user_id'], unique=False)
-    op.create_index('uix_system_default_category', 'user_tool_configs', ['category'], unique=True, postgresql_where=sa.text('is_system_default = true'))
     op.create_table('workspaces',
     sa.Column('workspace_id', sa.String(length=26), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('description', sa.String(length=500), nullable=True),
     sa.Column('user_id', sa.String(length=26), nullable=False),
     sa.Column('archived_convos', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('config', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('workspace_id'),
     sa.UniqueConstraint('user_id', 'workspace_id', name='uq_user_workspace')
@@ -94,6 +76,7 @@ def upgrade() -> None:
     sa.Column('workspace_id', sa.String(length=26), nullable=False),
     sa.Column('title', sa.String(length=500), nullable=True),
     sa.Column('convo_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('convo_config', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.workspace_id'], ondelete='CASCADE'),
@@ -108,24 +91,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.workspace_id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('source_id', 'workspace_id')
     )
-    op.create_table('config_assignments',
-    sa.Column('id', sa.String(length=26), nullable=False),
-    sa.Column('role', sa.String(length=50), nullable=False),
-    sa.Column('tool_config_id', sa.String(length=26), nullable=False),
-    sa.Column('workspace_id', sa.String(length=26), nullable=True),
-    sa.Column('convo_id', sa.String(length=26), nullable=True),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.CheckConstraint('(workspace_id IS NOT NULL AND convo_id IS NULL) OR (workspace_id IS NULL AND convo_id IS NOT NULL)', name='check_exactly_one_scope'),
-    sa.ForeignKeyConstraint(['convo_id'], ['convos.convo_id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['tool_config_id'], ['user_tool_configs.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.workspace_id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_assignments_config', 'config_assignments', ['tool_config_id'], unique=False)
-    op.create_index('ix_assignments_convo_role', 'config_assignments', ['convo_id', 'role'], unique=False)
-    op.create_index('ix_assignments_workspace_role', 'config_assignments', ['workspace_id', 'role'], unique=False)
-    op.create_index('uix_convo_role', 'config_assignments', ['convo_id', 'role'], unique=True, postgresql_where=sa.text('convo_id IS NOT NULL'))
-    op.create_index('uix_workspace_role', 'config_assignments', ['workspace_id', 'role'], unique=True, postgresql_where=sa.text('workspace_id IS NOT NULL'))
     op.create_table('messages',
     sa.Column('message_id', sa.String(length=26), nullable=False),
     sa.Column('convo_id', sa.String(length=26), nullable=False),
@@ -155,23 +120,12 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_messages_message_id'), table_name='messages')
     op.drop_index('ix_messages_convo_created', table_name='messages')
     op.drop_table('messages')
-    op.drop_index('uix_workspace_role', table_name='config_assignments', postgresql_where=sa.text('workspace_id IS NOT NULL'))
-    op.drop_index('uix_convo_role', table_name='config_assignments', postgresql_where=sa.text('convo_id IS NOT NULL'))
-    op.drop_index('ix_assignments_workspace_role', table_name='config_assignments')
-    op.drop_index('ix_assignments_convo_role', table_name='config_assignments')
-    op.drop_index('ix_assignments_config', table_name='config_assignments')
-    op.drop_table('config_assignments')
     op.drop_table('source_workspace_association')
     op.drop_index(op.f('ix_convos_convo_id'), table_name='convos')
     op.drop_index('ix_convo_user_workspace', table_name='convos')
     op.drop_table('convos')
     op.drop_index(op.f('ix_workspaces_name'), table_name='workspaces')
     op.drop_table('workspaces')
-    op.drop_index('uix_system_default_category', table_name='user_tool_configs', postgresql_where=sa.text('is_system_default = true'))
-    op.drop_index(op.f('ix_user_tool_configs_user_id'), table_name='user_tool_configs')
-    op.drop_index('ix_tool_configs_user_category', table_name='user_tool_configs')
-    op.drop_index('ix_tool_configs_system_defaults', table_name='user_tool_configs')
-    op.drop_table('user_tool_configs')
     op.drop_index('ix_chunks_source_id', table_name='chunks')
     op.drop_table('chunks')
     op.drop_table('users')

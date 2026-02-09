@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel
-from backend.src.api.dependencies import get_db_session, get_infra, get_request_context
+from backend.src.api.dependencies import get_db_session, get_infra 
 from backend.src.api.request_context import RequestContext
 from backend.src.api.schemas import SourceResponseDeep
 from backend.src.domain.schemas import ParserConfig, ChunkerConfig, EmbedderConfig
@@ -18,34 +18,34 @@ from backend.src.tasks.storing import store_file_vectors
 router = APIRouter(prefix="/testing", tags=["Testing"])
 
 
-@router.post("/test_parse/{user_id}")
-async def parse_test(
-    request: Request,
-    user_id: str,
-    workspace_id: Annotated[str, Body()],
-    path: Annotated[str, Body()],
-    session=Depends(get_db_session),
-):
-    context = RequestContext.create_simple(user_id=user_id, workspace_id=workspace_id)
-
-    logger.success(f"Successfully parsed {path}")
-
-
-@router.get("/available-parsers}")
-async def available_parsers(
-    request: Request,
-    user_id: str,
-    session=Depends(get_db_session),
-):
-    from backend.src.services.processing.parser_service import ParserService
-
-    context = RequestContext.create_simple(user_id=user_id, workspace_id="999999")
-
-    parsers = ParserService.get_available_parsers()
-
-    logger.success(f"Successfully got parsers {len(parsers)}")
-
-    return parsers
+# @router.post("/test_parse/{user_id}")
+# async def parse_test(
+#     request: Request,
+#     user_id: str,
+#     workspace_id: Annotated[str, Body()],
+#     path: Annotated[str, Body()],
+#     session=Depends(get_db_session),
+# ):
+#     context = RequestContext.create_simple(user_id=user_id, workspace_id=workspace_id)
+#
+#     logger.success(f"Successfully parsed {path}")
+#
+#
+# @router.get("/available-parsers}")
+# async def available_parsers(
+#     request: Request,
+#     user_id: str,
+#     session=Depends(get_db_session),
+# ):
+#     from backend.src.services.processing.parser_service import ParserService
+#
+#     context = RequestContext.create_simple(user_id=user_id, workspace_id="999999")
+#
+#     parsers = ParserService.get_available_parsers()
+#
+#     logger.success(f"Successfully got parsers {len(parsers)}")
+#
+#     return parsers
 
 
 class UploadPathsRequest(BaseModel):
