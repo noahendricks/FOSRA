@@ -2,7 +2,6 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.src.domain.schemas import RerankResult, RerankerConfig
 from backend.src.domain.schemas.source_schemas import (
-    ProcessingResult,
     RetrievedResult,
 )
 from backend.src.services.retrieval.reranker_service import RerankerService

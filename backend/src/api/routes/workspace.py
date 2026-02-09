@@ -291,22 +291,10 @@ async def restore_conversation(
         raise e
 
 
-# # PUT Update conversation settings (your toggles)
-# @router.put("/{convo_id}/settings")
-# async def update_conversation_settings(convo_id: str, request):
-#     pass
-
-
-# # PUT Update conversation config overrides
-# @router.put("/conversation/{convo_id}")
-# async def update_conversation_config(convo_id: str, request):
-#     pass
-
 
 # ============================================================================
 # DELETE
 # ============================================================================
-# - DELETE Convo
 @router.delete("/user/profile/{user_id}")
 async def delete_temporary_convo(request):
     pass
@@ -430,6 +418,7 @@ async def send_message_stream(
                     config=parser_config,
                     session_factory=session_factory,
                 )
+
                 print(f"DEBUGPRINT[71]: workspace.py:458: parsed={parsed}")
 
                 chunked = await chunk_sources(config=chunker_config, sources=parsed)

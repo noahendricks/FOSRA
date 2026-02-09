@@ -25,7 +25,7 @@ class _BaseModelFlex(BaseModel):
         populate_by_name=True,
     )
 
-    model_config: ConfigDict = _FLEXIBLE_CONFIG
+    model_config: ConfigDict = _FLEXIBLE_CONFIG #pyright: ignore
 
 
 class MessageAPI(_BaseModelFlex):
@@ -67,18 +67,6 @@ class NewUserRequest(UserLogin):
 class UserRequest(_BaseModelFlex):
     user_id: str
     created_at: datetime = Field(default_factory=utc_now)
-
-
-class UserUpdateRequest(UserRequestBase):
-    """Properties for updating a user."""
-
-    username: str | None = None
-    enabled: bool | None = None
-
-
-# ============================================================================
-# API OUTPUT SCHEMAS (Response DTOs)
-# ============================================================================
 
 
 class UserResponse(_BaseModelFlex):
@@ -234,11 +222,6 @@ class MessageUpdateRequest(MessageRequest):
 # ============================================================================
 
 
-# ============================================================================
-# Conversation Schemas
-# ============================================================================
-
-
 class ConvoRequestBase(_BaseModelFlex):
     user_id: str
     workspace_id: str
@@ -284,7 +267,6 @@ class NewConvoResponse(ConvoRequestBase):
 
 class ConvoFullResponse(ConvoRequestBase):
     convo_id: str
-    user_id: str | None = None
     title: str | None = "New Convo"
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -296,11 +278,6 @@ class ConvoFullResponse(ConvoRequestBase):
     )
 
     messages: list[MessageResponse] = Field(default_factory=list)
-
-
-# ============================================================================
-# Access Records Schemas
-# ============================================================================
 
 
 class CompletionResponse(_BaseModelFlex):

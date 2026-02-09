@@ -5,7 +5,6 @@ import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
-import logfire
 from loguru import logger
 
 from backend.src.domain.exceptions import (
@@ -121,7 +120,6 @@ class FlashRankReranker(LocalReranker):
     display_name = "FlashRank"
     default_model = "ms-marco-TinyBERT-L-2-v2"
 
-    @logfire.instrument("Initializing FlashRank model")
     async def _initialize_model(self) -> None:
         try:
             from flashrank import Ranker
@@ -237,115 +235,6 @@ class FlashRankReranker(LocalReranker):
                 reason=str(e),
             ) from e
 
-
-@BaseReranker.register(RerankerType.CROSS_ENCODER)
-class CrossEncoderReranker(LocalReranker):
-    reranker_type = RerankerType.CROSS_ENCODER
-    display_name = "Cross-Encoder"
-    default_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-
-    async def _initialize_model(self) -> None:
-        try:
-            from sentence_transformers import CrossEncoder
-
-            logger.debug(f"Loading cross-encoder model: {self.default_model}")
-            self._model = CrossEncoder(self.default_model)
-            logger.success(f"Cross-encoder model loaded: {self.default_model}")
-
-        except ImportError as e:
-            logger.error("sentence-transformers not installed")
-            raise RerankerDependencyError(
-                reranker_type=self.reranker_type.value,
-                missing_dependency="sentence-transformers",
-            ) from e
-        except Exception as e:
-            logger.error(f"Failed to initialize cross-encoder: {e}")
-            raise RerankerInitializationError(
-                reranker_type=self.reranker_type.value,
-                reason=str(e),
-            ) from e
-
-    async def rerank(
-        self,
-        query: str,
-        documents: list[RetrievedResult],
-        config: RerankerConfig,
-        user_id: str | None = None,
-    ) -> RerankResult:
-        start_time = time.time()
-
-        if not documents:
-            logger.warning("No documents to rerank")
-            return RerankResult(
-                documents=[],
-                reranker_used=self.reranker_type.value,
-                original_count=0,
-            )
-
-        try:
-            await self._ensure_initialized()
-
-            logger.debug(
-                f"Reranking {len(documents)} documents with Cross-Encoder, "
-                f"top_k={config.top_k}, threshold={config.score_threshold}"
-            )
-
-            pairs = [(query, d.contents or "") for d in documents]
-
-            scores = await asyncio.to_thread(
-                lambda: self._model.predict(pairs)  # type: ignore
-            )
-
-            for doc, score in zip(documents, scores):
-                doc.reranker_score = float(score)
-                doc.similarity_score = float(score)
-
-            reranked_docs = sorted(
-                documents,
-                key=lambda x: x.reranker_score or 0,
-                reverse=True,
-            )
-
-            if config.score_threshold is not None:
-                before_filter = len(reranked_docs)
-                reranked_docs = [
-                    d
-                    for d in reranked_docs
-                    if d.reranker_score or 0 >= config.score_threshold
-                ]
-                logger.debug(
-                    f"Filtered {before_filter - len(reranked_docs)} documents "
-                    f"below threshold {config.score_threshold}"
-                )
-
-            reranked_docs = reranked_docs[: config.top_k]
-
-            rerank_time = (time.time() - start_time) * 1000
-
-            logger.info(
-                f"Cross-encoder reranking complete: "
-                f"{len(reranked_docs)}/{len(documents)} documents, "
-                f"{rerank_time:.2f}ms"
-            )
-
-            return RerankResult(
-                documents=reranked_docs,
-                reranker_used=self.reranker_type.value,
-                rerank_time_ms=rerank_time,
-                original_count=len(documents),
-                filtered_count=len(reranked_docs),
-            )
-
-        except (RerankerDependencyError, RerankerInitializationError):
-            raise
-        except Exception as e:
-            logger.error(f"Cross-encoder reranking failed: {e}")
-            raise RerankingOperationError(
-                reranker_type=self.reranker_type.value,
-                query=query,
-                document_count=len(documents),
-                reason=str(e),
-            ) from e
 
 
 # =============================================================================

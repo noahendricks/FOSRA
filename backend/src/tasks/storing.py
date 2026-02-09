@@ -10,7 +10,7 @@ from .broker import broker
 async def store_file_vectors(
     sources: list[SourceFull],
     config: VectorStoreConfig,
-    session_factory: async_sessionmaker,
+    session_factory: async_sessionmaker[AsyncSession],
 ) -> list[str]:
     """Upsert source documents and their vectors into the store."""
 

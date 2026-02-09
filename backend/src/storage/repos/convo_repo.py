@@ -41,14 +41,14 @@ from backend.src.domain.schemas import (
 from backend.src.domain.enums import MessageRole
 
 
-def file_part_to_dict(file_part: FilePartDomain) -> dict:
+def file_part_to_dict(file_part: FilePartDomain) -> dict[str,Any]:
     d = msgspec.structs.asdict(file_part)
     if d.get("bytes"):
         d["bytes"] = base64.b64encode(d["bytes"]).decode("utf-8")
     return d
 
 
-def dict_to_file_part(d: dict) -> FilePartDomain:
+def dict_to_file_part(d: dict[str,Any]) -> FilePartDomain:
     if d.get("bytes"):
         d["bytes"] = base64.b64decode(d["bytes"])
     return msgspec.convert(d, FilePartDomain)

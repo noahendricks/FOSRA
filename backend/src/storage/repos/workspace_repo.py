@@ -7,10 +7,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from backend.src.api.schemas import (
-    ConvoFullResponse,
-    ConvoRequest,
     WorkspaceDeleteRequest,
-    WorkspaceFullResponse,
     WorkspaceRequest,
     NewWorkspaceRequest,
     WorkspaceUpdateRequest,

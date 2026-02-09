@@ -86,21 +86,6 @@ class SourceResponseDeep(SourceResponseBase):
     result_score: float = 0.0
 
 
-# ============================================================================
-# Retrieval Schemas
-# ============================================================================
-
-
-class ChunkResponse(_BaseModelFlex):
-    chunk_id: str
-    source_id: str
-    source_hash: str
-    start_index: int
-    end_index: int
-    token_count: int
-    text: str
-
-
 class ChunkWithScoreResponse(_BaseModelFlex):
     """Chunk with retrieval scoring."""
 
@@ -116,20 +101,3 @@ class SourceGroupResponse(_BaseModelFlex):
     chunks: list[ChunkWithScoreResponse]
     top_score: float
     chunk_count: int
-
-
-# ============================================================================
-# Access Records
-# API Output SCHEMAS (Request DTOs)
-# ============================================================================
-
-
-class AccessRecordResponse(_BaseModelFlex):
-    """Access record schema for API responses."""
-
-    access_id: str
-    user_id: str
-    source_id: str
-    accessed_at: datetime = Field(default_factory=utc_now)
-    access_type: str | None = None
-    times_accessed: int

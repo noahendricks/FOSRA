@@ -3,12 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from qdrant_client.models import Payload
-from ulid import ULID
 
 from msgspec import field
 
-from backend.src.api.schemas import SourceResponseDeep
 from backend.src.domain.enums import (
     DocumentType,
     FileType,
@@ -54,9 +51,8 @@ class SourceProcessing(Source):
 
 class SourceUpdate(Source):
     """Properties for updating a source."""
-
-    source_summary: str | None = None
-    summary_embedding: str | None = None
+    source_summary: str | None = None #pyright: ignore
+    summary_embedding: str | None = None #pyright: ignore
 
 
 class SourceFull(Source):
@@ -208,43 +204,7 @@ class RetrievalConfig(DomainStruct):
     deduplicate: bool = True
 
 
-# ============================================================================
-# Access Records Schemas
-# ============================================================================
 
 
-class AccessRecordBase(DomainStruct):
-    """Base access record properties."""
-
-    access_id: str
-    user_id: str
-    source_id: str
-    times_accessed: int
-    access_type: str | None = None
 
 
-class AccessRecordCreate(AccessRecordBase):
-    """Properties for creating an access record."""
-
-    pass
-
-
-class AccessRecord(AccessRecordBase):
-    """Access record schema for API responses."""
-
-    accessed_at: datetime = field(default_factory=utc_now)
-
-
-class ProcessingResult(DomainStruct):
-    """Base access record properties."""
-
-    access_id: str | None = None
-    user_id: str | None = None
-    source: SourceFull | None = None
-    source_id: str | None = None
-    times_accessed: int | None = None
-    access_type: str | None = None
-    errors: list[str] = field(default_factory=list)
-    page_count: int = 0
-    chunk_count: int = 0
-    processing_time_ms: float = 0.0
