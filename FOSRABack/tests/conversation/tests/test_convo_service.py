@@ -1,39 +1,3 @@
-"""
-Tests for ConvoService class.
-
-Test coverage targets:
-- ConvoService.__init__
-- ConvoService.create_new_convo
-- ConvoService.save_user_message
-- ConvoService.new_assistant_message
-- ConvoService.get_context
-- ConvoService.format_to_str
-- ConvoService.new_user_message
-
-TESTING PHILOSOPHY:
--------------------
-1. UNIT TESTS: Test individual methods in isolation using mocks
-   - Mock all external dependencies (database, vector store, etc.)
-   - Focus on: correct behavior, edge cases, error handling
-   - Fast to run, no I/O
-
-2. INTEGRATION TESTS: Test how components work together
-   - Use real (but temporary) databases
-   - Verify data actually persists and can be retrieved
-   - Slower but catch real integration issues
-
-3. WHAT TO TEST:
-   - Happy path: Method works correctly with valid inputs
-   - Edge cases: Empty lists, None values, boundary conditions
-   - Error handling: Method fails gracefully with invalid inputs
-   - State changes: Side effects occur as expected (DB writes, etc.)
-
-4. WHAT NOT TO TEST:
-   - Third-party library internals (trust they work)
-   - Simple getters/setters with no logic
-   - Implementation details that may change
-"""
-
 from pathlib import Path
 from typing import cast, Any
 import pytest

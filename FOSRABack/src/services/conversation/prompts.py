@@ -131,17 +131,17 @@ def format_documents_for_context(sources: list[dict[str, Any]]) -> str:
         return ""
 
     for src in sources:
-        document_info = (doc.get("document") or {}) if isinstance(doc, dict) else {}
+        document_info = (src.get("document") or {}) if isinstance(src, dict) else {}
         metadata = (
             (document_info.get("metadata") or {})
             if isinstance(document_info, dict)
             else {}
         )
-        if not metadata and isinstance(doc, dict):
-            metadata = doc.get("metadata") or {}
+        if not metadata and isinstance(src, dict):
+            metadata = src.get("metadata") or {}
 
         source = (
-            (doc.get("source") if isinstance(doc, dict) else None)
+            (src.get("source") if isinstance(src, dict) else None)
             or metadata.get("document_type")
             or "UNKNOWN"
         )
@@ -175,7 +175,7 @@ def format_documents_for_context(sources: list[dict[str, Any]]) -> str:
                 "chunks": [],
             }
 
-        chunks_list = doc.get("chunks") if isinstance(doc, dict) else None
+        chunks_list = src.get("chunks") if isinstance(doc, dict) else None
         if isinstance(chunks_list, list) and chunks_list:
             for ch in chunks_list:
                 if not isinstance(ch, dict):
@@ -491,7 +491,7 @@ async def search_knowledge_base_async(
         if doc_id:
             seen_doc_ids.add(doc_id)
         seen_hashes.add(content_hash)
-        deduplicated.append(doc)
+        deduplicated.append(src)
 
     return format_documents_for_context(deduplicated)
 

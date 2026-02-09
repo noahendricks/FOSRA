@@ -354,6 +354,7 @@ async def send_message_stream(
                 if not req.convo_id:
                     raise ValueError("No ConvoId Provided in Attempt to Send Message")
 
+                # get context bundle from db from user info
                 ctx = await RequestContext.from_request(
                     user_id=req.user_id,
                     workspace_id=req.workspace_id,
@@ -372,6 +373,7 @@ async def send_message_stream(
                 def emit_chunk(chunk: dict[str, Any]) -> str:
                     return f"data: {json.dumps(chunk)}\n\n"
 
+                # note: these should be gotten from ctx when configured correctly
                 storage_config = StorageConfig()
                 parser_config = ParserConfig(preferrend_parser_type=ParserType.MARKDOWN)
                 chunker_config = ChunkerConfig(preferred_chunker_type=ChunkerType.TOKEN)
@@ -379,8 +381,6 @@ async def send_message_stream(
                 vector_config = VectorStoreConfig(
                     host="localhost", port=6333, api_base=None
                 )
-
-                # TODO: Add retrieving files from user message source part
 
                 logger.debug("prior to message save")
 
@@ -397,6 +397,8 @@ async def send_message_stream(
 
                 logger.debug("prior to ingest")
 
+                # begin the source retrieval
+                # should be extracted to distinct external function
                 yield emit_chunk(
                     {
                         "type": "data-rag-status",
@@ -406,8 +408,7 @@ async def send_message_stream(
 
                 logger.debug(sys.getsizeof(new_message))
 
-                print()
-
+                # ui file parts from request to filecontent obj
                 files = await ingest_files(
                     files=[i for i in new_message.parts if isinstance(i, FilePart)],
                     session=session,
@@ -484,6 +485,7 @@ async def send_message_stream(
                     session=session,
                 )
 
+                # raw returned sources
                 search: list[RetrievedResult] = await VectorService().search(
                     query_vector=query,
                     query_text=user_query,
@@ -491,24 +493,29 @@ async def send_message_stream(
                     session=session,
                 )
 
+                # end of the source retrieval pipeline
+
                 logger.debug("after search")
 
                 # NOTE: Currently throwing: "expected str got array"
-                sources_grouped: list[SourceGroup] = group_by_source(results=search)
-                print()
 
+                # sources grouped as backend domain objects
+                sources_grouped: list[SourceGroup] = group_by_source(results=search)
+
+                # sources grouped as the shape the shape frontend expects
                 source_groups_response: list[SourceGroupResponse] = [
                     domain_to_response(group, SourceGroupResponse)
                     for group in sources_grouped
                 ]
                 # NOTE: EMPTY
 
+                # sources in the shape sse stream expects
                 sources_as_dicts: list[dict[str, Any]] = [
                     group.model_dump(mode="json") for group in source_groups_response
                 ]
 
-                print()
                 # NOTE: EMPTY
+                # rag status complete message
                 yield emit_chunk(
                     {
                         "type": "data-rag-status",
@@ -523,9 +530,9 @@ async def send_message_stream(
                 )
                 # NOTE: EMPTY
 
-                print()
                 # NOTE: EMPTY
 
+                # NOTE: source retrieval pipeline currently accomodates batch return rather than one by one
                 for src in sources_as_dicts:
                     yield emit_chunk(
                         {
@@ -533,12 +540,13 @@ async def send_message_stream(
                             "source": src,
                         }
                     )
+
                 yield emit_chunk({"type": "start", "messageId": message_id})
                 yield emit_chunk({"type": "text-start", "id": text_part_id})
 
             # TODO: Add LLM Initialization checks and remediation
-            # NOTE: Type narrowing should have got here, messages shouldn't be none
 
+            # call llm
             stream: AsyncIterator[AIMessageChunk] = await generate_llm_response(
                 chat_history=req.messages if req.messages else [],
                 convo_id=req.convo_id,
@@ -546,9 +554,12 @@ async def send_message_stream(
                 user_prefs=None,
             )
 
+            # text to be saved to llm message
             full_text = ""
 
             logger.debug("prior to stream")
+
+            # sse stream each chunk from the llm
             async for chunk in stream:
                 content = chunk.content
                 if content:
@@ -557,14 +568,17 @@ async def send_message_stream(
                     )
                     full_text += text_chunk
 
+                    # vercel ai format
                     yield f"data: {json.dumps({'type': 'text-delta', 'id': text_part_id, 'delta': text_chunk})}\n\n"
 
             logger.debug("after stream")
 
+            # text stream ended sse event
             yield f"data: {json.dumps({'type': 'text-end', 'id': text_part_id})}\n\n"
 
             logger.info(sources_grouped)
 
+            # assistant message saved as message obj
             _ = await ConversationService().save_message(
                 message=MessageResponse(
                     role=MessageRole.ASSISTANT,
