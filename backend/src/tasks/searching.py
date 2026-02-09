@@ -9,7 +9,6 @@ from backend.src.domain.schemas import (
 from backend.src.domain.schemas.config_schemas import RerankerConfig
 from backend.src.services.retrieval.impls._utils import (
     deduplicate_results,
-    transform_vector_results,
 )
 from backend.src.services.retrieval.vector_service import VectorService
 from backend.src.tasks.processing import embed_query

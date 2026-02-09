@@ -1,16 +1,14 @@
 from fastapi import APIRouter
 
-from backend.src.api.schemas.config_api_schemas import WorkspacePreferencesAPI
 
 
 router = APIRouter(tags=["Config"])
 
 
 # GET User config
-@router.get("/user/{user_id}")
-async def get_user_config(user_id: str) -> WorkspacePreferencesAPI:
-    u = WorkspacePreferencesAPI()
-    return u
+async def get_user_config(user_id: str):
+    #deprecated- needs rewrite
+    pass
 
 
 # PUT Update user config

@@ -200,42 +200,4 @@ class ValidationResult(DomainStruct):
     response_preview: str | None = None
 
 
-class ToolConfig(DomainStruct):
-    # Config details
-    name: str
-    category: ToolCategory
-    provider: str
-    model: str | None = None
-    details: dict[str, Any] = {}
-    description: str = ""
-    is_system_default: bool | None = True
 
-    # Optional immediate assignment
-    assign_to_workspace: str | None = None
-    assign_to_convo: str | None = None
-    assign_as_role: ConfigRole | None = None
-
-    def should_assign(self) -> bool:
-        return self.assign_as_role is not None
-
-
-class ToolConfigUpdate(DomainStruct):
-    name: str | None = None
-    description: str | None = None
-    provider: str | None = None
-    model: str | None = None
-    details: dict[str, Any] | None = None
-
-
-class ToolConfigResponse(DomainStruct):
-    id: str
-    user_id: str
-    name: str
-    description: str | None
-    category: ToolCategory
-    provider: str
-    model: str | None
-    details: dict[str, Any]
-    created_at: str
-    updated_at: str
-    is_system_default: bool = True

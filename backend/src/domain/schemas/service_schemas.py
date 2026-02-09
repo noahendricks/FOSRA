@@ -62,12 +62,4 @@ class StreamValidationResult(DomainStruct):
     warnings: list[str] = field(default_factory=list)
 
 
-class StreamingStats(DomainStruct):
-    """Streaming statistics."""
 
-    active_streams: int
-    total_chunks_sent: int
-    average_stream_duration_seconds: float
-    success_rate: float
-    error_count: int
-    last_updated: str

@@ -364,6 +364,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     # Query & Search (400/404)
     app.add_exception_handler(QueryError, query_error_handler)
+
     app.add_exception_handler(RetrievalError, retrieval_error_handler)
 
     # RAG (500/503)

@@ -27,10 +27,7 @@ async def parse_files(
             files=files_list, config=config, session_factory=session_factory
         )
 
-        logger.info(
-            f"Parse Documents output for each: {[i.content[:50] for i in parsed_files if i]}"
-        )
-
+        
         return parsed_files
 
     except Exception as e:
@@ -66,7 +63,7 @@ async def chunk_sources(
 async def embed_documents(
     sources: list[SourceFull],
     config: EmbedderConfig,
-    session_factory: async_sessionmaker,
+    session_factory: async_sessionmaker[AsyncSession],
 ) -> list[SourceFull]:
     """
     Process a file_path to raw bytes and relevant metadata"""

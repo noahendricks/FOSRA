@@ -23,7 +23,6 @@ from backend.src.domain.schemas import (
 
 from backend.src.domain.enums import ChunkerType
 
-
 # =============================================================================
 # Base Chunker Interface
 # =============================================================================
@@ -114,10 +113,6 @@ class BaseChunker(ABC):
             errors=[error],
         )
 
-
-# =============================================================================
-# Concrete Chunker Implementations
-# =============================================================================
 
 
 @BaseChunker.register(ChunkerType.SEMANTIC)
@@ -409,39 +404,7 @@ class ChunkerService:
         """Get list of all available chunker types."""
         return BaseChunker.get_available_chunkers()
 
-    async def chunk_text(
-        self,
-        text: str,
-        source_id: str,
-        source_hash: str,
-        config: ChunkerConfig | None = None,
-    ) -> ChunkingResult:
-        chunker_type = config.preferred_chunker_type or self.default_chunker
-        chunker = self.get_chunker(chunker_type)
-
-        if not chunker:
-            return ChunkingResult(
-                chunks=[],
-                errors=[f"Chunker not found: {chunker_type}"],
-            )
-
-        return await chunker.chunk_text(text, source_id, source_hash, config)
-
-    async def chunk_source(
-        self,
-        config: ChunkerConfig,
-        source: SourceFull,
-    ) -> SourceFull:
-        chunker_type = config.preferred_chunker_type or self.default_chunker
-
-        chunker = self.get_chunker(chunker_type)
-
-        if not chunker:
-            logger.error(f"Chunker not found: {chunker_type}")
-            return source
-
-        return await chunker.chunk_source(source, config)
-
+    
     async def chunk_sources(
         self,
         sources: list[SourceFull],

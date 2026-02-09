@@ -174,8 +174,6 @@ class ConversationService:
 
     # Message Operations & RAG Logic
     # =========================================================================
-    #
-    #
     @staticmethod
     async def unpack_message(
         message: UIMessage, convo_id: str, user_id: str

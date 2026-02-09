@@ -4,22 +4,17 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.schemas import (
-    ConvoRequest,
     NewUserRequest,
     UserRequest,
-    UserRequestBase,
     UserUpdateRequest,
     UserResponse,
 )
 
-from backend.src.api.schemas.api_schemas import NewUserResponse
 from backend.src.domain.exceptions import (
-    UserExistenceError,
     UserRetrievalError,
-    UserStorageError,
 )
 from backend.src.domain.schemas import User
-from backend.src.domain.schemas.schemas import UserLogin, UserUpdate
+from backend.src.domain.schemas.schemas import  UserUpdate
 from backend.src.storage.repos.user_repo import UserRepo
 from backend.src.storage.utils.converters import (
     domain_to_response,
@@ -110,39 +105,7 @@ class UserService:
         )
         return result
 
-    @staticmethod
-    async def delete_list_of_users(
-        user_list: list[str],
-        session: AsyncSession,
-    ) -> bool:
-        result = False
-
-        try:
-            if user_list:
-                u_list = user_list
-                for id in u_list:
-                    result = await UserRepo.delete_user(user_id=id, session=session)
-                    logger.info(f"Deleted user {id}!")
-            return result
-
-        except Exception:
-            raise
-
-    @staticmethod
-    async def user_exists(user_request: UserRequest, session: AsyncSession) -> bool:
-        exists = await UserRepo.exists(user_id=user_request.user_id, session=session)
-        return exists
-
-    @staticmethod
-    async def check_user_exists(username, session: AsyncSession) -> bool:
-        try:
-            exists = await UserRepo().validate_user(session=session, username=username)
-
-            return exists
-
-        except Exception as e:
-            raise
-
+    
     @staticmethod
     async def check_user_login(
         username: str, password: str, session: AsyncSession

@@ -13,11 +13,9 @@ from backend.src.domain.enums import (
     RerankerType,
     RetrievalMode,
     SearchStrategy,
-    StorageBackendType,
     VectorStoreType,
     FileType,
 )
-from backend.src.domain.enums import ConfigRole, ToolCategory
 
 
 if TYPE_CHECKING:
@@ -206,88 +204,4 @@ class RetrievalConfig(_BaseModelFlex):
     deduplicate: bool = True
 
 
-class StorageConfigRequest(BaseServiceConfig):
-    """User's storage backend configuration."""
 
-    backend_type: StorageBackendType = StorageBackendType.FILESYSTEM
-
-    timeout_seconds: int = 30
-    max_retries: int = 3
-    chunk_size: int = 8192
-
-    backend_options: dict[str, Any] = Field(default_factory=dict)
-
-    base_path: str | None = Field(
-        default=None, description="Base directory for filesystem storage"
-    )
-
-    def to_init_config(self) -> dict[str, Any]:
-        """Convert to initialization config dict."""
-        config = {
-            "backend_type": self.backend_type,
-            "timeout_seconds": self.timeout_seconds,
-            "max_retries": self.max_retries,
-            "chunk_size": self.chunk_size,
-            "backend_options": self.backend_options,
-        }
-
-        return config
-
-
-class ToolConfigCreate(_BaseModelFlex):
-    """Create config AND optionally assign it."""
-
-    name: str
-    category: ToolCategory
-    provider: str
-    model: str | None = None
-    details: dict[str, Any] = {}
-    is_system_default: bool = True
-    description: str
-
-    assign_to_workspace: str | None = None
-    assign_to_convo: str | None = None
-    assign_as_role: ConfigRole | None = None
-
-    def should_assign(self) -> bool:
-        return self.assign_as_role is not None
-
-
-class ToolConfigUpdate(_BaseModelFlex):
-    """Schema for updating tool configuration."""
-
-    name: str | None = Field(None, min_length=1, max_length=100)
-    description: str | None = Field(None, max_length=500)
-    provider: str | None = Field(None, min_length=1, max_length=50)
-    model: str | None = None
-    details: dict[str, Any] | None = None
-
-
-class ToolConfig(_BaseModelFlex):
-    """Schema for tool configuration response."""
-
-    id: str
-    user_id: str
-    name: str
-    description: str | None
-    category: ToolCategory
-    provider: str
-    model: str | None
-    details: dict[str, Any]
-    is_system_default: bool = True
-    created_at: str
-    updated_at: str
-
-
-class PreferencesAPI(_BaseModelFlex):
-    llms: dict[ConfigRole, LLMConfigRequest] = Field(default_factory=dict)
-
-    parser: ParserConfigRequest = Field(default_factory=ParserConfigRequest)
-
-    vector_store: VectorStoreConfigRequest = Field(
-        default_factory=VectorStoreConfigRequest
-    )
-
-    embedder: EmbedderConfigRequest = Field(default_factory=EmbedderConfigRequest)
-    reranker: RerankerConfigRequest = Field(default_factory=RerankerConfigRequest)
-    storage: StorageConfigRequest = Field(default_factory=StorageConfigRequest)

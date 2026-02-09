@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 # =============================================================================
 
 
+#for use with langchain
 @dataclass
 class QueryExpander:
     enable_expansion: bool = True
@@ -212,72 +213,6 @@ class QueryExpander:
 
 # =============================================================================
 # Metadata Filtering
-# =============================================================================
-
-
-@dataclass
-class MetadataFilter:
-    class Filters(DomainStruct):
-        file_path: list[str] | None = None
-        source_type: str | None = None
-        date_after: str | None = None
-        date_before: str | None = None
-        tags: list[str] | None = None
-        custom_field: Any = None
-
-    def filter_chunks(
-        self,
-        chunks: list[dict[str, Any]],
-        filters: Filters,
-    ) -> list[dict[str, Any]]:
-        logger.debug(f"Applying metadata filters: {filters.to_dict()}")
-
-        try:
-            filtered: list[dict[str, Any]] = []
-
-            for chunk in chunks:
-                if self._matches_filters(chunk, filters):
-                    filtered.append(chunk)
-
-            logger.success(
-                f"Filtered {len(chunks)} chunks down to {len(filtered)} matches"
-            )
-            return filtered
-
-        except Exception as e:
-            logger.error(f"Metadata filtering failed: {e}")
-            raise MetadataFilterError(
-                filter_key="multiple",
-                reason=str(e),
-            ) from e
-
-    def _matches_filters(self, chunk: dict[str, Any], filters: Filters) -> bool:
-        dict_filters = filters.to_dict()
-        for key, value in dict_filters.items():
-            chunk_value = chunk.get(key)
-
-            if callable(value):
-                try:
-                    if not value(chunk_value):
-                        return False
-                except Exception as e:
-                    logger.warning(f"Callable filter failed for key '{key}': {e}")
-                    return False
-                continue
-
-            if isinstance(value, list):
-                if chunk_value not in value:
-                    return False
-                continue
-
-            if chunk_value != value:
-                return False
-
-        return True
-
-
-# =============================================================================
-# Result Fusion (RRF)
 # =============================================================================
 
 

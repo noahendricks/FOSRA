@@ -67,7 +67,6 @@ class BaseEmbedder(ABC):
     def get_available_embedders(cls) -> list[str]:
         return list(cls._registry.keys())
 
-    # Class attributes (defined in subclasses)
     embedder_type: ClassVar[EmbedderType]
     display_name: ClassVar[str]
     default_dense_model: ClassVar[str]

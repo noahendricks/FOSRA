@@ -28,16 +28,6 @@ from backend.src.api.schemas.config_api_schemas import (
     RerankerConfigRequest,
 )
 
-from backend.src.api.schemas.settings_api_schemas import (
-    ConnectorSettingsRequest,
-    DatabaseSettingsRequest,
-    VectorSettingsRequest,
-    QdrantSettingsRequest,
-    EmbeddingSettingsRequest,
-    RerankerSettingsRequest,
-    APIKeySettingsRequest,
-)
-
 
 from backend.src.api.schemas.source_api_schemas import (
     SourceResponseDeep,

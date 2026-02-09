@@ -17,25 +17,15 @@ from .broker import broker
 from blake3 import blake3
 
 
+
 @broker.task
 async def ingest_files(
     files: list[FilePart], session: AsyncSession, storage_config: StorageConfig
 ) -> list[FileContent]:
-    """
-    Ingest a file_path to raw bytes and relevant metadata.
-
-    Returns:
-        FileContent object with Raw File Bytes and Metadata
-    """
-    import time
-
-    start_time = time.time()
 
     files_out = []
     try:
         for f in files:
-            content = f.bytes.decode("utf-8")
-
             context = f"{f.filename}, {f.type}"
             hash = blake3(f.bytes, derive_key_context=context).hexdigest()
             logger.debug(hash)
