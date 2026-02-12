@@ -54,29 +54,25 @@ class SourceRequest(_BaseModelFlex):
 class SourceResponseBase(_BaseModelFlex):
     """Response DTO for a source in a directory session."""
 
-    origin_path: str | None = None
-    origin_type: OriginType | str | None
-    source_id: str
-    source_type: FileType | None = None
-    uploaded_at: datetime = Field(default_factory=utc_now)
+    id: str
+    type: OriginType | str | None
     hash: str | None = None  # WARN: Change this to Non-Nullable
     name: str = ""
     document_type: DocumentType | None = None
     source_summary: str = ""
     summary_embedding: str = ""
+    uploaded_at: datetime = Field(default_factory=utc_now)
 
 
 class SourceResponseShallow(_BaseModelFlex):
     """Response DTO for a source in a directory session."""
 
-    source_id: str
+    id: str
     name: str = ""
-    origin_path: str | None = None
     source_summary: str = ""
-    origin_type: OriginType
+    source_type: OriginType
     summary_embedding: str = ""
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now())
-    modified_time: datetime = Field(default_factory=lambda: datetime.now())
 
 
 class SourceResponseDeep(SourceResponseBase):

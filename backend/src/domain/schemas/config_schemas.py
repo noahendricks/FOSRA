@@ -199,22 +199,23 @@ class RerankerConfig(DomainStruct):
         return self.api_key
 
 
-# TODO: Rename to WorkspacePreferences
+# internal type checking -- serialize to and from dict on ingress and egress
+# global settings -
 class UserPreferences(DomainStruct, kw_only=True):
     """Domain Container for all typed user preferences."""
 
-    # LLM configs by role
+    # llm configs by role
+    #
     llm_default: LLMConfig | None = None
     llm_fast: LLMConfig | None = None
     llm_logic: LLMConfig | None = None
     llm_heavy: LLMConfig | None = None
 
-    # Service configs
+    # service configs
     parser: ParserConfig | None = None
     vector_store: VectorStoreConfig | None = None
     embedder: EmbedderConfig | None = None
     reranker: RerankerConfig | None = None
-    storage: StorageConfig | None = None
     chunker: ChunkerConfig | None = None
 
     def get_llm_config(self, role: str = "default") -> LLMConfig | None:
@@ -233,12 +234,41 @@ class UserPreferences(DomainStruct, kw_only=True):
         return config
 
 
-class WorkspaceConfig(DomainStruct):
-    """User's reranker configuration."""
+class ModelPrefs(DomainStruct, kw_only=True):
+    stream_chat_response: bool
+    stream_delta_chunk_size: int
+    seed: str
+    stop_sequence: str
+    temperature: int
+    reasoning_effort: str
+    logit_bias: str
+    max_tokens: int
+    top_k: int
+    top_p: float
+    min_p: float
+    frequency_penalty: float
+    presence_penalty: int
+    mirostat: float
+    mirostat_eta: float
+    mirostat_tau: int
+    repeat_last_n: int
+    tfs_z: int
+    repeat_penalty: float
+    use_mmap: bool
+    use_mlock: bool
+    think_ollama: bool
+    format_ollama: str
+    num_keep_ollama: int
+    num_ctx_ollama: int
+    num_batch_ollama: int
+    num_thread_ollama: int
+    num_gpu_ollama: int
+    keep_alive_ollama: bool
 
-    config_id: int | None = None
-    config_name: str = ""
-    enabled: bool = False
-    UserPreferences: UserPreferences | None = None
 
-    params: dict[str, Any] | None = None
+# workspace and convo settings - workspace -> convo precedence
+class DynamicPrefs(DomainStruct, kw_only=True):
+    llm_prefs: ModelPrefs | None = None  # remove none - set defaults
+    search_enabled: bool = False
+    rag_enabled: bool = True
+    llm_override: LLMConfig | None = None

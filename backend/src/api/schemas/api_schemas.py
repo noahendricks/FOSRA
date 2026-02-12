@@ -14,6 +14,7 @@ from backend.src.api.schemas.source_api_schemas import (
     SourceResponseShallow,
 )
 from backend.src.domain.enums import MessageRole
+from backend.src.domain.schemas.config_schemas import DynamicPrefs
 from backend.src.storage.utils.converters import utc_now
 
 
@@ -25,7 +26,7 @@ class _BaseModelFlex(BaseModel):
         populate_by_name=True,
     )
 
-    model_config: ConfigDict = _FLEXIBLE_CONFIG #pyright: ignore
+    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
 
 
 class MessageAPI(_BaseModelFlex):
@@ -271,7 +272,9 @@ class ConvoFullResponse(ConvoRequestBase):
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     message_count: int = 0
-    # Knowledge sources
+    dynamic_prefs: DynamicPrefs | None = None
+
+    #to source model
     knowledge_sources: list[SourceResponseDeep | SourceResponseShallow] = Field(
         default_factory=list,
         description="All sources for this chat",

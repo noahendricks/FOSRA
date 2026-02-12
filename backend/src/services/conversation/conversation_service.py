@@ -69,7 +69,6 @@ class ConversationService:
                 conversation,
                 NewConvoResponse,
             )
-
         except Exception as e:
             raise e
 
