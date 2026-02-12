@@ -36,7 +36,7 @@ from backend.src.domain.schemas import (
 from backend.src.domain.enums import LLMRole
 from backend.src.domain.schemas.config_schemas import UserPreferences
 from backend.src.domain.schemas.source_schemas import ChunkWithScore, SourceGroup
-from backend.src.services.conversation.prompts import FOSRA_CITATION_INSTRUCTIONS 
+from backend.src.services.conversation.prompts import FOSRA_CITATION_INSTRUCTIONS
 
 if TYPE_CHECKING:
     pass

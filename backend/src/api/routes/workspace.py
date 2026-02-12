@@ -1,12 +1,8 @@
 import sys
 from pydantic import BaseModel
-import msgspec
 import json
-from datetime import datetime
 from fastapi.responses import StreamingResponse
-from fastapi.exceptions import RequestValidationError
 from loguru import logger
-from starlette.types import Send
 from backend.src.api.request_context import RequestContext
 from backend.src.api.schemas.source_api_schemas import SourceGroupResponse
 from backend.src.domain.enums import (
@@ -49,7 +45,6 @@ from backend.src.api.schemas.api_schemas import (
     NewConvoResponse,
     NewWorkspaceRequest,
     NewWorkspaceResponse,
-    MessageRequest,
     TextPart,
     UIMessage,
     UIMessagePart,
@@ -66,7 +61,6 @@ from backend.src.tasks.processing import (
     parse_files,
 )
 
-import json
 
 if TYPE_CHECKING:
     from langchain_core.messages import AIMessageChunk
@@ -91,15 +85,6 @@ async def intercept_file_binary(
     # breakpoint()
     print(req)
     return None
-
-
-# ============================================================================
-# WORKSPACE
-# ============================================================================
-
-# ============================================================================
-# GET
-# ============================================================================
 
 
 @router.get("/{user_id}/list_workspaces")
@@ -131,9 +116,6 @@ async def get_existing_workspace(
     return requested_workspace
 
 
-# ============================================================================
-# POST
-# ============================================================================
 @router.post("/{user_id}/create_workspace/")
 async def new_workspace(
     request: Annotated[NewWorkspaceRequest, Query()], session=Depends(get_db_session)
@@ -144,9 +126,6 @@ async def new_workspace(
     return new_workspace
 
 
-# ============================================================================
-# PUT
-# ============================================================================
 @router.put("/{user_id}/{workspace_id}/")
 async def update_workspace(
     request: Annotated[WorkspaceUpdateRequest, Query()],
@@ -158,9 +137,6 @@ async def update_workspace(
     return requested_workspace
 
 
-# ============================================================================
-# DELETE
-# ============================================================================
 @router.delete("{user_id}/delete_workspaces/")
 async def delete_workspaces(
     request: Annotated[WorkspaceDeleteRequest, Query()], session=Depends(get_db_session)
@@ -172,14 +148,6 @@ async def delete_workspaces(
     return is_deleted
 
 
-# ============================================================================
-# Conversation
-# ============================================================================
-
-
-# ============================================================================
-# GET
-# ============================================================================
 @router.get("/{user_id}/{convo_id}/get_convo")
 async def get_convo(
     user_id: str, convo_id: str, session=Depends(get_db_session)
@@ -212,20 +180,6 @@ async def get_list_of_convos(
     return convo_list
 
 
-# # GET Conversation metadata/settings
-# @router.get("/{convo_id}/settings")
-# async def get_conversation_settings(convo_id: str):
-#     pass
-#
-# # GET Conversation config overrides
-# @router.get("/conversation/{convo_id}")
-# async def get_conversation_config(convo_id: str):
-#     pass
-
-
-# ============================================================================
-# POST
-# ============================================================================
 @router.post("/user/profile")
 async def new_temporary_convo(request):
     pass
@@ -246,9 +200,6 @@ async def create_new_convo(
         raise e
 
 
-# ============================================================================
-# PUT
-# ============================================================================
 @router.put("/{workspace_id}/{convo_id}")
 async def update_convo(
     request: Annotated[ConvoUpdateRequest, Query()], session=Depends(get_db_session)
@@ -291,10 +242,6 @@ async def restore_conversation(
         raise e
 
 
-
-# ============================================================================
-# DELETE
-# ============================================================================
 @router.delete("/user/profile/{user_id}")
 async def delete_temporary_convo(request):
     pass

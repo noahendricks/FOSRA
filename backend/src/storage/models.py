@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict
 
 from sqlalchemy import (
+    ForeignKeyConstraint,
     String,
     DateTime,
     Integer,
@@ -19,6 +20,7 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
     Column,
+    event,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -122,6 +124,11 @@ class UserORM(Base):
         DateTime(timezone=True), default=utc_now
     )
 
+    # Global Settings
+    preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
+
+    ui_prefs: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
+
     # Relationships
     workspaces: Mapped[list["WorkspaceORM"]] = relationship(
         back_populates="user",
@@ -150,6 +157,11 @@ class WorkspaceORM(Base):
 
     user_id: Mapped[str] = mapped_column(
         String(26), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+
+    # per request settings
+    dynamic_prefs: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        MutableDict.as_mutable(JSONB)
     )
 
     archived_convos: Mapped[Optional[dict[str, Any]]] = mapped_column(
@@ -190,24 +202,19 @@ class SourceORM(Base):
     source_hash: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, index=True
     )
-    origin_path: Mapped[str] = mapped_column(String(2048), nullable=False)
-    origin_type: Mapped[OriginType] = mapped_column(String(50), nullable=False)
-    unique_id: Mapped[str] = mapped_column(
-        String(100), index=True, unique=True, nullable=False
-    )
 
-    # Metadata
-    times_accessed: Mapped[int | None] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+
+    type: Mapped[OriginType] = mapped_column(String(50), nullable=False)
+
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
+
     source_summary: Mapped[str] = mapped_column(Text)
+
     summary_embedding: Mapped[str] = mapped_column(Text)
 
-    # Relationships
-    chunks: Mapped[list["ChunkORM"]] = relationship(
-        back_populates="source", cascade="all, delete-orphan", lazy="selectin"
-    )
     workspaces: Mapped[list["WorkspaceORM"]] = relationship(
         secondary=source_workspace_association, back_populates="sources"
     )
@@ -257,70 +264,75 @@ class ConvoORM(Base):
     convo_id: Mapped[str] = mapped_column(
         String(26), primary_key=True, index=True, default=ulid_factory
     )
+
     user_id: Mapped[str] = mapped_column(
         String(26), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
     )
+
     workspace_id: Mapped[str] = mapped_column(
         String(26),
         ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
         nullable=False,
     )
 
-    # Metadata
     title: Mapped[str | None] = mapped_column(String(500), default="New Convo")
+
+    dynamic_prefs: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        MutableDict.as_mutable(JSONB)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+    user: Mapped["UserORM"] = relationship(back_populates="convos", lazy="selectin")
+
+    workspace: Mapped["WorkspaceORM"] = relationship(
+        back_populates="convos", lazy="selectin"
+    )
+    messages: Mapped[list["MessageORM"]] = relationship(
+        back_populates="convo",  
+        cascade="all, delete-orphan",
+    )
 
     convo_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(
         MutableDict.as_mutable(JSONB)
     )
 
-    convo_config: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, default=None, nullable=True
-    )
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now
-    )
-
-    # Relationships
-    user: Mapped["UserORM"] = relationship(back_populates="convos", lazy="selectin")
-    workspace: Mapped["WorkspaceORM"] = relationship(
-        back_populates="convos", lazy="selectin"
-    )
-    messages: Mapped[list["MessageORM"]] = relationship(
-        back_populates="convo",  # FIXED: was "convos"
-        cascade="all, delete-orphan",
-    )
     __table_args__ = (Index("ix_convo_user_workspace", "user_id", "workspace_id"),)
 
 
 class MessageORM(Base):
     """Individual message in a conversation."""
+    __tablename__: str = "messages"
 
-    __tablename__ = "messages"
-
+    #ids
     message_id: Mapped[str] = mapped_column(
         String(26), primary_key=True, index=True, default=ulid_factory
     )
+
     convo_id: Mapped[str] = mapped_column(
         String(26),
         ForeignKey("convos.convo_id", ondelete="CASCADE"),
         nullable=False,
     )
+
     user_id: Mapped[str | None] = mapped_column(
         String(26), ForeignKey("users.user_id", ondelete="SET NULL")
     )
 
-    # Content
+    parent_id: Mapped[str | None] = mapped_column(String)
+
+    parent_message = relationship("Message", back_populates="child_messsages", remote_side=[user_id, message_id ])
+
+    child_messages = relationship("Message", back_populates="parent_message")
+
+
     role: Mapped[str] = mapped_column(String(20), nullable=False)
 
+    #content
     text: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Metadata
-    message_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        MutableDict.as_mutable(JSONB)
-    )
-
+    #sources / files
     attached_files: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, nullable=False
     )
@@ -329,24 +341,24 @@ class MessageORM(Base):
         JSONB, default=list, nullable=False
     )
 
-    chat_metadata: Mapped[str] = mapped_column(Text, default="", nullable=False)
-
-    # Threading support
-    parent_id: Mapped[str | None] = mapped_column(
-        ForeignKey("messages.message_id", ondelete="SET NULL")
-    )
-
-    # Timestamps
+    #time
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
 
-    # Relationships
+    message_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        MutableDict.as_mutable(JSONB)
+    )
+
+    #relationships
     convo: Mapped["ConvoORM"] = relationship(back_populates="messages")
 
+    #args
     __table_args__ = (
         Index("ix_messages_convo_created", "convo_id", "created_at"),
         CheckConstraint(
             "role IN ('user', 'assistant', 'system', 'tool')", name="check_valid_role"
         ),
     )
+
+    

@@ -5,11 +5,10 @@ from backend.src.api.dependencies import get_db_session
 from backend.src.api.schemas import (
     NewUserRequest,
     UserRequest,
-    UserRequestBase,
     UserResponse,
     UserUpdateRequest,
 )
-from backend.src.api.schemas.api_schemas import NewUserResponse, UserLogin
+from backend.src.api.schemas.api_schemas import UserLogin
 from backend.src.domain.schemas import User
 from backend.src.services.workspace.user_service import UserService
 from backend.src.storage.utils.converters import domain_to_response
