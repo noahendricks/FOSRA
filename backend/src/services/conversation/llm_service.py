@@ -36,7 +36,7 @@ from backend.src.domain.schemas import (
 from backend.src.domain.enums import LLMRole
 from backend.src.domain.schemas.config_schemas import UserPreferences
 from backend.src.domain.schemas.source_schemas import ChunkWithScore, SourceGroup
-from backend.src.services.conversation.prompts import FOSRA_CITATION_INSTRUCTIONS
+from backend.src.services.conversation.prompts import FOSRA_SYSTEM_PROMPT
 
 if TYPE_CHECKING:
     pass
@@ -352,7 +352,6 @@ prefs = UserPreferences(
     embedder=EmbedderConfig(),
     parser=ParserConfig(),
     reranker=RerankerConfig(),
-    storage=StorageConfig(),
     chunker=ChunkerConfig(),
 )
 
@@ -441,7 +440,6 @@ prefs: UserPreferences = UserPreferences(
     embedder=EmbedderConfig(),
     parser=ParserConfig(),
     reranker=RerankerConfig(),
-    storage=StorageConfig(),
     chunker=ChunkerConfig(),
 )
 
@@ -571,7 +569,7 @@ async def generate_llm_response(
         raise RuntimeError(error_message)
 
     system_prompt: str = _format_system_prompt(
-        prompt_template=DEFAULT_QNA_NO_DOCUMENTS_PROMPT,
+        prompt_template=FOSRA_SYSTEM_PROMPT,
         chat_history=chat_history_str,
     )
 

@@ -170,11 +170,11 @@ class EmbedderService:
         except EmbedderNotFoundError:
             raise
         except Exception as e:
-            logger.error(f"Chunk embedding failed: {e}")
+            logger.error(f"chunk embedding failed: {e}")
             raise EmbeddingOperationError(
                 operation="embed_chunks",
                 reason=str(e),
-                remediation="Check embedder configuration and chunk data",
+                remediation="check embedder configuration and chunk data",
             ) from e
 
     @staticmethod
@@ -184,11 +184,11 @@ class EmbedderService:
         session: AsyncSession,
     ) -> SourceFull:
         if not source.chunks:
-            logger.debug(f"Source {source.source_id} has no chunks to embed")
+            logger.debug(f"source {source.source_id} has no chunks to embed")
             return source
 
         logger.debug(
-            f"Embedding source {source.source_id} with {len(source.chunks)} chunks"
+            f"embedding source {source.source_id} with {len(source.chunks)} chunks"
         )
 
         try:

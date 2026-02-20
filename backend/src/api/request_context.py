@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Bundle
 
+from backend.src.api.schemas.api_schemas import _BaseModelFlex
 from backend.src.api.schemas.config_api_schemas import (
     EmbedderConfigRequest,
     LLMConfigRequest,
     ParserConfigRequest,
     RerankerConfigRequest,
-    StorageConfigRequest,
     VectorStoreConfigRequest,
 )
 from backend.src.domain.enums import StorageBackendType
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-class RequestContext(BaseModel):
+class RequestContext(_BaseModelFlex):
     user_id: str
     workspace_id: str
     convo_id: str | None = None

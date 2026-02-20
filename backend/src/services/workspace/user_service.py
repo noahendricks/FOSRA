@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.src.api.schemas import (
     NewUserRequest,
     UserRequest,
-    UserUpdateRequest,
     UserResponse,
 )
 
@@ -14,8 +13,8 @@ from backend.src.domain.exceptions import (
     UserRetrievalError,
 )
 from backend.src.domain.schemas import User
-from backend.src.domain.schemas.schemas import  UserUpdate
-from backend.src.storage.repos.user_repo import UserRepo
+from backend.src.domain.schemas.schemas import UserUpdate
+from backend.src.storage.user import UserRepo
 from backend.src.storage.utils.converters import (
     domain_to_response,
     pydantic_to_domain,
@@ -61,7 +60,7 @@ class UserService:
     async def get_all_users(
         session: AsyncSession,
     ) -> list[UserResponse]:
-        users = await UserRepo.get_all_users(
+        users = await UserRepo().get_all_users(
             session=session,
         )
 
@@ -73,19 +72,19 @@ class UserService:
         create_user: NewUserRequest,
         session: AsyncSession,
     ) -> UserResponse:
-        user = await UserRepo.create_user(new_user=create_user, session=session)
+        user = await UserRepo().create_user(new_user=create_user, session=session)
         logger.info(f"Created user {user.user_id} for user {user.username}")
 
         return domain_to_response(user, UserResponse)
 
     @staticmethod
     async def update_user(
-        user_update: UserUpdateRequest,
+        user_update: UserRequest,
         session: AsyncSession,
     ) -> UserResponse:
         user_domain = pydantic_to_domain(user_update, UserUpdate)
 
-        user: User = await UserRepo.update_user(
+        user: User = await UserRepo().update_user(
             user_update=user_domain, session=session
         )
 
@@ -105,7 +104,39 @@ class UserService:
         )
         return result
 
-    
+    @staticmethod
+    async def delete_list_of_users(
+        user_list: list[str],
+        session: AsyncSession,
+    ) -> bool:
+        result = False
+
+        try:
+            if user_list:
+                u_list = user_list
+                for id in u_list:
+                    result = await UserRepo().delete_user(user_id=id, session=session)
+                    logger.info(f"Deleted user {id}!")
+            return result
+
+        except Exception:
+            raise
+
+    @staticmethod
+    async def user_exists(user_request: UserRequest, session: AsyncSession) -> bool:
+        exists = await UserRepo().exists(user_id=user_request.user_id, session=session)
+        return exists
+
+    @staticmethod
+    async def check_user_exists(username, session: AsyncSession) -> bool:
+        try:
+            exists = await UserRepo().validate_user(session=session, username=username)
+
+            return exists
+
+        except Exception as e:
+            raise
+
     @staticmethod
     async def check_user_login(
         username: str, password: str, session: AsyncSession

@@ -6,7 +6,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from backend.src.api.schemas import UserRequest, UserUpdateRequest
+from backend.src.api.schemas import UserRequest
 from backend.src.api.schemas.api_schemas import NewUserRequest
 from backend.src.domain.exceptions import (
     UserExistenceError,

@@ -18,6 +18,7 @@ from blake3 import blake3
 
 
 
+#NOTE: task not necessary
 @broker.task
 async def ingest_files(
     files: list[FilePart], session: AsyncSession, storage_config: StorageConfig

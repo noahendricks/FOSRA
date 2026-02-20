@@ -148,7 +148,7 @@ class QdrantVectorStore(BaseVectorStore):
 
     async def initialize(self, config: VectorStoreConfig) -> None:
         if self.client is not None:
-            logger.debug("Qdrant client already initialized")
+            logger.debug("qdrant client already initialized")
             return
 
         try:
@@ -160,14 +160,14 @@ class QdrantVectorStore(BaseVectorStore):
                 api_key=config.api_key.get_secret_value() if config.api_key else None,
             )
 
-            logger.info(f"Initialized Qdrant client at {config.host}:{config.port}")
+            logger.info(f"initialized qdrant client at {config.host}:{config.port}")
             self._initialized = True
 
         except ImportError:
             logger.error("qdrant-client not installed")
             raise
         except Exception as e:
-            logger.error(f"Failed to initialize Qdrant client: {e}")
+            logger.error(f"failed to initialize Qdrant client: {e}")
             raise
 
     async def ensure_collection(

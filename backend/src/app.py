@@ -12,8 +12,6 @@ import taskiq_fastapi
 
 from backend.src.api.routes.user import router as user_router
 from backend.src.api.routes.workspace import router as workspace_router
-from backend.src.api.routes.test_routes import router as test_router
-from backend.src.api.routes.llm import router as stream_router
 from backend.src.api.routes.config import router as config_router
 import warnings
 
@@ -94,8 +92,6 @@ register_exception_handlers(app=app)
 
 app.include_router(user_router)
 app.include_router(workspace_router)
-app.include_router(test_router)
-app.include_router(stream_router)
 app.include_router(config_router)
 
 

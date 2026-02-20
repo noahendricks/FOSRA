@@ -41,14 +41,14 @@ from backend.src.domain.schemas import (
 from backend.src.domain.enums import MessageRole
 
 
-def file_part_to_dict(file_part: FilePartDomain) -> dict[str,Any]:
+def file_part_to_dict(file_part: FilePartDomain) -> dict[str, Any]:
     d = msgspec.structs.asdict(file_part)
     if d.get("bytes"):
         d["bytes"] = base64.b64encode(d["bytes"]).decode("utf-8")
     return d
 
 
-def dict_to_file_part(d: dict[str,Any]) -> FilePartDomain:
+def dict_to_file_part(d: dict[str, Any]) -> FilePartDomain:
     if d.get("bytes"):
         d["bytes"] = base64.b64decode(d["bytes"])
     return msgspec.convert(d, FilePartDomain)
@@ -94,6 +94,18 @@ class ConvoRepo:
         # logger.info(f"after orm to chat: {vars(chat)}")
 
         return chat
+
+    @staticmethod
+    async def _get_message_orm(
+        session: AsyncSession,
+        message_id: str,
+    ) -> MessageORM:
+        stmt = select(MessageORM).where(MessageORM.message_id == message_id)
+        result = await session.execute(stmt)
+        message = result.scalar_one_or_none()
+        if not message:
+            raise ValueError(f"Message not found: {message_id}")
+        return message
 
     # =========================================================================
     # CRUD Operations
@@ -316,11 +328,24 @@ class ConvoRepo:
                 )
 
                 # NOTE: For now parsing assistant sources to string using source id
+            parent = None
+            computed_root_id = new_message.root_id
+            if new_message.parent_id:
+                parent = await ConvoRepo._get_message_orm(
+                    session, new_message.parent_id
+                )
+                if parent.convo_id != new_message.convo_id:
+                    raise ValueError("Parent message not in same conversation")
+                computed_root_id = (
+                    parent.root_id if parent.root_id else parent.message_id
+                )
             db_message = MessageORM(
                 user_id=new_message.user_id,
                 text=new_message.text,
                 convo_id=new_message.convo_id,
                 role=new_message.role,
+                parent_id=new_message.parent_id,
+                root_id=computed_root_id,
                 attached_files=None,
                 attached_sources=None,
             )

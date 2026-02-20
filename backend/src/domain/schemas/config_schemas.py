@@ -84,7 +84,6 @@ class VectorStoreConfig(DomainStruct):
     collection_name: str = "test"
     include_metadata: bool = True
     distance_metric: str = ""
-    metadata: dict = field(default_factory=dict)
     store_type: VectorStoreType = VectorStoreType.QDRANT
     host: str | None = "localhost"
     port: int | None = None

@@ -16,10 +16,10 @@ async def parse_files(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> list[SourceFull]:
     """
-    Process FileContent to Source Object
+    process FileContent to source object
 
     Returns:
-        FileContent object with Raw File Bytes and Metadata
+        FileContent object with raw file bytes and metadata
     """
     try:
 
@@ -27,7 +27,6 @@ async def parse_files(
             files=files_list, config=config, session_factory=session_factory
         )
 
-        
         return parsed_files
 
     except Exception as e:

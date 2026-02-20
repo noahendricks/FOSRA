@@ -15,14 +15,13 @@ from backend.src.domain.exceptions import (
 )
 from backend.src.domain.schemas import User
 
-from backend.src.storage.repos.user_repo import UserRepo
+from backend.src.storage.user import User
 
 
 AUTH_ENABLED = False
 
 DEV_USER_ID = "dev-user-001"
 DEV_USER_NAME = "Development User"
-
 
 
 async def get_infra(
@@ -86,7 +85,6 @@ async def get_current_user_id(
     )
 
 
-
 async def get_optional_user(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     authorization: Annotated[str | None, Header()] = None,
@@ -106,7 +104,7 @@ async def get_optional_user(
         return None
 
     try:
-        user = await UserRepo().get_or_create_user(
+        user = await User().get_or_create_user(
             session=session, user_request=UserRequest(user_id=user_id)
         )
 
@@ -114,12 +112,13 @@ async def get_optional_user(
     except Exception:
         return None
 
+
 async def authenticate_user_id(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     user_id: str,
 ) -> User:
     """Authenticate and get user by ID (for non-HTTP contexts)."""
-    user = await UserRepo.get_or_create_user(
+    user = await User.get_or_create_user(
         session=session, user_request=UserRequest(user_id=user_id)
     )
 
