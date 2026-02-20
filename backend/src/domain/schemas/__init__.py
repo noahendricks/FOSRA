@@ -6,7 +6,6 @@ from backend.src.domain.schemas.schemas import (
     WorkspaceFull,
     Message,
     MessageUpdate,
-    Message,
     Convo,
     NewConvo,
     ConvoUpdate,
@@ -43,18 +42,9 @@ from backend.src.domain.schemas.source_schemas import (
     SourceUpdate,
     SourceFull,
     ChunkFull,
-    AccessRecordBase,
     NewChunk,
-    AccessRecordCreate,
-    AccessRecord,
     ChunkingResult,
     PayloadShape,
-)
-
-from backend.src.domain.schemas.utility_schemas import (
-    ProcessingStatus,
-    HealthCheck,
-    PaginatedResponseOut,
 )
 
 from backend.src.domain.schemas.file_schemas import (

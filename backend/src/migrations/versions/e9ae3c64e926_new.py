@@ -1,8 +1,8 @@
-"""remove configs
+"""new
 
-Revision ID: ff2d9efc6e69
+Revision ID: e9ae3c64e926
 Revises: 
-Create Date: 2026-02-09 13:39:35.936152
+Create Date: 2026-02-14 12:22:47.270395
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'ff2d9efc6e69'
+revision: str = 'e9ae3c64e926'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,17 +24,15 @@ def upgrade() -> None:
     op.create_table('sources',
     sa.Column('source_id', sa.String(length=26), nullable=False),
     sa.Column('source_hash', sa.String(length=64), nullable=False),
-    sa.Column('origin_path', sa.String(length=2048), nullable=False),
-    sa.Column('origin_type', sa.String(length=50), nullable=False),
-    sa.Column('unique_id', sa.String(length=100), nullable=False),
-    sa.Column('times_accessed', sa.Integer(), nullable=True),
+    sa.Column('name', sa.String(length=64), nullable=False),
+    sa.Column('type', sa.String(length=50), nullable=False),
     sa.Column('uploaded_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('source_summary', sa.Text(), nullable=False),
     sa.Column('summary_embedding', sa.Text(), nullable=False),
     sa.PrimaryKeyConstraint('source_id')
     )
+    op.create_index(op.f('ix_sources_name'), 'sources', ['name'], unique=True)
     op.create_index(op.f('ix_sources_source_hash'), 'sources', ['source_hash'], unique=True)
-    op.create_index(op.f('ix_sources_unique_id'), 'sources', ['unique_id'], unique=True)
     op.create_table('users',
     sa.Column('user_id', sa.String(length=26), nullable=False),
     sa.Column('username', sa.String(length=200), nullable=True),
@@ -42,6 +40,8 @@ def upgrade() -> None:
     sa.Column('enabled', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('last_login', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('preferences', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('ui_prefs', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.PrimaryKeyConstraint('user_id')
     )
     op.create_table('chunks',
@@ -63,6 +63,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('description', sa.String(length=500), nullable=True),
     sa.Column('user_id', sa.String(length=26), nullable=False),
+    sa.Column('dynamic_prefs', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('archived_convos', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('config', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ondelete='CASCADE'),
@@ -75,9 +76,9 @@ def upgrade() -> None:
     sa.Column('user_id', sa.String(length=26), nullable=False),
     sa.Column('workspace_id', sa.String(length=26), nullable=False),
     sa.Column('title', sa.String(length=500), nullable=True),
-    sa.Column('convo_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('convo_config', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('dynamic_prefs', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('convo_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.workspace_id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('convo_id')
@@ -95,17 +96,16 @@ def upgrade() -> None:
     sa.Column('message_id', sa.String(length=26), nullable=False),
     sa.Column('convo_id', sa.String(length=26), nullable=False),
     sa.Column('user_id', sa.String(length=26), nullable=True),
+    sa.Column('parent_id', sa.String(), nullable=True),
+    sa.Column('root_id', sa.String(), nullable=True),
     sa.Column('role', sa.String(length=20), nullable=False),
     sa.Column('text', sa.Text(), nullable=False),
-    sa.Column('message_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('attached_files', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('attached_sources', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('chat_metadata', sa.Text(), nullable=False),
-    sa.Column('parent_id', sa.String(length=26), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('message_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.CheckConstraint("role IN ('user', 'assistant', 'system', 'tool')", name='check_valid_role'),
     sa.ForeignKeyConstraint(['convo_id'], ['convos.convo_id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['parent_id'], ['messages.message_id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('message_id')
     )
@@ -129,7 +129,7 @@ def downgrade() -> None:
     op.drop_index('ix_chunks_source_id', table_name='chunks')
     op.drop_table('chunks')
     op.drop_table('users')
-    op.drop_index(op.f('ix_sources_unique_id'), table_name='sources')
     op.drop_index(op.f('ix_sources_source_hash'), table_name='sources')
+    op.drop_index(op.f('ix_sources_name'), table_name='sources')
     op.drop_table('sources')
     # ### end Alembic commands ###

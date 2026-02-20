@@ -169,6 +169,8 @@ class MessageRequest(_BaseModelFlex):
     workspace_id: str
     convo_id: str
     message_id: str
+    parent_message_id: str | None = None
+    root_message_id: str | None = None
     role: MessageRole | str
     messages: list[UIMessage] = []
     text: str | None = None
@@ -185,6 +187,8 @@ class MessageResponse(_BaseModelFlex):
     convo_id: str
     text: str
     message_id: str | None = None
+    parent_id: str | None = None
+    root_id: str | None = None
     message_metadata: dict[str, Any] | None = None
     attached_files: list[dict[str, Any]] | None = None
     attached_sources: list[dict[str, Any]] | None = []
@@ -272,9 +276,10 @@ class ConvoFullResponse(ConvoRequestBase):
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     message_count: int = 0
-    dynamic_prefs: DynamicPrefs | None = None
+    # dynamic_prefs: DynamicPrefs | None = None
+    # note: needs api model version
 
-    #to source model
+    # to source model
     knowledge_sources: list[SourceResponseDeep | SourceResponseShallow] = Field(
         default_factory=list,
         description="All sources for this chat",

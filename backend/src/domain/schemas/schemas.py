@@ -117,6 +117,8 @@ class Message(DomainStruct):
     text: str
     user_id: str | None = None
     message_id: str | None = None
+    parent_id: str | None = None
+    root_id: str | None = None
     metadata: None = None
     attached_files: list[FilePartDomain] | None = None
     attached_sources: list[dict[str, Any]] | None = None
@@ -198,6 +200,3 @@ class ValidationResult(DomainStruct):
     is_valid: bool
     error_message: str = ""
     response_preview: str | None = None
-
-
-

@@ -6,6 +6,8 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.schemas import (
+    ConvoFullResponse,
+    ConvoUpdateRequest,
     MessageResponse,
     NewConvoRequest,
 )
@@ -29,13 +31,7 @@ from backend.src.storage.utils.converters import (
     orm_to_domain,
     pydantic_to_domain,
 )
-from backend.src.storage.repos.convo_repo import ConvoRepo
-
-
-from backend.src.api.schemas import (
-    ConvoFullResponse,
-    ConvoUpdateRequest,
-)
+from backend.src.storage.convo import ConvoRepo
 
 # pyright: strict
 if TYPE_CHECKING:
@@ -191,6 +187,12 @@ class ConversationService:
             text="",
             message_id="placeholder",
             user_id=user_id,
+            parent_id=message.message_metadata.get("parent_id")
+            if message.message_metadata
+            else None,
+            root_id=message.message_metadata.get("root_id")
+            if message.message_metadata
+            else None,
         )
 
         for part in message.parts:
@@ -226,7 +228,7 @@ class ConversationService:
                 message, convo_id=convo_id, user_id=user_id
             )
             # save message
-            save: MessageORM = await ConvoRepo.add_message(
+            _: MessageORM = await ConvoRepo.add_message(
                 session=session,
                 new_message=msg,
             )

@@ -19,6 +19,7 @@ async def rerank_documents(
     """Rerank"""
 
     # NOTE: Currently single query
+    
     try:
         reranked = await RerankerService().rerank_documents(
             query=query,

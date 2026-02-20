@@ -16,7 +16,7 @@ from backend.src.api.schemas.api_schemas import NewWorkspaceResponse
 from backend.src.domain.exceptions import (
     WorkspaceRetrievalError,
 )
-from backend.src.storage.repos.workspace_repo import WorkspaceRepo
+from backend.src.storage.workspace import WorkspaceRepo
 from backend.src.storage.utils.converters import domain_to_response
 
 

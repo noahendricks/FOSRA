@@ -2,8 +2,8 @@ from backend.src.api.schemas.api_schemas import (
     ConvoRequest,
     NewConvoRequest,
     UserRequestBase,
-    UserUpdateRequest,
     UserResponse,
+    UserRequest,
     MessageResponse,
     WorkspaceRequest,
     NewWorkspaceRequest,
@@ -32,23 +32,14 @@ from backend.src.api.schemas.config_api_schemas import (
 from backend.src.api.schemas.source_api_schemas import (
     SourceResponseDeep,
     SourceResponseShallow,
-    AccessRecordResponse,
 )
 from backend.src.api.schemas.file_api_schemas import (
     FileRequest,
 )
 
 
-from backend.src.api.schemas.utility_api_schemas import (
-    ProcessingStatusResponse,
-    HealthCheckResponse,
-    PaginatedResponse,
-)
-
-
 __all__ = [
     "UserRequestBase",
-    "UserUpdateRequest",
     "UserResponse",
     "WorkspaceRequest",
     "NewWorkspaceRequest",

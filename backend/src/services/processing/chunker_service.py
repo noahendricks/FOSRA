@@ -23,6 +23,8 @@ from backend.src.domain.schemas import (
 
 from backend.src.domain.enums import ChunkerType
 
+#NOTE: reduce to chonkie alone with settings wrapper, service not needed
+
 # =============================================================================
 # Base Chunker Interface
 # =============================================================================

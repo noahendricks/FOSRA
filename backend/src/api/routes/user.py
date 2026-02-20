@@ -6,7 +6,6 @@ from backend.src.api.schemas import (
     NewUserRequest,
     UserRequest,
     UserResponse,
-    UserUpdateRequest,
 )
 from backend.src.api.schemas.api_schemas import UserLogin
 from backend.src.domain.schemas import User
@@ -56,7 +55,7 @@ async def new_user_profile(
 # PUT Update Existing User Profile / User
 @router.put("/user/profile/{user_id}")
 async def update_user_profile(
-    request: Annotated[UserUpdateRequest, Query()], session=Depends(get_db_session)
+    request: Annotated[UserRequest, Query()], session=Depends(get_db_session)
 ) -> UserResponse:
     try:
         user: UserResponse = await UserService().update_user(
