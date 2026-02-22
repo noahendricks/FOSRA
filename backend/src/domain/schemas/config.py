@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from msgspec import field
 from langchain_litellm import ChatLiteLLM
 from loguru import logger
-from pydantic import SecretStr
+from pydantic import SecretStr, BaseModel
 
-from backend.src.domain.schemas.file_schemas import StorageConfig
 from backend.src.settings import settings
 from backend.src.storage.utils.converters import DomainStruct
 from ..enums import (
@@ -37,6 +36,65 @@ class ChunkerConfig(DomainStruct):
     # Sentence chunking specific
     sentences_per_chunk: int = 5
     preferred_chunker_type: ChunkerType = ChunkerType.SEMANTIC
+
+
+from chonkie import (
+    BaseEmbeddings,
+    RecursiveRules,
+    SemanticChunker,
+    LateChunker,
+    RecursiveChunker,
+    CodeChunker,
+    NeuralChunker,
+    SentenceTransformerEmbeddings,
+    TokenizerProtocol,
+)
+
+
+class SemanticChunkerConfig(BaseModel):
+    embedding_model: str | BaseEmbeddings = "minishlab/potion-base-32M"
+    threshold: float = 0.8
+    chunk_size: int = 2048
+    similarity_window: int = 3
+    min_sentences_per_chunk: int = 1
+    min_characters_per_sentence: int = 24
+    delim: str | list[str] = [". ", "! ", "? ", "\n"]
+    include_delim: Literal["prev", "next"] | None = "prev"
+    skip_window: int = 0
+    filter_window: int = 5
+    filter_polyorder: int = 3
+    filter_tolerance: float = 0.2
+
+
+class LateChunkerConfig(BaseModel):
+    embedding_model: str | SentenceTransformerEmbeddings | Any = (
+        "nomic-ai/modernbert-embed-base"
+    )
+    chunk_size: int = 2048
+    rules: RecursiveRules = RecursiveRules()
+    min_characters_per_chunk: int = 24
+
+
+class RecursiveChunkerConfig(BaseModel):
+    tokenizer: str | TokenizerProtocol = "character"
+    chunk_size: int = 2048
+    rules: RecursiveRules = RecursiveRules()
+    min_characters_per_chunk: int = 24
+
+
+class CodeChunkerConfig(BaseModel):
+    tokenizer: str | TokenizerProtocol = "character"
+    chunk_size: int = 2048
+    language: Literal["auto"] | Any = "auto"
+    include_nodes: bool = False
+
+
+class NeuralChunkerConfig(BaseModel):
+    model: str | Any = ""
+    tokenizer: str | Any | None = None
+    device_map: str = "auto"
+    min_characters_per_chunk: int = 10
+    stride: int | None = None
 
 
 class LLMConfig(DomainStruct):

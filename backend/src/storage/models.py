@@ -30,7 +30,7 @@ from sqlalchemy.orm import (
 )
 from ulid import ULID
 
-from backend.src.domain.enums import ConfigRole, OriginType, ToolCategory
+from backend.src.domain.enums import ConfigRole, SourceType, ToolCategory
 
 
 if TYPE_CHECKING:
@@ -179,7 +179,7 @@ class WorkspaceORM(Base):
 
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=None, nullable=True)
 
-    sources: Mapped[list["SourceORM"]] = relationship(
+    sources: Mapped[list["DocORM"]] = relationship(
         secondary=source_workspace_association,
         back_populates="workspaces",
     )
@@ -194,28 +194,28 @@ class WorkspaceORM(Base):
 # ============================================================================
 
 
-class SourceORM(Base):
+class DocORM(Base):
     """Document source."""
 
     __tablename__ = "sources"
 
-    source_id: Mapped[str] = mapped_column(
+    doc_id: Mapped[str] = mapped_column(
         String(26), primary_key=True, default=ulid_factory
     )
 
-    source_hash: Mapped[str] = mapped_column(
+    doc_hash: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, index=True
     )
 
     name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
 
-    type: Mapped[OriginType] = mapped_column(String(50), nullable=False)
+    type: Mapped[SourceType] = mapped_column(String(50), nullable=False)
 
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
 
-    source_summary: Mapped[str] = mapped_column(Text)
+    doc_summary: Mapped[str] = mapped_column(Text)
 
     summary_embedding: Mapped[str] = mapped_column(Text)
 
@@ -223,7 +223,7 @@ class SourceORM(Base):
         secondary=source_workspace_association, back_populates="sources"
     )
 
-
+#WARN: DEPRECATED
 class ChunkORM(Base):
     """Text chunk from a source document."""
 
@@ -245,7 +245,7 @@ class ChunkORM(Base):
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Relationships
-    source: Mapped["SourceORM"] = relationship(back_populates="chunks")
+    source: Mapped["DocORM"] = relationship(back_populates="chunks")
 
     __table_args__ = (
         CheckConstraint("start_index >= 0", name="check_start_index_non_negative"),
@@ -390,5 +390,3 @@ class MessageORM(Base):
             "role IN ('user', 'assistant', 'system', 'tool')", name="check_valid_role"
         ),
     )
-
-

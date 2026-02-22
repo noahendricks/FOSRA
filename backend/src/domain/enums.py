@@ -25,12 +25,9 @@ class EmbedderType(StrEnum):
     """Types of embedders available."""
 
     FASTEMBED = "FASTEMBED"
-    SENTENCE_TRANSFORMERS = "SENTENCE_TRANSFORMERS"
-    OPENAI = "OPENAI"
-    COHERE = "COHERE"
-    VOYAGE = "VOYAGE"
-    JINA = "JINA"
-    MISTRAL = "MISTRAL"
+    OLLAMA = "OLLAMA"
+    HUGGINGFACE = "OLLAMA"
+    PINECONE = "OLLAMA"
 
 
 class ParserType(StrEnum):
@@ -73,6 +70,11 @@ class ChunkerType(StrEnum):
     """Types of chunkers available."""
 
     SEMANTIC = "SEMANTIC"
+    FAST = "FAST"
+    CODE = "CODE"
+    LATE = "LATE"
+    SLUMBER = "SLUMBER"
+    NEURAL = "NEURAL"
     TOKEN = "TOKEN"
     SENTENCE = "SENTENCE"
     FIXED = "FIXED"
@@ -87,7 +89,7 @@ class MessageRole(StrEnum):
     SYSTEM = "system"
 
 
-class OriginType(StrEnum):
+class SourceType(StrEnum):
     """Types of origins where information can be fetched from."""
 
     CRAWLED_URL = "CRAWLED_URL"
@@ -257,7 +259,7 @@ class SearchStrategy(StrEnum):
 from enum import StrEnum, auto
 
 
-class DocumentType(StrEnum):
+class DocType(StrEnum):
     """Supported document types based on official IANA Media Types."""
 
     # Applications
