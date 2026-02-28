@@ -51,7 +51,10 @@ coverage.xml
 .pytest_cache/
 cover/
 
+AGENTS.md
+
 # Translations
+#
 *.mo
 *.pot
 

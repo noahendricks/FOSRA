@@ -22,7 +22,7 @@ dependencies = [
   "github3-py==4.0.1",
   "google-api-python-client>=2.156.0",
   "httpx>=0.28.1",
-  "langchain[huggingface,ollama,unstructured]>=1.0.5",
+  "langchain[exa,huggingface,ollama,pinecone,unstructured]>=1.0.5",
   "langchain-community>=0.4.1",
   "langgraph>=0.3.29",
   "linkup-sdk>=0.2.4",
@@ -73,7 +73,6 @@ dependencies = [
   "langchain-litellm>=0.3.2",
   "pudb>=2025.1.4",
   "hunter>=3.9.0",
-  "exa-py>=2.0.1",
   "aiofiles>=25.1.0",
   "fastapi[cli]>=0.124.4",
   "fastapi-cli>=0.0.16",
@@ -101,13 +100,21 @@ dependencies = [
   "pympler>=1.1",
   "alembic>=1.18.3",
   "pymupdf>=1.27.1",
+  "langchain-exa>=1.0.0",
+  "langchain-pinecone>=0.2.13",
+  "langchain-milvus>=0.3.3",
+  "black>=25.12.0",
+  "langchain-qdrant>=1.1.0",
 ]
 
 [project.scripts]
 
 [dependency-groups]
 dev = [
+    "isort>=8.0.0",
+    "mcpydoc>=1.4.0",
     "py2puml>=0.10.0",
+    "pyink>=25.12.0",
     "pylyzer>=0.0.82",
     "pytest>=8.4.2",
     "pytest-dotenv>=0.5.2",

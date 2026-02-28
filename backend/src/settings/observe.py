@@ -26,9 +26,6 @@ class InterceptHandler(logging.Handler):
             level = record.levelno
 
         frame, depth = logging.currentframe(), 2
-        while frame.f_code.co_filename == logging.__file__:
-            frame = frame.f_back
-            depth += 1
 
         # Escape angle brackets to prevent color tag parsing
         message: str = record.getMessage().replace("<", r"\<")

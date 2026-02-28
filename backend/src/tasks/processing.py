@@ -1,11 +1,5 @@
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from domain.schemas.config_schemas import ParserConfig, ChunkerConfig, EmbedderConfig
-from domain.schemas.file_schemas import FileContent
-from domain.schemas.source_schemas import SourceFull
-from services.processing.chunker_service import ChunkerService
-from services.processing.embedder_service import EmbedderService
-from services.processing.parser_service import ParserService
 from .broker import broker
 
 

@@ -11,7 +11,7 @@ from pydantic_settings import (
 )
 
 
-from backend.src.domain.enums import OriginType, EmbedderType
+from backend.src.domain.enums import SourceType, EmbedderType
 
 
 class ConnectorSettings(BaseSettings):
@@ -19,7 +19,7 @@ class ConnectorSettings(BaseSettings):
 
     id: int | None = 1
     name: str | None = "Local Files"
-    origin_type: str | None = OriginType.FILESYSTEM
+    origin_type: str | None = SourceType.FILESYSTEM
 
     # Optional fields (can be null/None in source data)
     api_key: SecretStr | None = None

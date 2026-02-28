@@ -1,35 +1,25 @@
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.src.domain.schemas import (
-    EmbedderConfig,
-    RerankResult,
-    RetrievedResult,
-    VectorStoreConfig,
-)
-from backend.src.domain.schemas.config_schemas import RerankerConfig
-from backend.src.services.retrieval.impls._utils import (
-    deduplicate_results,
-)
 from backend.src.services.retrieval.vector_service import VectorService
 from backend.src.tasks.processing import embed_query
-from backend.src.tasks.retrieving import rerank_documents
 
 from .broker import broker
 
 
-async def search_online(
-    query: str,
-    documents: list[RetrievedResult],
-) -> list[RetrievedResult] | None:
-    """Search Online"""
+# async def search_online(
+#     query: str,
+#     documents: list[RetrievedResult],
+# ) -> list[RetrievedResult] | None:
+#     """Search Online"""
+#
+#     try:
+#         pass
+#     except Exception as e:
+#         logger.error(f"Online Search Task failed:{e}")
+#         raise
 
-    try:
-        pass
-    except Exception as e:
-        logger.error(f"Online Search Task failed:{e}")
-        raise
 
-
+#TODO:
 @broker.task
 async def search_vector_store(
     query: str,

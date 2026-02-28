@@ -185,9 +185,8 @@ class Doc(BaseModel):
         return isinstance(self.metadata, TextMetadata)
 
 
-class Chunk(DomainStruct):
+class ChunkMetadata(BaseModel):
     chunk_id: str
-    text: str
     doc_id: str
     page_number: int | None 
     token_count: int | None
@@ -195,3 +194,7 @@ class Chunk(DomainStruct):
     end_index: int | None
     embedding: float | str | None
     score: int | float | None
+
+class Chunk(BaseModel):
+    text: str
+    metadata: ChunkMetadata

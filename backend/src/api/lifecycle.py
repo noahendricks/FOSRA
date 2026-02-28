@@ -1,7 +1,6 @@
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from backend.src.settings import settings
 from backend.src.storage.models import Base
 
 

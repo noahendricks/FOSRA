@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, UTC
 from enum import StrEnum
+import json
 from typing import Any, TYPE_CHECKING, Optional
+from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict
 
 from sqlalchemy import (
+    VARCHAR,
     ForeignKeyConstraint,
     String,
     DateTime,
@@ -16,6 +19,7 @@ from sqlalchemy import (
     JSON,
     Table,
     ForeignKey,
+    TypeDecorator,
     UniqueConstraint,
     CheckConstraint,
     Index,
@@ -31,6 +35,7 @@ from sqlalchemy.orm import (
 from ulid import ULID
 
 from backend.src.domain.enums import ConfigRole, SourceType, ToolCategory
+from backend.src.domain.schemas.config import UserPreferences
 
 
 if TYPE_CHECKING:
@@ -102,6 +107,9 @@ ROLE_TO_CATEGORY_MAP: dict[ConfigRole, ToolCategory] = {
 # ============================================================================
 # User ORM
 # ============================================================================
+
+
+
 
 
 class UserORM(Base):
@@ -215,6 +223,8 @@ class DocORM(Base):
         DateTime(timezone=True), default=utc_now
     )
 
+    #CHUNK VECTOR ID'S
+
     doc_summary: Mapped[str] = mapped_column(Text)
 
     summary_embedding: Mapped[str] = mapped_column(Text)
@@ -223,36 +233,37 @@ class DocORM(Base):
         secondary=source_workspace_association, back_populates="sources"
     )
 
-#WARN: DEPRECATED
+#WARN: DEPRECATED - CHUNKS REFERENCED IN DOC
 class ChunkORM(Base):
-    """Text chunk from a source document."""
-
-    __tablename__ = "chunks"
-
-    chunk_id: Mapped[str] = mapped_column(
-        String(26), primary_key=True, default=ulid_factory
-    )
-    source_id: Mapped[str] = mapped_column(
-        String(26), ForeignKey("sources.source_id", ondelete="CASCADE"), nullable=False
-    )
-
-    # Content
-    text: Mapped[str | None] = mapped_column(Text)
-
-    # Position
-    start_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    end_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    # Relationships
-    source: Mapped["DocORM"] = relationship(back_populates="chunks")
-
-    __table_args__ = (
-        CheckConstraint("start_index >= 0", name="check_start_index_non_negative"),
-        CheckConstraint("end_index > start_index", name="check_end_after_start"),
-        CheckConstraint("token_count > 0", name="check_token_count_positive"),
-        Index("ix_chunks_source_id", "source_id"),
-    )
+    pass
+#     """Text chunk from a source document."""
+#
+#     __tablename__ = "chunks"
+#
+#     chunk_id: Mapped[str] = mapped_column(
+#         String(26), primary_key=True, default=ulid_factory
+#     )
+#     source_id: Mapped[str] = mapped_column(
+#         String(26), ForeignKey("sources.source_id", ondelete="CASCADE"), nullable=False
+#     )
+#
+#     # Content
+#     text: Mapped[str | None] = mapped_column(Text)
+#
+#     # Position
+#     start_index: Mapped[int] = mapped_column(Integer, nullable=False)
+#     end_index: Mapped[int] = mapped_column(Integer, nullable=False)
+#     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+#
+#     # Relationships
+#     source: Mapped["DocORM"] = relationship(back_populates="chunks")
+#
+#     __table_args__ = (
+#         CheckConstraint("start_index >= 0", name="check_start_index_non_negative"),
+#         CheckConstraint("end_index > start_index", name="check_end_after_start"),
+#         CheckConstraint("token_count > 0", name="check_token_count_positive"),
+#         Index("ix_chunks_source_id", "source_id"),
+#     )
 
 
 # ============================================================================
