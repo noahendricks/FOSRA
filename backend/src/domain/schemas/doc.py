@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import builtins
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any, Literal, Self
 
+from langchain_core.documents import Document
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.v1.utils import to_camel
+from qdrant_client.models import SparseVector
 
-from msgspec import field
-
-from backend.src.domain.enums import (
-    DocType,
-)
+from backend.src.storage.models import ulid_factory
 from backend.src.storage.utils.converters import DomainStruct
 
-from backend.src.domain.enums import SourceType
 
-from langchain_core.documents import Document
-from typing import Literal, Self
-from pydantic import BaseModel, Field, field_validator
-from langchain_core.documents import Document
+class _BaseModelFlex(BaseModel):
+    _FLEXIBLE_CONFIG = ConfigDict(
+        from_attributes=True,
+        arbitrary_types_allowed=True,
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
 
 
 class MDNFile(DomainStruct):
@@ -127,7 +131,7 @@ CodeMetadataUnion = FunctionsClassesMetadata | SimplifiedCodeMetadata | ImportsM
 
 # main doc with typed metadata - used everywhere Document(LC) would be
 class Doc(BaseModel):
-    id: str | None = None
+    id: str
     type: Literal["Document"] = "Document"
     page_content: str
     metadata: (
@@ -159,7 +163,7 @@ class Doc(BaseModel):
         return cls(
             page_content=doc.page_content,
             metadata=model_class.model_validate(meta_dict),
-            id=getattr(doc, "id", None),
+            id=str(ulid_factory()),
         )
 
     def to_lc(self) -> Document:
@@ -185,15 +189,18 @@ class Doc(BaseModel):
         return isinstance(self.metadata, TextMetadata)
 
 
-class ChunkMetadata(BaseModel):
+class ChunkMetadata(_BaseModelFlex):
     chunk_id: str
     doc_id: str
-    page_number: int | None 
+    doc_title: str
+    page_number: int | None
     token_count: int | None
     start_index: int | None
     end_index: int | None
-    embedding: float | str | None
-    score: int | float | None
+    dense_embedding: list[float] = []
+    sparse_embedding: Any = None
+    late_embedding: list[float] = []
+
 
 class Chunk(BaseModel):
     text: str

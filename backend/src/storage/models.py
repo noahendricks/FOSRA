@@ -1,42 +1,36 @@
 from __future__ import annotations
 
-from datetime import datetime, UTC
-from enum import StrEnum
 import json
-from typing import Any, TYPE_CHECKING, Optional
-from pydantic import BaseModel
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.mutable import MutableDict
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Optional
 
+from pydantic import BaseModel
 from sqlalchemy import (
-    VARCHAR,
-    ForeignKeyConstraint,
-    String,
-    DateTime,
-    Integer,
-    Boolean,
-    Text,
     JSON,
-    Table,
+    VARCHAR,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Table,
+    Text,
     TypeDecorator,
     UniqueConstraint,
-    CheckConstraint,
-    Index,
-    Column,
     event,
 )
-from sqlalchemy.orm import (
-    DeclarativeBase,
-    Mapped,
-    mapped_column,
-    relationship,
-)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from ulid import ULID
 
 from backend.src.domain.enums import ConfigRole, SourceType, ToolCategory
 from backend.src.domain.schemas.config import UserPreferences
-
 
 if TYPE_CHECKING:
     pass
@@ -107,9 +101,6 @@ ROLE_TO_CATEGORY_MAP: dict[ConfigRole, ToolCategory] = {
 # ============================================================================
 # User ORM
 # ============================================================================
-
-
-
 
 
 class UserORM(Base):
@@ -223,7 +214,7 @@ class DocORM(Base):
         DateTime(timezone=True), default=utc_now
     )
 
-    #CHUNK VECTOR ID'S
+    # CHUNK VECTOR ID'S
 
     doc_summary: Mapped[str] = mapped_column(Text)
 
@@ -233,9 +224,10 @@ class DocORM(Base):
         secondary=source_workspace_association, back_populates="sources"
     )
 
-#WARN: DEPRECATED - CHUNKS REFERENCED IN DOC
-class ChunkORM(Base):
-    pass
+
+# WARN: DEPRECATED - CHUNKS REFERENCED IN DOC
+# class ChunkORM(Base):
+#     pass
 #     """Text chunk from a source document."""
 #
 #     __tablename__ = "chunks"
@@ -320,20 +312,20 @@ class ConvoORM(Base):
         MutableDict.as_mutable(JSONB)
     )
 
-    __table_args__ = (
-        # Performance indexes for common queries
-        # WHERE folder_id = ...
-        Index("folder_id_idx", "folder_id"),
-        Index("ix_convo_user_workspace", "user_id", "workspace_id"),
-        # WHERE user_id = ... AND pinned = ...
-        Index("user_id_pinned_idx", "user_id", "pinned"),
-        # WHERE user_id = ... AND archived = ...
-        Index("user_id_archived_idx", "user_id", "archived"),
-        # WHERE user_id = ... ORDER BY updated_at DESC
-        Index("updated_at_user_id_idx", "updated_at", "user_id"),
-        # WHERE folder_id = ... AND user_id = ...
-        Index("folder_id_user_id_idx", "folder_id", "user_id"),
-    )
+    # __table_args__ = (
+    #     # Performance indexes for common queries
+    #     # WHERE folder_id = ...
+    #     Index("folder_id_idx", "folder_id"),
+    #     Index("ix_convo_user_workspace", "user_id", "workspace_id"),
+    #     # WHERE user_id = ... AND pinned = ...
+    #     Index("user_id_pinned_idx", "user_id", "pinned"),
+    #     # WHERE user_id = ... AND archived = ...
+    #     Index("user_id_archived_idx", "user_id", "archived"),
+    #     # WHERE user_id = ... ORDER BY updated_at DESC
+    #     Index("updated_at_user_id_idx", "updated_at", "user_id"),
+    #     # WHERE folder_id = ... AND user_id = ...
+    #     Index("folder_id_user_id_idx", "folder_id", "user_id"),
+    # )
 
 
 class MessageORM(Base):

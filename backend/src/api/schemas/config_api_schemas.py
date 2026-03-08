@@ -3,20 +3,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from langchain_litellm import ChatLiteLLM
-from pydantic import BaseModel, Field, SecretStr, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic.v1.utils import to_camel
 
 from backend.src.domain.enums import (
     EmbedderType,
     EmbeddingMode,
+    FileType,
     ParserType,
     RerankerType,
     RetrievalMode,
     SearchStrategy,
     VectorStoreType,
-    FileType,
 )
-
 
 if TYPE_CHECKING:
     pass
@@ -188,7 +187,7 @@ class RetrievalConfig(_BaseModelFlex):
 
     top_k: int = 10
     min_score: float = 0.0
-    mode: RetrievalMode = RetrievalMode.CHUNKS
+    mode: RetrievalMode = RetrievalMode.STANDARD
     strategy: SearchStrategy = SearchStrategy.VECTOR_ONLY
 
     file_types: list[FileType] | None = None
@@ -202,6 +201,3 @@ class RetrievalConfig(_BaseModelFlex):
     include_content: bool = True
     include_metadata: bool = True
     deduplicate: bool = True
-
-
-

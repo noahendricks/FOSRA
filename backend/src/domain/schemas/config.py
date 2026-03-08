@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import pathlib
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from langchain_community.vectorstores import DistanceStrategy
+from langchain_core.embeddings import Embeddings
 from langchain_litellm import ChatLiteLLM
 from langchain_qdrant import RetrievalMode
-from loguru import logger
 from msgspec import field
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic.v1.utils import to_camel
@@ -40,43 +43,33 @@ if TYPE_CHECKING:
 class ChunkerConfig(BaseModel):
     """Configuration for chunker behavior."""
 
-    chunk_size: int = 512
-    chunk_overlap: int = 128
+    chunk_size: int = 2048
+    chunk_overlap: int = 256
     min_chunk_size: int = 100
-    max_chunk_size: int = 2000
+    max_chunk_size: int = 2048
     # Semantic chunking specific
     similarity_threshold: float = 0.8
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: Any = "nomic-ai/nomic-embed-text-v1.5"
     # Sentence chunking specific
     sentences_per_chunk: int = 5
-    preferred_chunker_type: ChunkerType = ChunkerType.SEMANTIC
+    preferred_chunker_type: ChunkerType = ChunkerType.NEURAL
 
 
-from chonkie import (
-    BaseEmbeddings,
-    CodeChunker,
-    LateChunker,
-    NeuralChunker,
-    RecursiveChunker,
-    RecursiveRules,
-    SemanticChunker,
-    SentenceTransformerEmbeddings,
-    TokenizerProtocol,
-)
+from chonkie import RecursiveRules
 
 
 class SemanticChunkerConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
-    embedding_model: Any = "minishlab/potion-base-32M"
-    threshold: float = 0.8
+    embedding_model: Any = "nomic-ai/nomic-embed-text-v1.5"
+    threshold: float = 0.4
     chunk_size: int = 2048
-    similarity_window: int = 3
-    min_sentences_per_chunk: int = 1
-    min_characters_per_sentence: int = 24
-    delim: str | list[str] = [". ", "! ", "? ", "\n"]
+    similarity_window: int = 2
+    min_sentences_per_chunk: int = 2
+    min_characters_per_sentence: int = 64
+    delim: str | list[str] = [". ", "! ", "? ", "\n\n"]
     include_delim: Literal["prev", "next"] | None = "prev"
-    skip_window: int = 0
+    skip_window: int = 1
     filter_window: int = 5
     filter_polyorder: int = 3
     filter_tolerance: float = 0.2
@@ -106,14 +99,13 @@ class CodeChunkerConfig(BaseModel):
     tokenizer: Any = "character"
     chunk_size: int = 2048
     language: Any = "auto"
-    include_nodes: bool = False
+    include_nodes: bool = True
 
 
 class NeuralChunkerConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
-    model: Any = ""
-    tokenizer: Any = None
+    model: Any = "mirth/chonky_modernbert_base_1"
     device_map: str = "auto"
     min_characters_per_chunk: int = 10
     stride: int | None = None
@@ -157,10 +149,9 @@ class LLMConfig(BaseModel):
 class QdrantConfig(_BaseModelFlex):
     api_key: SecretStr | None = None
     api_base: str | None = None
-    collection_name: str = "test"
+    collection_name: str = "users_vectors"
     include_metadata: bool = True
     distance_metric: str = ""
-    retrieval_mode: str = RetrievalMode.DENSE
     host: str = Field(default="localhost")
     port: int = Field(default=6333, ge=1, le=65535)
     url: str | None = None
@@ -169,10 +160,6 @@ class QdrantConfig(_BaseModelFlex):
     min_score: float = 0.0
     include_vectors: bool = False
     filter_conditions: dict[str, Any] = Field(default_factory=dict)
-
-
-from langchain_community.vectorstores import DistanceStrategy
-from langchain_core.embeddings import Embeddings
 
 
 class PineconeConfig(_BaseModelFlex):
@@ -204,12 +191,30 @@ class VectorStoreConfig(BaseModel):
     # opensearch_config: QdrantConfig = QdrantConfig
 
 
+def set_model_cache_dir():
+    home = Path.home()
+    new_path = home / "fosra_model_cache"
+    new_path.mkdir(exist_ok=True, parents=True)
+    return new_path
+
+
+class ScoredRetrieval(_BaseModelFlex):
+    rank: int | None = None
+    score: float
+    text: str
+    doc_title: str
+    chunk_id: str
+    doc_id: str
+    page_number: int
+    start_index: int
+    end_index: int
+
+
 class EmbedderConfig(BaseModel):
     """User's embedder connection configuration."""
 
     config_id: int | None = None
     config_name: str | None = None
-    model: str = "BAAI/bge-small-en-v1.5"
     api_key: SecretStr | None = None
     api_base: str | None = None
     mode: EmbeddingMode = EmbeddingMode.DENSE_ONLY
@@ -218,12 +223,25 @@ class EmbedderConfig(BaseModel):
     normalize: bool = True
     truncate: bool = True
     max_length: int = 512
+    cache_dir: Path = set_model_cache_dir()
 
-    dense_model: str | None = None
-    sparse_model: str | None = None
-    late_model: str | None = None
-
+    # default to fastembed
     embedder_type: EmbedderType = EmbedderType.FASTEMBED
+
+    # default fastembed models
+    dense_model: str = "nomic-ai/nomic-embed-text-v1.5"
+    dense_dimensions: int = 768
+
+    sparse_enabled: bool = True
+    # !todo: add code models
+    sparse_model: str | None = "prithivida/Splade_PP_en_v1"
+
+    late_enabled: bool = True
+    # !todo: add code models
+    late_model: str | None = "colbert-ir/colbertv2.0"
+    late_dimensions: int = 128
+
+    cuda_enabled: bool = False
 
     def get_api_key_value(self) -> str | None:
         """Get the API key as a string."""
@@ -251,38 +269,23 @@ class ParserConfig(BaseModel):
     fallback_parsers: list[ParserType] = field(default_factory=list)
     generate_summary: bool = True
 
-    def get_api_key_value(self) -> str | None:
-        """Get the API key as a string."""
-        if self.api_key is None:
-            return None
-        if isinstance(self.api_key, SecretStr):
-            return self.api_key.get_secret_value()
-        return self.api_key
-
 
 class RerankerConfig(BaseModel):
     """User's reranker configuration."""
 
     user_id: str = ""
+    enabled: bool = True
     config_id: str = ""
     config_name: str = "New Reranker Config"
-    reranker_type: RerankerType | None = None
-    model: str | None = None
     api_key: SecretStr | None = None
-    enabled: bool = False
-    params: dict[str, Any] | None = None
+    # default to fastembed
+    RerankProvider: RerankerType = RerankerType.FASTEMBED
+    model: str | None = "jinaai/jina-reranker-v1-turbo-en"
     top_k: int = 10
     score_threshold: float | None = None
     return_scores: bool = True
     batch_size: int = 32
-
-    def get_api_key_value(self) -> str | None:
-        """Get the API key as a string."""
-        if self.api_key is None:
-            return None
-        if isinstance(self.api_key, SecretStr):
-            return self.api_key.get_secret_value()
-        return self.api_key
+    params: dict[str, Any] | None = None
 
 
 # internal type checking -- serialize to and from dict on ingress and egress
@@ -303,21 +306,6 @@ class UserPreferences(BaseModel):
     embedder: EmbedderConfig | None = None
     reranker: RerankerConfig | None = None
     chunker: ChunkerConfig | None = None
-
-    def get_llm_config(self, role: str = "default") -> LLMConfig | None:
-        """Get LLM config by role name."""
-        role_map: dict[str, LLMConfig | None] = {
-            "default": self.llm_default,
-            "fast": self.llm_fast,
-            "strategic": self.llm_logic,
-            "heavy": self.llm_heavy,
-        }
-        config = role_map.get(role.lower())
-
-        if not config:
-            logger.warning(f"LLM config for role '{role}' not found. Using default.")
-            return self.llm_default
-        return config
 
 
 class ModelPrefs(BaseModel):

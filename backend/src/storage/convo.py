@@ -1,57 +1,38 @@
 from __future__ import annotations
+
 import base64
-import msgspec
 from typing import Any
 
+import msgspec
 from loguru import logger
-from sqlalchemy import select, func
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from backend.src.api.schemas import (
-    ConvoRequest,
-    MessageUpdateRequest,
-    NewConvoRequest,
-)
-from backend.src.api.schemas.api_schemas import (
-    MessageRequest,
-    ConvoDeleteRequest,
-    ConvoUpdateRequest,
-)
+from backend.src.api.schemas import MessageUpdateRequest, NewConvoRequest
+from backend.src.api.schemas.api_schemas import (ConvoDeleteRequest, ConvoUpdateRequest)
 from backend.src.domain.exceptions.exceptions import (
     ConvoRetrievalError,
     ConvoStorageError,
     TenantContextError,
 )
-from backend.src.domain.schemas.schemas import FilePartDomain
-from backend.src.storage.models import (
-    ConvoORM,
-    MessageORM,
-)
-
+from backend.src.domain.schemas.convo import Convo, Message, NewConvo
+from backend.src.domain.schemas.doc import MDNFile
+from backend.src.storage.models import ConvoORM, MessageORM
 from backend.src.storage.utils.converters import orm_to_domain
-from backend.src.domain.schemas import (
-    ConvoFull,
-    NewConvo,
-    Message,
-    RetrievedResult,
-)
 
 
-from backend.src.domain.enums import MessageRole
-
-
-def file_part_to_dict(file_part: FilePartDomain) -> dict[str, Any]:
+def file_part_to_dict(file_part: MDNFile) -> dict[str, Any]:
     d = msgspec.structs.asdict(file_part)
     if d.get("bytes"):
         d["bytes"] = base64.b64encode(d["bytes"]).decode("utf-8")
     return d
 
 
-def dict_to_file_part(d: dict[str, Any]) -> FilePartDomain:
+def dict_to_file_part(d: dict[str, Any]) -> MDNFile:
     if d.get("bytes"):
         d["bytes"] = base64.b64decode(d["bytes"])
-    return msgspec.convert(d, FilePartDomain)
+    return msgspec.convert(d, MDNFile)
 
 
 class ConvoRepo:
@@ -157,7 +138,7 @@ class ConvoRepo:
         session: AsyncSession,
         user_id: str,
         convo_id: str,
-    ) -> ConvoFull:
+    ) -> Convo:
         try:
             logger.info(
                 f"user id and convo_id get_by_id entrance: user_id: {user_id}, convo_id: {convo_id}"
@@ -176,7 +157,7 @@ class ConvoRepo:
 
             # logger.info(f"db_chat vars: {vars(db_chat)}")
 
-            return orm_to_domain(db_chat, ConvoFull)
+            return orm_to_domain(db_chat, Convo)
 
         except ConvoRetrievalError:
             raise
@@ -194,7 +175,7 @@ class ConvoRepo:
         session: AsyncSession,
         user_id: str,
         workspace_id: str,
-    ) -> list[ConvoFull]:
+    ) -> list[Convo]:
         skip: int = 0
         limit: int = 999
         try:
@@ -216,7 +197,7 @@ class ConvoRepo:
 
             conversations = result.scalars().all()
 
-            return [orm_to_domain(c, ConvoFull) for c in conversations]
+            return [orm_to_domain(c, Convo) for c in conversations]
 
         except Exception as e:
             logger.error(f"Error listing workspace conversations: {e}")
@@ -231,7 +212,7 @@ class ConvoRepo:
     async def update(
         session: AsyncSession,
         convo_update: ConvoUpdateRequest,
-    ) -> ConvoFull:
+    ) -> Convo:
         try:
             db_chat: ConvoORM = await ConvoRepo._get_convo_orm(
                 session,
@@ -250,7 +231,7 @@ class ConvoRepo:
 
             logger.success(f"Updated conversation {convo_update.convo_id}")
 
-            return orm_to_domain(db_chat, ConvoFull)
+            return orm_to_domain(db_chat, Convo)
 
         except ConvoRetrievalError:
             raise

@@ -1,12 +1,11 @@
 from __future__ import annotations
-import msgspec
 
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator, field_serializer
+import msgspec
+from pydantic import (BaseModel, ConfigDict, Field, field_serializer, model_validator)
 from pydantic.v1.utils import to_camel
-
 
 from backend.src.api.schemas.source_api_schemas import (
     SourceGroupResponse,
@@ -14,7 +13,6 @@ from backend.src.api.schemas.source_api_schemas import (
     SourceResponseShallow,
 )
 from backend.src.domain.enums import MessageRole
-from backend.src.domain.schemas.config_schemas import DynamicPrefs
 from backend.src.storage.utils.converters import utc_now
 
 

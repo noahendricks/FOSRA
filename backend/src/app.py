@@ -1,28 +1,24 @@
-from fastapi.responses import JSONResponse
-import uvicorn
+import warnings
+from asyncio import CancelledError
 from contextlib import asynccontextmanager
+
+import taskiq_fastapi
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.responses import JSONResponse
 from loguru import logger
-from backend.src.api.lifecycle import global_infra
-from backend.src.tasks.broker import broker
-from backend.src.settings.observe import setup_telemetry
-import taskiq_fastapi
-
-from backend.src.api.routes.user import router as user_router
-from backend.src.api.routes.workspace import router as workspace_router
-from backend.src.api.routes.config import router as config_router
-import warnings
-
 from rich.traceback import install
 
-install(show_locals=True)
-
-from asyncio import CancelledError
-
-
 from backend.src.api.exception_handlers import register_exception_handlers
+from backend.src.api.lifecycle import global_infra
+from backend.src.api.routes.config import router as config_router
+from backend.src.api.routes.user import router as user_router
+from backend.src.api.routes.workspace import router as workspace_router
+from backend.src.settings.observe import setup_telemetry
+from backend.src.tasks.broker import broker
+
+# install(show_locals=True)
 
 
 # logfire.configure(
@@ -108,22 +104,23 @@ app.add_middleware(
 
 
 from rich.console import Console
-from rich.traceback import Traceback
 
-console = Console()
-
-
-@app.exception_handler(Exception)
-async def rich_exception_handler(request, exc):
-    console.print(
-        Traceback.from_exception(
-            type(exc),
-            exc,
-            exc.__traceback__,
-            show_locals=True,
-        )
-    )
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+# from rich.traceback import Traceback
+#
+# console = Console()
+#
+#
+# @app.exception_handler(Exception)
+# async def rich_exception_handler(request, exc):
+#     console.print(
+#         Traceback.from_exception(
+#             type(exc),
+#             exc,
+#             exc.__traceback__,
+#             show_locals=True,
+#         )
+#     )
+#     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 if __name__ == "__main__":

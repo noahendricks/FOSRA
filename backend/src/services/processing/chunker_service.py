@@ -9,10 +9,19 @@ from typing import TYPE_CHECKING, Any, cast
 from loguru import logger
 
 from backend.src.domain.enums import ChunkerType
-from backend.src.domain.schemas.doc import (Chunk, ChunkMetadata, Doc, PDFMetadata)
+from backend.src.domain.schemas.doc import (
+    Chunk,
+    ChunkMetadata,
+    Doc,
+    PDFMetadata,
+    TextMetadata,
+)
+from backend.src.storage.models import ulid_factory
 
 if TYPE_CHECKING:
     from backend.src.domain.schemas.config import ChunkerConfig
+
+from uuid import uuid4
 
 from chonkie import (
     BaseChunker,
@@ -21,8 +30,12 @@ from chonkie import (
     NeuralChunker,
     RecursiveChunker,
     SemanticChunker,
+    SentenceTransformerEmbeddings,
+    Visualizer,
     chunker,
 )
+
+viz = Visualizer()
 
 from backend.src.domain.schemas.config import ChunkerConfig
 
@@ -78,16 +91,17 @@ class ChunkerService:
 
                 # !warn: config currently hardcoded, user config dump necessary for config
 
-                semantic_config = SemanticChunkerConfig(
-                    embedding_model=chunker_config.embedding_model,
-                    threshold=chunker_config.similarity_threshold,
-                    chunk_size=chunker_config.chunk_size,
+                semantic_config = SemanticChunkerConfig()
+
+                embedding_model = SentenceTransformerEmbeddings(
+                    semantic_config.embedding_model, trust_remote_code=True
                 )
 
                 chunker = SemanticChunker(
-                    embedding_model=semantic_config.embedding_model,
-                    threshold=semantic_config.threshold,
-                    chunk_size=semantic_config.chunk_size,
+                    **{
+                        **semantic_config.model_dump(),
+                        "embedding_model": embedding_model,
+                    }
                 )
 
                 logger.info(f"Initialized SEMANTIC chunker with model")
@@ -113,7 +127,9 @@ class ChunkerService:
 
                 code_config = CodeChunkerConfig(chunk_size=chunker_config.chunk_size)
 
-                chunker = CodeChunker(**code_config.model_dump())
+                chunker = CodeChunker(
+                    **code_config.model_dump(),
+                )
 
                 logger.info(f"Initialized CODE chunker with chunk size")
 
@@ -135,14 +151,11 @@ class ChunkerService:
 
         async with asyncio.TaskGroup() as group:
             for doc in docs:
-
                 # !hack: NOT MAINTAINING TEXT LOCATION IN END CHUNKS - NEED OPTION THAT DOES
-
                 doc_type = "PDF" if doc.is_pdf else "code" if doc.is_code else "text"
 
                 logger.debug(f"Processing {doc_type} document: {doc.id}")
                 try:
-
                     if doc.is_pdf:
                         # if doc is pdf, chunk / (leave as) as pages unless page length > 300 tokens, then chunk w/ text chunker
                         cpdf_task = group.create_task(
@@ -181,6 +194,9 @@ class ChunkerService:
 
         chunker = ChunkerService()._get_chunker(config)
 
+        if chunker is None:
+            raise RuntimeError("PDF Chunker from _get_chunker returned None")
+
         # token count approximation for 300 token threshold
         # FIX: NOT WORKING
 
@@ -189,21 +205,22 @@ class ChunkerService:
         if estimated_tokens > 250:
             # chunk within the page using text chunker
             chunks = await ChunkerService()._chunk_with_chonkie(
-                doc, chunker
+                doc, chunker=chunker
             )  # pyright: ignore
 
             from pprint import pp
         else:
             # keep as single chunk (page)
             chunk_meta: ChunkMetadata = ChunkMetadata(
-                chunk_id=f"{doc.id}-page-{doc.metadata.page}",
+                chunk_id=str(uuid4()),
+                doc_title=doc.metadata.source
+                if doc.metadata.source
+                else "Unknown File Name",
                 doc_id=doc.id or "unknown",
                 page_number=doc.metadata.page,
                 token_count=int(estimated_tokens),
                 start_index=0,
                 end_index=len(doc.page_content),
-                embedding=None,
-                score=None,
             )
 
             chunk: Chunk = Chunk(text=doc.page_content, metadata=chunk_meta)
@@ -225,13 +242,11 @@ class ChunkerService:
         """Handle code file chunking."""
         # use code chunker as default, respect user preference
 
-        chunker_type = config.preferred_chunker_type if config else ChunkerType.CODE
-
         chunker = ChunkerService()._get_chunker(config)
 
         return await ChunkerService()._chunk_with_chonkie(
-            doc, chunker
-        )  # pyright: ignore
+            doc, chunker=chunker  # pyright:ignore
+        )
 
     @staticmethod
     async def _chunk_text(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
@@ -240,7 +255,9 @@ class ChunkerService:
 
         chunker: BaseChunker = ChunkerService()._get_chunker(config)  # pyright: ignore
 
-        return await ChunkerService()._chunk_with_chonkie(doc, chunker)
+        chunks = await ChunkerService()._chunk_with_chonkie(doc, chunker)
+
+        return chunks
 
     @staticmethod
     async def _chunk_with_chonkie(doc: Doc, chunker: BaseChunker) -> list[Chunk]:
@@ -250,19 +267,28 @@ class ChunkerService:
 
         try:
             chonkie_chunks = chunker.chunk(doc.page_content)
+            logger.info(f"Chunking with {chunker} ")
+
+            viz.print(chonkie_chunks)
 
             chunks = []
 
+            if isinstance(doc.metadata, PDFMetadata or TextMetadata):
+                doc_title = (
+                    doc.metadata.title if doc.metadata.title else "Unknown Doc Title"
+                )
+            else:
+                doc_title = "Unknown Doc Title"
+
             for i, chonkie_chunk in enumerate(chonkie_chunks):
                 chunk_meta = ChunkMetadata(
-                    chunk_id=f"{doc.id}-chunk-{i}",
+                    chunk_id=str(uuid4()),
                     doc_id=doc.id or "unknown",
+                    doc_title=doc_title,
                     page_number=0,
                     token_count=getattr(chonkie_chunk, "token_count", None),
                     start_index=getattr(chonkie_chunk, "start_index", None),
                     end_index=getattr(chonkie_chunk, "end_index", None),
-                    embedding=None,
-                    score=None,
                 )
 
                 chunk = Chunk(text=chonkie_chunk.text, metadata=chunk_meta)

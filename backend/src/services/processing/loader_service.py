@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import pprint
+from pathlib import Path
 from pprint import pp
 from typing import TYPE_CHECKING
 
@@ -10,12 +12,16 @@ from langchain_core.documents.base import Blob
 from loguru import logger
 from ulid import ULID
 
+from backend.src.domain.enums import VectorStoreType
 from backend.src.domain.schemas.config import (
     ChunkerConfig,
     EmbedderConfig,
+    UserPreferences,
     VectorStoreConfig,
 )
 from backend.src.domain.schemas.doc import (Doc, MDNFile, PDFMetadata, TextMetadata)
+from backend.src.services.conversation import llm_service
+from backend.src.services.conversation.conversation_service import ConversationService
 from backend.src.services.processing.chunker_service import ChunkerService
 from backend.src.services.processing.embedder_service import EmbedderService
 from backend.src.services.retrieval.vector_service import VectorService
@@ -29,11 +35,10 @@ def to_bytes(path: str):
         return f.read()
 
 
+import markitdown
 from rich.traceback import install
 
-_ = install(show_locals=True, word_wrap=True)
-
-import markitdown
+# _ = install(show_locals=True, word_wrap=True)
 
 
 def ulid_factory() -> str:
@@ -74,7 +79,6 @@ class LoaderService:
                     )
 
                     # !todo : use pdf_full to get doc hash
-
                     for lc_doc in pdf_docs:
                         lc_doc.metadata["content_type"] = "pdf"
 
@@ -88,10 +92,7 @@ class LoaderService:
                     # text/markdown parsing
                     blob: Blob = Blob.from_data(file.bytes, encoding="utf-8")
 
-                    print("blob: \n", str(blob.data)[:100])
-
                     text_docs: list[Document] = TextParser().parse(blob)
-                    print("text_docs: \n", text_docs)
 
                     for lc_doc in text_docs:
                         lc_doc.metadata["content_type"] = "text"
@@ -166,71 +167,123 @@ async def _chunk(result):
 
 
 if __name__ == "__main__":
-    md_bytes = to_bytes(
-        "/home/roccoluxe/Documents/docs/09-frontend-ui/tsform/overview.md"
-    )
 
-    md_blob = Blob.from_data(data=md_bytes)
+    import joblib
 
-    pdf_bytes = to_bytes(
-        "/home/roccoluxe/Documents/Misc/MakingMusic_DennisDeSantis.pdf"
-    )
+    user_dirs = [
+        "/home/roccoluxe/Documents/docs/01-ai-ml/ai-sdk/01-core-text-generation",
+        "/home/roccoluxe/Documents/docs/01-ai-ml/ai-sdk/00-getting-started",
+        "/home/roccoluxe/Documents/docs/01-ai-ml/ai-sdk/02-structured-output",
+    ]
 
-    pdf_blob = Blob.from_data(data=pdf_bytes)
+    path_dirs = [Path(p) for p in user_dirs]
 
-    mock_mdn_pdf = MDNFile(
-        media_type="application/pdf",
-        type=pdf_blob.mimetype or "",
-        name=str(pdf_blob.path),
-        size=0,
-        bytes=pdf_bytes,
-        webkit_relative_path=pdf_blob.source,
-    )
+    dir_files: list[MDNFile] = []
+    for path in path_dirs:
+        if path.is_dir():
+            files = path.glob("*")
+            for file in files:
+                print(mime)
+                if not file.is_dir():
+                    print(file.as_posix())
+                    mime = mimetypes.guess_file_type(file.as_posix())
+                    dir_files.append(
+                        MDNFile(
+                            type=mime if mime else "text",
+                            size=999,
+                            name=file.name,
+                            bytes=to_bytes(file.as_posix()),
+                            media_type=mime if mime else "text",
+                        )
+                    )
 
-    mock_mdn_md = MDNFile(
-        media_type="text/markdown",
-        type=md_blob.mimetype or "",
-        name=str(md_blob.path),
-        size=0,
-        bytes=md_blob.data,
-        webkit_relative_path=md_blob.source,
-    )
+    cache = Path(".cache")
+    cache.mkdir(exist_ok=True)
 
-    result: list[Doc] = LoaderService.parse_files([mock_mdn_md])
+    docs = LoaderService.parse_files(dir_files)
 
-    chunks = asyncio.run(
-        ChunkerService().chunk_documents(docs=result, config=ChunkerConfig())
-    )
+    joblib.dump(docs, ".cache/docs.pkl")
 
-    for c in chunks:
-        print(c)
+    # pp([d.to_dict() for d in dir_files])
 
-        print("\n \n")
-
-    embedded_chunks = []
-
-    for c in chunks:
-        embedded_chunks.append(
-            asyncio.run(
-                EmbedderService().embed_chunks(chunks=c, config=EmbedderConfig())
-            )
-        )
-
-    for e in embedded_chunks:
-
-        logger.debug(f"storing {len(embedded_chunks)} vectorsj")
-
-        ids = asyncio.run(
-            VectorService().upsert(
-                config=VectorStoreConfig(),
-                chunks=[c for sub in embedded_chunks for c in sub],
-            )
-        )
-
-        print(ids)
-
-    # for p in result:
-    #     if isinstance(p.metadata, TextMetadata):
-    #         pp(p.model_dump())
-    #     if isinstance(p.metadata, PDFMetadata):
-    #         pp(p.model_dump())
+    # md_bytes = to_bytes(
+    #     "/home/roccoluxe/Documents/docs/01-ai-ml/ai-sdk/04-agents-workflows/03-agents/03-workflows.mdx"
+    # )
+    #
+    # md_blob = Blob.from_data(data=md_bytes)
+    #
+    # pdf_bytes = to_bytes(
+    #     "/home/roccoluxe/Documents/Misc/MakingMusic_DennisDeSantis.pdf"
+    # )
+    #
+    # pdf_blob = Blob.from_data(data=pdf_bytes)
+    #
+    # mock_mdn_pdf = MDNFile(
+    #     media_type="application/pdf",
+    #     type=pdf_blob.mimetype or "",
+    #     name=str(pdf_blob.path),
+    #     size=0,
+    #     bytes=pdf_bytes,
+    #     webkit_relative_path=pdf_blob.source,
+    # )
+    #
+    # mock_mdn_md = MDNFile(
+    #     media_type="text/markdown",
+    #     type=md_blob.mimetype or "",
+    #     name=str(md_blob.path),
+    #     size=0,
+    #     bytes=md_blob.data,
+    #     webkit_relative_path=md_blob.source,
+    # )
+    #
+    # result: list[Doc] = LoaderService.parse_files([mock_mdn_md])
+    #
+    # chunks = asyncio.run(
+    #     ChunkerService().chunk_documents(docs=result, config=ChunkerConfig())
+    # )
+    #
+    # embedded_chunks = []
+    #
+    # for c in chunks:
+    #     embedded_chunks.append(
+    #         asyncio.run(
+    #             EmbedderService().embed_chunks(chunks=c, config=EmbedderConfig())
+    #         )
+    #     )
+    #
+    # ids = asyncio.run(
+    #     VectorService().upsert(
+    #         config=VectorStoreConfig(),
+    #         chunks=[c for sub in embedded_chunks for c in sub],
+    #         embed_config=EmbedderConfig(),
+    #     )
+    # )
+    #
+    # print("DEBUGPRINT[91]: loader_service.py:242 (before asyncio.run()")
+    #
+    # async def print_stream():
+    #     vector_results = await VectorService().search(
+    #         config=VectorStoreConfig(),
+    #         embed_config=EmbedderConfig(),
+    #         query="what is evaluator optimizer?",
+    #     )
+    #     if not vector_results:
+    #         print("no results")
+    #         raise RuntimeError()
+    #
+    #     cc = await ConversationService().parse_retrievals(
+    #         retrievals=vector_results, store_type=VectorStoreType.QDRANT
+    #     )
+    #
+    #     if not cc:
+    #         raise RuntimeError()
+    #
+    #     res = await llm_service.LLMService().generate_llm_response(
+    #         chat_history=[], sources=cc, convo_id="1234", user_prefs=UserPreferences()
+    #     )
+    #     async for chunk in res:
+    #         print(chunk.content, end="", flush=True)
+    #
+    # asyncio.run(print_stream())
+    #
+    # print("DEBUGPRINT[93]: loader_service.py:243 (after asyncio.run()")

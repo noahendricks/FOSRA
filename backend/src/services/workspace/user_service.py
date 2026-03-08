@@ -3,17 +3,9 @@ from __future__ import annotations
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.api.schemas import (
-    NewUserRequest,
-    UserRequest,
-    UserResponse,
-)
-
-from backend.src.domain.exceptions import (
-    UserRetrievalError,
-)
-from backend.src.domain.schemas import User
-from backend.src.domain.schemas.schemas import UserUpdate
+from backend.src.api.schemas import NewUserRequest, UserRequest, UserResponse
+from backend.src.domain.exceptions import UserRetrievalError
+from backend.src.domain.schemas.user import User, UserUpdate
 from backend.src.storage.user import UserRepo
 from backend.src.storage.utils.converters import (
     domain_to_response,
@@ -22,6 +14,7 @@ from backend.src.storage.utils.converters import (
 
 
 class UserService:
+
     @staticmethod
     async def get_or_create_default_user(
         user_request: UserRequest | NewUserRequest,

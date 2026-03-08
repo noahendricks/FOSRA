@@ -1,19 +1,16 @@
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.v1.utils import to_camel
+
+from backend.src.domain.enums import DocType, FileType, SourceType
+from backend.src.storage.utils.converters import utc_now
 
 # ============================================================================
 # File
 # API INPUT SCHEMAS (Request DTOs)
 # ============================================================================
-
-from backend.src.domain.enums import DocumentType, FileType, OriginType
-from backend.src.storage.utils.converters import (
-    utc_now,
-)
-
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class _BaseModelFlex(BaseModel):
@@ -55,10 +52,10 @@ class SourceResponseBase(_BaseModelFlex):
     """Response DTO for a source in a directory session."""
 
     id: str
-    type: OriginType | str | None
+    type: SourceType | str | None
     hash: str | None = None  # WARN: Change this to Non-Nullable
     name: str = ""
-    document_type: DocumentType | None = None
+    document_type: DocType | None = None
     source_summary: str = ""
     summary_embedding: str = ""
     uploaded_at: datetime = Field(default_factory=utc_now)
@@ -70,7 +67,7 @@ class SourceResponseShallow(_BaseModelFlex):
     id: str
     name: str = ""
     source_summary: str = ""
-    source_type: OriginType
+    source_type: SourceType
     summary_embedding: str = ""
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now())
 

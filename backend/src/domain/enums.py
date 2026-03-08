@@ -50,6 +50,7 @@ class RerankerType(StrEnum):
     COLBERT = "COLBERT"
     BGE = "BGE"
     FLASHRANK = "FLASHRANK"
+    FASTEMBED = "FASTEMBED"
 
     # API rerankers
     JINA = "JINA"
@@ -123,7 +124,7 @@ class SerpType(StrEnum):
     SEARXNG_API = "SEARXNG_API"
     LINKUP_API = "LINKUP_API"
     BAIDU_API = "BAIDU_API"
-    
+
 
 class ChatType(StrEnum):
     QNA = "QNA"
@@ -223,9 +224,9 @@ class ConversationStreamType(StrEnum):
 class RetrievalMode(StrEnum):
     """How to retrieve and return results."""
 
-    CHUNKS = "CHUNKS"
-    DOCUMENTS = "DOCUMENTS"
+    STANDARD = "STANDARD"
     HYBRID = "HYBRID"
+    LATE = "LATE"
 
 
 class SearchStrategy(StrEnum):

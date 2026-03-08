@@ -131,3 +131,7 @@ class SerpService:
                 pass
             case _:
                 pass
+
+                # Serp and Retrieve
+                # Hold 20 Most Recent Results In Memory
+                # Allow User to Store them in Knowledge Base
