@@ -4,6 +4,7 @@ import pathlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from chonkie.genie import BaseGenie, OpenAIGenie
 from langchain_community.vectorstores import DistanceStrategy
 from langchain_core.embeddings import Embeddings
 from langchain_litellm import ChatLiteLLM
@@ -40,22 +41,7 @@ if TYPE_CHECKING:
     pass
 
 
-class ChunkerConfig(BaseModel):
-    """Configuration for chunker behavior."""
-
-    chunk_size: int = 2048
-    chunk_overlap: int = 256
-    min_chunk_size: int = 100
-    max_chunk_size: int = 2048
-    # Semantic chunking specific
-    similarity_threshold: float = 0.8
-    embedding_model: Any = "nomic-ai/nomic-embed-text-v1.5"
-    # Sentence chunking specific
-    sentences_per_chunk: int = 5
-    preferred_chunker_type: ChunkerType = ChunkerType.NEURAL
-
-
-from chonkie import RecursiveRules
+from chonkie import RecursiveRules, TokenizerProtocol
 
 
 class SemanticChunkerConfig(BaseModel):
@@ -63,7 +49,7 @@ class SemanticChunkerConfig(BaseModel):
 
     embedding_model: Any = "nomic-ai/nomic-embed-text-v1.5"
     threshold: float = 0.4
-    chunk_size: int = 2048
+    chunk_size: int = 512
     similarity_window: int = 2
     min_sentences_per_chunk: int = 2
     min_characters_per_sentence: int = 64
@@ -76,12 +62,25 @@ class SemanticChunkerConfig(BaseModel):
 
 
 class LateChunkerConfig(BaseModel):
+
     model_config = {"arbitrary_types_allowed": True}
 
     embedding_model: Any = "nomic-ai/modernbert-embed-base"
     chunk_size: int = 2048
     rules: RecursiveRules = RecursiveRules()
     min_characters_per_chunk: int = 24
+
+
+class SlumberChunkerConfig(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
+    genie: BaseGenie = OpenAIGenie()
+    tokenizer: str = "character"
+    chunk_size: int = 1024
+    rules = RecursiveRules()
+    candidate_size: int = 512
+    min_characters_per_chunk: int = 24
+    verbose: bool = True
 
 
 class RecursiveChunkerConfig(BaseModel):
@@ -107,8 +106,55 @@ class NeuralChunkerConfig(BaseModel):
 
     model: Any = "mirth/chonky_modernbert_base_1"
     device_map: str = "auto"
-    min_characters_per_chunk: int = 10
+    min_characters_per_chunk: int = 256
     stride: int | None = None
+
+
+class TokenChunkerConfig(BaseModel):
+    tokenizer: str | TokenizerProtocol = "character"
+    chunk_size: int = 2048
+    chunk_overlap: int | float = 0
+
+
+class SentenceChunkerConfig(BaseModel):
+    tokenizer: str | TokenizerProtocol = "character"
+    chunk_size: int = 2048
+    chunk_overlap: int = 0
+    min_sentences_per_chunk: int = 1
+    min_characters_per_sentence: int = 12
+    approximate: bool = False
+    delim: str | list[str] = [". ", "! ", "? ", "\n"]
+    include_delim: Literal["prev", "next"] | None = "prev"
+    sentences_per_chunk: int = 5
+
+
+class ChunkerConfig(BaseModel):
+    """Configuration for chunker behavior."""
+
+    chunk_size: int = 2048
+    max_inference_tokens: int = 8192
+    max_levels: int = 3
+    # HC200 fixed-size sub-chunking
+    fixed_chunk_size: int = 200
+    tokenizer: str = "auto"  # switch to rust based tokenizer model
+
+    chunk_overlap: int = 256
+    min_chunk_size: int = 100
+    max_chunk_size: int = 2048
+
+    slumber_config: SlumberChunkerConfig = SlumberChunkerConfig()
+    neural_config: NeuralChunkerConfig = NeuralChunkerConfig()
+    semantic_config: SemanticChunkerConfig = SemanticChunkerConfig()
+    late_config: LateChunkerConfig = LateChunkerConfig()
+    sentence_config: SentenceChunkerConfig = SentenceChunkerConfig()
+    code_config: CodeChunkerConfig = CodeChunkerConfig()
+    token_config: TokenChunkerConfig = TokenChunkerConfig()
+    token_budget: int = 4096
+    batch_size: int = 32
+
+    embedding_model: str | Any = "nomic-ai/nomic-embed-text-v1.5"
+    # Sentence chunking specific
+    preferred_strategy: ChunkerType = ChunkerType.SEMANTIC
 
 
 class LLMConfig(BaseModel):

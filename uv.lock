@@ -990,6 +990,10 @@ all = [
     { name = "voyageai" },
     { name = "weaviate-client" },
 ]
+genie = [
+    { name = "google-genai" },
+    { name = "pydantic" },
+]
 st = [
     { name = "accelerate" },
     { name = "sentence-transformers" },
@@ -2128,7 +2132,7 @@ dependencies = [
     { name = "basedpyright" },
     { name = "black" },
     { name = "blake3" },
-    { name = "chonkie", extra = ["all", "st", "viz"] },
+    { name = "chonkie", extra = ["all", "genie", "st", "viz"] },
     { name = "code2flow" },
     { name = "deepagents" },
     { name = "docling" },
@@ -2252,7 +2256,7 @@ requires-dist = [
     { name = "basedpyright", specifier = ">=1.36.1" },
     { name = "black", specifier = ">=25.12.0" },
     { name = "blake3", specifier = ">=1.0.8" },
-    { name = "chonkie", extras = ["all", "st", "viz"], specifier = ">=1.4.0" },
+    { name = "chonkie", extras = ["all", "genie", "st", "viz"], specifier = ">=1.4.0" },
     { name = "code2flow", specifier = ">=2.5.1" },
     { name = "deepagents", specifier = ">=0.3.8" },
     { name = "docling", extras = ["chunking"], specifier = ">=2.59.0" },

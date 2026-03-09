@@ -8,21 +8,16 @@ from typing import TYPE_CHECKING, Any, Optional
 from pydantic import BaseModel
 from sqlalchemy import (
     JSON,
-    VARCHAR,
     Boolean,
     CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
-    ForeignKeyConstraint,
     Index,
-    Integer,
     String,
     Table,
     Text,
-    TypeDecorator,
     UniqueConstraint,
-    event,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict
@@ -103,96 +98,6 @@ ROLE_TO_CATEGORY_MAP: dict[ConfigRole, ToolCategory] = {
 # ============================================================================
 
 
-class UserORM(Base):
-    """User account."""
-
-    __tablename__ = "users"
-
-    user_id: Mapped[str] = mapped_column(
-        String(26), default=ulid_factory, primary_key=True
-    )
-    username: Mapped[str | None] = mapped_column(String(200))
-
-    password: Mapped[str | None] = mapped_column(String(length=400))
-
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now
-    )
-
-    last_login: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now
-    )
-
-    # Global Settings
-    preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
-
-    ui_prefs: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
-
-    # Relationships
-    workspaces: Mapped[list["WorkspaceORM"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    convos: Mapped[list["ConvoORM"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-
-
-# ============================================================================
-# Workspace ORM
-# ============================================================================
-
-
-class WorkspaceORM(Base):
-    """Workspace containing convos and sources."""
-
-    __tablename__ = "workspaces"
-
-    workspace_id: Mapped[str] = mapped_column(
-        String(26), primary_key=True, default=ulid_factory
-    )
-    name: Mapped[str] = mapped_column(String(100), index=True)
-    description: Mapped[str | None] = mapped_column(String(500))
-
-    user_id: Mapped[str] = mapped_column(
-        String(26), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
-    )
-
-    # per request settings
-    dynamic_prefs: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        MutableDict.as_mutable(JSONB)
-    )
-
-    archived_convos: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        MutableDict.as_mutable(JSONB)
-    )
-    # Relationships
-    user: Mapped["UserORM"] = relationship(back_populates="workspaces")
-
-    convos: Mapped[list["ConvoORM"]] = relationship(
-        back_populates="workspace", cascade="all, delete-orphan"
-    )
-
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=None, nullable=True)
-
-    sources: Mapped[list["DocORM"]] = relationship(
-        secondary=source_workspace_association,
-        back_populates="workspaces",
-    )
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "workspace_id", name="uq_user_workspace"),
-    )
-
-
-# ============================================================================
-# Source & Chunk ORM
-# ============================================================================
-
-
 class DocORM(Base):
     """Document source."""
 
@@ -220,42 +125,23 @@ class DocORM(Base):
 
     summary_embedding: Mapped[str] = mapped_column(Text)
 
-    workspaces: Mapped[list["WorkspaceORM"]] = relationship(
-        secondary=source_workspace_association, back_populates="sources"
+
+class DocTopicORM(Base):
+    """Document Topics ."""
+
+    __tablename__ = "sources"
+
+    topic_id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=ulid_factory
     )
+    topic: Mapped[str] = mapped_column(String(length=200))
 
-
-# WARN: DEPRECATED - CHUNKS REFERENCED IN DOC
-# class ChunkORM(Base):
-#     pass
-#     """Text chunk from a source document."""
-#
-#     __tablename__ = "chunks"
-#
-#     chunk_id: Mapped[str] = mapped_column(
-#         String(26), primary_key=True, default=ulid_factory
-#     )
-#     source_id: Mapped[str] = mapped_column(
-#         String(26), ForeignKey("sources.source_id", ondelete="CASCADE"), nullable=False
-#     )
-#
-#     # Content
-#     text: Mapped[str | None] = mapped_column(Text)
-#
-#     # Position
-#     start_index: Mapped[int] = mapped_column(Integer, nullable=False)
-#     end_index: Mapped[int] = mapped_column(Integer, nullable=False)
-#     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
-#
-#     # Relationships
-#     source: Mapped["DocORM"] = relationship(back_populates="chunks")
-#
-#     __table_args__ = (
-#         CheckConstraint("start_index >= 0", name="check_start_index_non_negative"),
-#         CheckConstraint("end_index > start_index", name="check_end_after_start"),
-#         CheckConstraint("token_count > 0", name="check_token_count_positive"),
-#         Index("ix_chunks_source_id", "source_id"),
-#     )
+    topic_hash: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
+    icl_examples: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        MutableDict.as_mutable(JSONB)
+    )
 
 
 # ============================================================================
@@ -296,11 +182,6 @@ class ConvoORM(Base):
 
     pinned: Mapped[Boolean] = mapped_column(Boolean, default=False)
 
-    user: Mapped["UserORM"] = relationship(back_populates="convos", lazy="selectin")
-
-    workspace: Mapped["WorkspaceORM"] = relationship(
-        back_populates="convos", lazy="selectin"
-    )
     messages: Mapped[list["MessageORM"]] = relationship(
         back_populates="convo",
         cascade="all, delete-orphan",
@@ -311,21 +192,6 @@ class ConvoORM(Base):
     meta: Mapped[Optional[dict[str, Any]]] = mapped_column(
         MutableDict.as_mutable(JSONB)
     )
-
-    # __table_args__ = (
-    #     # Performance indexes for common queries
-    #     # WHERE folder_id = ...
-    #     Index("folder_id_idx", "folder_id"),
-    #     Index("ix_convo_user_workspace", "user_id", "workspace_id"),
-    #     # WHERE user_id = ... AND pinned = ...
-    #     Index("user_id_pinned_idx", "user_id", "pinned"),
-    #     # WHERE user_id = ... AND archived = ...
-    #     Index("user_id_archived_idx", "user_id", "archived"),
-    #     # WHERE user_id = ... ORDER BY updated_at DESC
-    #     Index("updated_at_user_id_idx", "updated_at", "user_id"),
-    #     # WHERE folder_id = ... AND user_id = ...
-    #     Index("folder_id_user_id_idx", "folder_id", "user_id"),
-    # )
 
 
 class MessageORM(Base):

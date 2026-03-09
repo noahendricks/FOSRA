@@ -1,59 +1,16 @@
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.src.services.retrieval.vector_service import VectorService
 from backend.src.tasks.processing import embed_query
 
 from .broker import broker
 
 
-# async def search_online(
-#     query: str,
-#     documents: list[RetrievedResult],
-# ) -> list[RetrievedResult] | None:
-#     """Search Online"""
-#
-#     try:
-#         pass
-#     except Exception as e:
-#         logger.error(f"Online Search Task failed:{e}")
-#         raise
-
-
-#TODO:
 @broker.task
-async def search_vector_store(
-    query: str,
-    vector_store_config: VectorStoreConfig,
-    embedder_config: EmbedderConfig,
-    reranker_config: RerankerConfig,
-    session: AsyncSession,
-) -> RerankResult:
-    """Search Vector Store"""
-
-    try:
-        pass
-        embedded_query = await embed_query(
-            query=query, config=embedder_config, session=session
-        )
-        retrived_results: list[RetrievedResult] = await VectorService().search(
-            query_text=query,
-            query_vector=embedded_query,
-            config=vector_store_config,
-            session=session,
-        )
-
-        deduplicated_results: list[RetrievedResult] = deduplicate_results(
-            results=retrived_results
-        )
-
-        reranked = await rerank_documents(
-            query=query,
-            documents=deduplicated_results,
-            config=reranker_config,
-            session=session,
-        )
-
-        return reranked
-    except Exception as e:
-        logger.error(f"Reranking Task failed:{e}")
-        raise
+async def vector_source_search():
+    #  accept query
+    #  --- call reform_query and accept reformed query
+    #  --- call embed_query and accept query embedding
+    #  --- call vector store on "sources" collection and return top 5 sources and topics
+    pass

@@ -183,7 +183,6 @@ if __name__ == "__main__":
         if path.is_dir():
             files = path.glob("*")
             for file in files:
-                print(mime)
                 if not file.is_dir():
                     print(file.as_posix())
                     mime = mimetypes.guess_file_type(file.as_posix())

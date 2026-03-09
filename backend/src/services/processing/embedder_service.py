@@ -49,7 +49,7 @@ class EmbedderService:
     _semaphore: asyncio.Semaphore = asyncio.Semaphore(3)
 
     def _get_embedders(self, config: EmbedderConfig):
-        # HACK: NO EXTENSIBILITY: currently just handling fastembed (first class support, simplest and fastest)
+        # HACK: NO EXTENSIBILITY
 
         #!note: will add caching if profiling shows necessary
         embedder_type = config.embedder_type
@@ -138,7 +138,7 @@ class EmbedderService:
     async def embed_chunks(
         self, chunks: list[Chunk], config: EmbedderConfig
     ) -> list[Chunk]:
-        # HACK: NO EXTENSIBILITY: currently just handling fastembed (first class support, simplest and fastest)
+        # HACK: NO EXTENSIBILITY
 
         if not chunks:
             logger.warning("No chunks provided for embedding")
@@ -186,7 +186,7 @@ class EmbedderService:
     async def embed_query(
         self, query: str, config: EmbedderConfig
     ) -> EmbeddedQueries | None:
-        # HACK: NO EXTENSIBILITY: currently just handling fastembed (first class support, simplest and fastest)
+        # HACK: NO EXTENSIBILITY
         logger.debug(f"Embedding query using {config.embedder_type}")
 
         embed_models = self._get_embedders(config)
@@ -238,7 +238,7 @@ class EmbedderService:
         config: EmbedderConfig,
         dense_model: TextEmbedding,  # todo: add other providers types
     ) -> list[Chunk]:
-        # HACK: NO EXTENSIBILITY: currently just handling fastembed (first class support, simplest and fastest)
+        # HACK: NO EXTENSIBILITY
         if not chunks:
             logger.warning("No chunks provided for embedding")
 
@@ -282,7 +282,7 @@ class EmbedderService:
         config: EmbedderConfig,
         sparse_model: SparseTextEmbedding,  # todo: add other providers types
     ) -> None:
-        # HACK: NO EXTENSIBILITY: currently just handling fastembed (first class support, simplest and fastest)
+        # HACK: NO EXTENSIBILITY
 
         if not chunks:
             logger.warning("No chunks provided for embedding")
@@ -319,7 +319,7 @@ class EmbedderService:
         config: EmbedderConfig,
         late_model: LateInteractionTextEmbedding,  # todo: add other providers types
     ) -> None:
-        # HACK: NO EXTENSIBILITY: currently just handling fastembed (first class support, simplest and fastest)
+        # HACK: NO EXTENSIBILITY
 
         if not chunks:
             logger.warning("No chunks provided for embedding")

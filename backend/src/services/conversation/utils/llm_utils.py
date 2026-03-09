@@ -161,7 +161,7 @@ async def validate_config(
         ) from e
 
 
-def create_llm_from_config(config: LLMConfig) -> ChatLiteLLM:
+def build_llm(config: LLMConfig) -> ChatLiteLLM:
     """Create a ChatLiteLLM instance from configuration."""
 
     try:
