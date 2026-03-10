@@ -3,28 +3,46 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
+from uuid import uuid4
 
 import numpy as np
 from chonkie import (
     CodeChunker,
     LateChunker,
     NeuralChunker,
-    OpenAIGenie,
-    SemanticChunker,
     SentenceChunker,
     SentenceTransformerEmbeddings,
-    SlumberChunker,
     TokenChunker,
 )
 from chonkie.refinery import EmbeddingsRefinery
-from chonkie.types import Chunk
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic.v1.utils import to_camel
+from qdrant_client.models import PointStruct
 
 from backend.src.domain.enums import ChunkerType
 from backend.src.domain.schemas.config import ChunkerConfig, EmbedderConfig
-from backend.src.domain.schemas.doc import _BaseModelFlex
+from backend.src.domain.schemas.doc import Chunk, ChunkMetadata
+
+
+class _BaseModelFlex(BaseModel):
+    _FLEXIBLE_CONFIG = ConfigDict(
+        from_attributes=True,
+        arbitrary_types_allowed=True,
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
+
+
+class RetrievedChunk(_BaseModelFlex):
+    text: str
+    token_count: int
+    start_char: int
+    score: float
+    payload: dict[str, Any]
 
 
 class HierarchicalChunk(_BaseModelFlex):
@@ -64,17 +82,14 @@ class HiChunkStructurer:
 
     def __init__(self, config: ChunkerConfig):
         #  sentence splitter (step 0 in the paper: S[1:N])
-        self.sentence_chunker = SentenceChunker(**config.sentence_config.model_dump())
         self.config = config
-
-        # fixed-size sub-chunker (HC200 step)
+        self.sentence_chunker = SentenceChunker(**config.sentence_config.model_dump())
         self.token_chunker = TokenChunker(**config.token_config.model_dump())
         self.l1_chunker: CodeChunker | NeuralChunker | LateChunker
 
         #  level-1 (coarse) boundary detector
         match config.preferred_strategy:
             case ChunkerType.CODE:
-                print("DEBUGPRINT[94]: hi_chunk.py:75 (after case ChunkerType.CODE:)")
                 # llm decides semantic boundaries at paragraph level.
 
                 self.l2_chunker = CodeChunker(chunk_size=1200)
@@ -86,7 +101,6 @@ class HiChunkStructurer:
                 )
 
             case ChunkerType.NEURAL:
-                print("DEBUGPRINT[95]: hi_chunk.py:98 (after case ChunkerType.NEURAL:)")
                 if NeuralChunker:
                     # neuralchunker token-classification to predict segment boundaries
                     self.l1_chunker = NeuralChunker(**config.neural_config.model_dump())
@@ -99,10 +113,6 @@ class HiChunkStructurer:
                     raise ImportError("Install chonkie with NeuralChunker support.")
 
             case _:
-                # latechunker: encodes the full document first, then finds splits. preserves global doc context
-                print(
-                    "DEBUGPRINT[96]: hi_chunk.py:114 (after # latechunker: encodes the full document…)"
-                )
                 from chonkie import SemanticChunker
 
                 late_embedding_model = SentenceTransformerEmbeddings(
@@ -129,7 +139,7 @@ class HiChunkStructurer:
     # public
 
     def structure(self, document: str) -> list[HierarchicalChunk]:
-        """entry point. returns a list of level-1 HierarchicalChunk roots, each potentially containing level-2 (and deeper) children. iterative inference (algorithm 1) for long documents."""
+        """entry point."""
 
         # estimate token count via sentence chunker tokenizer
         doc_tokens = self._estimate_tokens(document)
@@ -287,40 +297,13 @@ class FlatChunkProducer:
                 result.extend(self._flatten(child))
             return result
 
+    def to_domain_chunk(flat_chunks: list[FlatChunk]):
+        domain_chunks = []
+        for c in flat_chunks:
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 4.  EMBEDDING ENRICHMENT  (LateChunker / EmbeddingsRefinery)
-# ══════════════════════════════════════════════════════════════════════════════
-class ChunkEmbedder:
-    """adds document-level-aware embeddings to FlatChunks using Chonkie's LateChunker strategy (embed the whole doc first, slice per chunk)."""
+            meta = ChunkMetadata()
 
-    def __init__(self, embed_config: EmbedderConfig):
-        self.embed_config = embed_config
-        self._late_chunker = None  # lazy-initialise
-
-    def embed(self, document: str, flat_chunks: list[FlatChunk]) -> list[FlatChunk]:
-        """Attach embeddings to every FlatChunk in-place and return them."""
-
-        # TODO:  SET TO EMBEDDER SERVICE EMBED
-        from chonkie.types import Chunk
-
-        proxy_chunks = [
-            Chunk(
-                text=fc.text,
-                start_index=fc.start_char,
-                end_index=fc.end_char,
-                token_count=fc.token_count,
-            )
-            for fc in flat_chunks
-        ]
-
-        # FIX: Embedder Service Class Impl here
-        #
-        # for fc, ec in zip(flat_chunks, enriched):
-        #     if ec.embedding is not None:
-        #         fc.embedding = np.array(ec.embedding)
-        #
-        return flat_chunks
+            d_chunk = Chunk()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -328,62 +311,41 @@ class ChunkEmbedder:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-class HiChunkPipeline:
-    """
-    HiChunk.
+class HiChunk:
 
-    # index a document (done once per document)
-    pipeline.index(document_text)
-
-    # retrieve context for a query
-    context = pipeline.retrieve(query, token_budget=4096)
-    """
-
-    def __init__(self, config: ChunkerConfig, embedder_config=EmbedderConfig):
-        self.structurer = HiChunkStructurer(config=config)
-
-        self.flat_producer = FlatChunkProducer(config=config)
-
-        self.embedder = ChunkEmbedder(
-            embed_config=embedder_config()
-        )  # WARN: () May Cause an issue
-
-        self._flat_chunks: list[FlatChunk] = []
-
-        self._hi_chunks: list[HierarchicalChunk] = []
-
-    # ── Indexing ───────────────────────────────────────────────────────────────
-
-    def index(self, document: str) -> None:
+    @staticmethod
+    def index(
+        document: str,
+        structurer: HiChunkStructurer,
+        flat_producer: FlatChunkProducer,
+    ) -> None:
         """build the hierarchical structure and embed all flat chunks."""
 
         logger.info("[HiChunk] Step 1/3 — Hierarchical structuring …")
 
         # structure
-        self._hi_chunks = self.structurer.structure(document)
+        _hi_chunks = structurer.structure(document)
 
-        logger.info(f"[HiChunk]   → {len(self._hi_chunks)} L1 sections found.")
-        total_l2 = sum(len(h.children) for h in self._hi_chunks)
+        logger.info(f"[HiChunk]   → {len(_hi_chunks)} L1 sections found.")
+        total_l2 = sum(len(h.children) for h in _hi_chunks)
         logger.info(f"[HiChunk]   → {total_l2} L2 sub-sections found.")
 
         logger.info("[HiChunk] Step 2/3 — Fixed-size sub-chunking (HC200) …")
 
         # produce
-        self._flat_chunks = self.flat_producer.produce(self._hi_chunks)
+        _flat_chunks = flat_producer.produce(_hi_chunks)
 
-        logger.info(f"[HiChunk]   → {len(self._flat_chunks)} flat chunks produced.")
+        logger.info(f"[HiChunk]   → {len(_flat_chunks)} flat chunks produced.")
 
         logger.info("[HiChunk] Step 3/3 — Embedding flat chunks …")
 
         #  embed
-        self._flat_chunks = self.embedder.embed(document, self._flat_chunks)
+        # self._flat_chunks = self.embedder.embed(document, self._flat_chunks)
 
-        self.print_tree()
-
-        print(self._hi_chunks)
+        print(_hi_chunks)
 
         print("\n\n")
-        for i in self._flat_chunks:
+        for i in _flat_chunks:
             print("-----------------beginning of chunk-----------")
             print("\n")
             print(i)
@@ -393,10 +355,11 @@ class HiChunkPipeline:
 
     #  inspection helpers
 
-    def print_tree(self, max_nodes: int = 20) -> None:
+    @staticmethod
+    def print_tree(hi_chunks: list[HierarchicalChunk], max_nodes: int = 20) -> None:
         """Print a compact view of the hierarchical structure."""
         count = 0
-        for h in self._hi_chunks:
+        for h in hi_chunks:
             if count >= max_nodes:
                 print("  … (truncated)")
                 break
@@ -413,6 +376,163 @@ class HiChunkPipeline:
                     f"  [L2] {sub}…  ({c.token_count} tokens, {len(c.children)} sub-chunks)"
                 )
                 count += 1
+
+    @staticmethod
+    def build_points(
+        chunks: list[Chunk],
+        source_id: str,
+    ) -> list[PointStruct]:
+        points = []
+        for i, chunk in enumerate(chunks):
+            parent = chunk.metadata.parent  # HierarchicalChunk (L2 or L1 leaf)
+
+            # Walk up to get all ancestor text for merge candidates
+            grandparent = getattr(parent, "parent", None)  # L1 if parent is L2
+
+            points.append(
+                PointStruct(
+                    id=str(uuid4()),
+                    vector={
+                        "dense": chunk.metadata.dense_embedding,
+                        "sparse": chunk.metadata.sparse_embedding,
+                        "late-interaction": chunk.metadata.late_embedding,
+                    },
+                    payload={
+                        "text": chunk.text,
+                        "source_id": source_id,
+                        "token_count": chunk.metadata.token_count,
+                        "start_char": chunk.metadata.start_char,
+                        "end_char": chunk.metadata.end_char,
+                        # Hierarchy for Auto-Merge
+                        "parent_text": parent.text if parent else None,
+                        "parent_token_count": parent.token_count if parent else 0,
+                        "parent_start_char": parent.start_char if parent else None,
+                        "parent_end_char": parent.end_char if parent else None,
+                        "parent_level": parent.level if parent else None,
+                        "grandparent_text": grandparent.text if grandparent else None,
+                        "grandparent_token_count": grandparent.token_count
+                        if grandparent
+                        else 0,
+                        "grandparent_start_char": grandparent.start_char
+                        if grandparent
+                        else None,
+                        "grandparent_level": grandparent.level if grandparent else None,
+                        # For grouping siblings during merge check
+                        "parent_id": f"{source_id}:{parent.start_char}:{parent.end_char}"
+                        if parent
+                        else None,
+                        "grandparent_id": f"{source_id}:{grandparent.start_char}:{grandparent.end_char}"
+                        if grandparent
+                        else None,
+                    },
+                )
+            )
+
+        return points
+
+    @staticmethod
+    def auto_merge(
+        results: list[RetrievedChunk],
+        token_budget: int,
+        merge_threshold: float = 0.5,  # fraction of parent's children needed
+    ) -> str:
+        """
+        Auto-Merge retrieval post-processor.
+        Takes RRF-ranked Qdrant results, merges up to parent/grandparent
+        where coverage conditions are met, returns assembled context string.
+        """
+
+        if not results:
+            return ""
+
+        # Group retrieved chunks by parent_id
+        parent_groups: dict[str, list[RetrievedChunk]] = {}
+        no_parent: list[RetrievedChunk] = []
+
+        for chunk in results:
+            pid = chunk.payload.get("parent_id")
+            if pid:
+                parent_groups.setdefault(pid, []).append(chunk)
+            else:
+                no_parent.append(chunk)
+
+        # Decide what to keep: parent text or individual chunks
+        node_ret: list[tuple[str, int, int]] = []  # (text, token_count, start_char)
+        tokens_used = 0
+
+        for pid, siblings in parent_groups.items():
+            if tokens_used >= token_budget:
+                break
+
+            parent_text = siblings[0].payload.get("parent_text")
+            parent_tokens = siblings[0].payload.get("parent_token_count", 0)
+            parent_start = siblings[0].payload.get("parent_start_char", 0)
+            grandparent_id = siblings[0].payload.get("grandparent_id")
+
+            # Cond1: at least 2 siblings retrieved
+            cond1 = len(siblings) >= 2
+
+            # Cond2: covered text >= adaptive threshold
+            covered_chars = sum(
+                (c.payload["end_char"] - c.payload["start_char"]) for c in siblings
+            )
+            parent_chars = len(parent_text) if parent_text else 1
+            theta_star = (parent_chars / 3) * (1 + tokens_used / token_budget)
+            cond2 = covered_chars >= theta_star
+
+            # Cond3: parent fits in remaining budget
+            cond3 = (token_budget - tokens_used) >= parent_tokens
+
+            if cond1 and cond2 and cond3 and parent_text:
+                # Check if we can merge further up to grandparent
+                # (only attempt if grandparent exists and budget allows)
+                grandparent_text = siblings[0].payload.get("grandparent_text")
+                grandparent_tokens = siblings[0].payload.get(
+                    "grandparent_token_count", 0
+                )
+
+                if (
+                    grandparent_text
+                    and grandparent_tokens <= (token_budget - tokens_used)
+                    and len(siblings) >= 3
+                ):  # stricter threshold for grandparent
+                    node_ret.append(
+                        (
+                            grandparent_text,
+                            grandparent_tokens,
+                            siblings[0].payload.get("grandparent_start_char", 0),
+                        )
+                    )
+                    tokens_used += grandparent_tokens
+                else:
+                    node_ret.append((parent_text, parent_tokens, parent_start))
+                    tokens_used += parent_tokens
+            else:
+                # Keep individual chunks
+                for chunk in siblings:
+                    if tokens_used >= token_budget:
+                        break
+                    node_ret.append((chunk.text, chunk.token_count, chunk.start_char))
+                    tokens_used += chunk.token_count
+
+        # Add orphan chunks (no parent)
+        for chunk in no_parent:
+            if tokens_used >= token_budget:
+                break
+            node_ret.append((chunk.text, chunk.token_count, chunk.start_char))
+            tokens_used += chunk.token_count
+
+        # Deduplicate and sort by position
+        seen = set()
+        unique = []
+        for text, tokens, start in node_ret:
+            if text not in seen:
+                seen.add(text)
+                unique.append((text, tokens, start))
+
+        unique.sort(key=lambda x: x[2])  # sort by start_char = document order
+
+        return "\n\n".join(text for text, _, _ in unique)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

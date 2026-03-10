@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.v1.utils import to_camel
 from qdrant_client.models import SparseVector
 
+from backend.src.services.processing.hi_chunk import HierarchicalChunk
 from backend.src.storage.models import ulid_factory
 from backend.src.storage.utils.converters import DomainStruct
 
@@ -197,11 +198,14 @@ class ChunkMetadata(_BaseModelFlex):
     token_count: int | None
     start_index: int | None
     end_index: int | None
+    start_char: str | None
+    end_char: str | None
+    parent: HierarchicalChunk | None = None
     dense_embedding: list[float] = []
-    sparse_embedding: Any = None
+    sparse_embedding: Any | SparseVector = None
     late_embedding: list[float] = []
 
 
-class Chunk(BaseModel):
+class Chunk(_BaseModelFlex):
     text: str
     metadata: ChunkMetadata
