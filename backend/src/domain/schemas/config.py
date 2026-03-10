@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 from chonkie import RecursiveRules, TokenizerProtocol
 
 
-class SemanticChunkerConfig(BaseModel):
+class SemanticChunkerConfig(_BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     embedding_model: Any = "nomic-ai/nomic-embed-text-v1.5"
@@ -59,31 +59,30 @@ class SemanticChunkerConfig(BaseModel):
     filter_window: int = 5
     filter_polyorder: int = 3
     filter_tolerance: float = 0.2
+    trust_remote_code: bool = True
 
 
-class LateChunkerConfig(BaseModel):
+class LateChunkerConfig(_BaseModelFlex):
 
     model_config = {"arbitrary_types_allowed": True}
 
     embedding_model: Any = "nomic-ai/modernbert-embed-base"
     chunk_size: int = 2048
-    rules: RecursiveRules = RecursiveRules()
     min_characters_per_chunk: int = 24
 
 
-class SlumberChunkerConfig(BaseModel):
+class SlumberChunkerConfig(_BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
-    genie: BaseGenie = OpenAIGenie()
+    genie: BaseGenie | None = None  # lazy initialize
     tokenizer: str = "character"
     chunk_size: int = 1024
-    rules = RecursiveRules()
     candidate_size: int = 512
     min_characters_per_chunk: int = 24
     verbose: bool = True
 
 
-class RecursiveChunkerConfig(BaseModel):
+class RecursiveChunkerConfig(_BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     tokenizer: Any = "character"
@@ -92,7 +91,7 @@ class RecursiveChunkerConfig(BaseModel):
     min_characters_per_chunk: int = 24
 
 
-class CodeChunkerConfig(BaseModel):
+class CodeChunkerConfig(_BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     tokenizer: Any = "character"
@@ -101,7 +100,7 @@ class CodeChunkerConfig(BaseModel):
     include_nodes: bool = True
 
 
-class NeuralChunkerConfig(BaseModel):
+class NeuralChunkerConfig(_BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     model: Any = "mirth/chonky_modernbert_base_1"
@@ -110,14 +109,14 @@ class NeuralChunkerConfig(BaseModel):
     stride: int | None = None
 
 
-class TokenChunkerConfig(BaseModel):
-    tokenizer: str | TokenizerProtocol = "character"
+class TokenChunkerConfig(_BaseModelFlex):
+    tokenizer: str = "character"
     chunk_size: int = 2048
     chunk_overlap: int | float = 0
 
 
-class SentenceChunkerConfig(BaseModel):
-    tokenizer: str | TokenizerProtocol = "character"
+class SentenceChunkerConfig(_BaseModelFlex):
+    tokenizer: str = "character"
     chunk_size: int = 2048
     chunk_overlap: int = 0
     min_sentences_per_chunk: int = 1
@@ -125,17 +124,16 @@ class SentenceChunkerConfig(BaseModel):
     approximate: bool = False
     delim: str | list[str] = [". ", "! ", "? ", "\n"]
     include_delim: Literal["prev", "next"] | None = "prev"
-    sentences_per_chunk: int = 5
 
 
-class ChunkerConfig(BaseModel):
+class ChunkerConfig(_BaseModelFlex):
     """Configuration for chunker behavior."""
 
     chunk_size: int = 2048
     max_inference_tokens: int = 8192
     max_levels: int = 3
     # HC200 fixed-size sub-chunking
-    fixed_chunk_size: int = 200
+    fixed_chunk_size: int = 250
     tokenizer: str = "auto"  # switch to rust based tokenizer model
 
     chunk_overlap: int = 256
@@ -154,10 +152,10 @@ class ChunkerConfig(BaseModel):
 
     embedding_model: str | Any = "nomic-ai/nomic-embed-text-v1.5"
     # Sentence chunking specific
-    preferred_strategy: ChunkerType = ChunkerType.SEMANTIC
+    preferred_strategy: ChunkerType = ChunkerType.CODE
 
 
-class LLMConfig(BaseModel):
+class LLMConfig(_BaseModelFlex):
     """User's LLM connection configuration."""
 
     config_id: int = 0
@@ -227,7 +225,7 @@ class PineconeConfig(_BaseModelFlex):
     filter: dict[str, Any] = Field(default_factory=dict)
 
 
-class VectorStoreConfig(BaseModel):
+class VectorStoreConfig(_BaseModelFlex):
     config_id: int | None = None
     preferred_store: VectorStoreType = VectorStoreType.QDRANT
     qdrant_config: QdrantConfig = QdrantConfig()
@@ -256,7 +254,7 @@ class ScoredRetrieval(_BaseModelFlex):
     end_index: int
 
 
-class EmbedderConfig(BaseModel):
+class EmbedderConfig(_BaseModelFlex):
     """User's embedder connection configuration."""
 
     config_id: int | None = None
@@ -298,7 +296,7 @@ class EmbedderConfig(BaseModel):
         return self.api_key
 
 
-class ParserConfig(BaseModel):
+class ParserConfig(_BaseModelFlex):
     """User's parser configuration."""
 
     config_id: int | None = None
@@ -316,7 +314,7 @@ class ParserConfig(BaseModel):
     generate_summary: bool = True
 
 
-class RerankerConfig(BaseModel):
+class RerankerConfig(_BaseModelFlex):
     """User's reranker configuration."""
 
     user_id: str = ""
@@ -336,7 +334,7 @@ class RerankerConfig(BaseModel):
 
 # internal type checking -- serialize to and from dict on ingress and egress
 # global settings -
-class UserPreferences(BaseModel):
+class UserPreferences(_BaseModelFlex):
     """Domain Container for all typed user preferences."""
 
     # llm configs by role
@@ -354,7 +352,7 @@ class UserPreferences(BaseModel):
     chunker: ChunkerConfig | None = None
 
 
-class ModelPrefs(BaseModel):
+class ModelPrefs(_BaseModelFlex):
     stream_chat_response: bool
     stream_delta_chunk_size: int
     seed: str
@@ -387,7 +385,7 @@ class ModelPrefs(BaseModel):
 
 
 # workspace and convo settings - workspace -> convo precedence
-class DynamicPrefs(BaseModel):
+class DynamicPrefs(_BaseModelFlex):
     llm_prefs: ModelPrefs | None = None  # remove none - set defaults
     search_enabled: bool = False
     rag_enabled: bool = True

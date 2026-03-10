@@ -7,9 +7,13 @@ from typing import Optional
 
 import numpy as np
 from chonkie import (
+    CodeChunker,
     LateChunker,
     NeuralChunker,
+    OpenAIGenie,
+    SemanticChunker,
     SentenceChunker,
+    SentenceTransformerEmbeddings,
     SlumberChunker,
     TokenChunker,
 )
@@ -19,7 +23,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from backend.src.domain.enums import ChunkerType
-from backend.src.domain.schemas.config import ChunkerConfig
+from backend.src.domain.schemas.config import ChunkerConfig, EmbedderConfig
 from backend.src.domain.schemas.doc import _BaseModelFlex
 
 
@@ -65,26 +69,24 @@ class HiChunkStructurer:
 
         # fixed-size sub-chunker (HC200 step)
         self.token_chunker = TokenChunker(**config.token_config.model_dump())
-        self.l1_chunker: SlumberChunker | NeuralChunker | LateChunker
+        self.l1_chunker: CodeChunker | NeuralChunker | LateChunker
 
         #  level-1 (coarse) boundary detector
         match config.preferred_strategy:
-            case ChunkerType.SLUMBER:
+            case ChunkerType.CODE:
+                print("DEBUGPRINT[94]: hi_chunk.py:75 (after case ChunkerType.CODE:)")
                 # llm decides semantic boundaries at paragraph level.
-                if SlumberChunker:
-                    self.l1_chunker = SlumberChunker(
-                        **config.slumber_config.model_dump()
-                    )
-                    # level-2 uses window to find sub-section breaks
-                    self.l2_chunker = SlumberChunker(
-                        genie=config.slumber_config.genie,
-                        candidate_size=config.slumber_config.candidate_size // 2,
-                        min_characters_per_chunk=128,
-                    )
-                else:
-                    raise ImportError("Install chonkie with SlumberChunker support.")
+
+                self.l2_chunker = CodeChunker(chunk_size=1200)
+                # level-2 uses window to find sub-section breaks
+
+                self.l1_chunker = NeuralChunker(
+                    model=config.neural_config.model,
+                    min_characters_per_chunk=128,
+                )
 
             case ChunkerType.NEURAL:
+                print("DEBUGPRINT[95]: hi_chunk.py:98 (after case ChunkerType.NEURAL:)")
                 if NeuralChunker:
                     # neuralchunker token-classification to predict segment boundaries
                     self.l1_chunker = NeuralChunker(**config.neural_config.model_dump())
@@ -98,12 +100,31 @@ class HiChunkStructurer:
 
             case _:
                 # latechunker: encodes the full document first, then finds splits. preserves global doc context
+                print(
+                    "DEBUGPRINT[96]: hi_chunk.py:114 (after # latechunker: encodes the full document…)"
+                )
                 from chonkie import SemanticChunker
 
-                self.l1_chunker = LateChunker(**config.late_config.model_dump())
+                late_embedding_model = SentenceTransformerEmbeddings(
+                    model=config.late_config.embedding_model, trust_remote_code=True
+                )
+                self.l1_chunker = LateChunker(
+                    embedding_model=late_embedding_model,
+                    **config.late_config.model_dump(exclude=("embedding_model")),
+                )
 
                 # l2: smaller semantic chunks inside each l1 section
-                self.l2_chunker = SemanticChunker(**config.semantic_config.model_dump())
+                semantic_embedding_model = SentenceTransformerEmbeddings(
+                    config.semantic_config.embedding_model, trust_remote_code=True
+                )
+
+                self.l2_chunker = SemanticChunker(
+                    embedding_model=semantic_embedding_model,
+                    **config.semantic_config.model_dump(exclude=("embedding_model")),
+                )
+
+        print(self.l1_chunker, "l1_chunker")
+        print(self.l2_chunker, "l2_chunker")
 
     # public
 
@@ -121,8 +142,11 @@ class HiChunkStructurer:
     # helpers
 
     def _estimate_tokens(self, text: str) -> int:
-        # TODO: SWITCH WITH TIKTOKEN
-        return len(text) // 4
+        import tiktoken
+
+        encoding = tiktoken.get_encoding("cl100k_base")
+
+        return len(encoding.encode(text))
 
     def _structure_window(self, text: str) -> list[HierarchicalChunk]:
         """structure a single window that fits in the inference budget."""
@@ -270,20 +294,12 @@ class FlatChunkProducer:
 class ChunkEmbedder:
     """adds document-level-aware embeddings to FlatChunks using Chonkie's LateChunker strategy (embed the whole doc first, slice per chunk)."""
 
-    def __init__(
-        self,
-        embedding_model: str = "nomic-ai/modernbert-embed-base",
-    ):
-        self.embedding_model = embedding_model
-        # We use it for the fallback path.
-        self.refinery = EmbeddingsRefinery(
-            embedding_model=embedding_model,
-        )
+    def __init__(self, embed_config: EmbedderConfig):
+        self.embed_config = embed_config
         self._late_chunker = None  # lazy-initialise
 
     def embed(self, document: str, flat_chunks: list[FlatChunk]) -> list[FlatChunk]:
         """Attach embeddings to every FlatChunk in-place and return them."""
-        # Build minimal Chonkie Chunk objects so EmbeddingsRefinery can work
 
         # TODO:  SET TO EMBEDDER SERVICE EMBED
         from chonkie.types import Chunk
@@ -298,216 +314,13 @@ class ChunkEmbedder:
             for fc in flat_chunks
         ]
 
-        enriched = self.refinery(proxy_chunks)
-
-        for fc, ec in zip(flat_chunks, enriched):
-            if ec.embedding is not None:
-                fc.embedding = np.array(ec.embedding)
-
+        # FIX: Embedder Service Class Impl here
+        #
+        # for fc, ec in zip(flat_chunks, enriched):
+        #     if ec.embedding is not None:
+        #         fc.embedding = np.array(ec.embedding)
+        #
         return flat_chunks
-
-
-# 5.  AUTO-MERGE RETRIEVER  (algorithm 2 from the paper)
-class AutoMergeRetriever:
-    """algorithm 2 (Auto-Merge retrieval) from the HiChunk paper."""
-
-    def __init__(
-        self,
-        token_budget: int = 4096,
-        embedding_model: str = "nomic-ai/modernbert-embed-base",
-    ):
-        self.token_budget = token_budget
-        self._embed_fn = self._build_embed_fn(embedding_model)
-
-    def retrieve(
-        self,
-        query: str,
-        flat_chunks: list[FlatChunk],
-    ) -> str:
-        """returns the assembled retrieval context as a plain string."""
-        if not flat_chunks:
-            return ""
-
-        # step 1: embed query and rank chunks
-
-        q_emb = self._embed_fn([query])[0]
-        scored = self._rank(q_emb, flat_chunks)
-
-        # step 2: Auto-Merge traversal
-
-        node_ret: list[HierarchicalChunk | FlatChunk] = []
-        tk_cur = 0
-
-        for flat_chunk, _score in scored:
-            if tk_cur >= self.token_budget:
-                break
-
-            node_ret.append(flat_chunk)
-            tk_cur = self._context_tokens(node_ret)
-
-            # try merging upward
-
-            parent = flat_chunk.parent
-            while parent is not None:
-                if not self._cond1(parent, node_ret):
-                    break
-                if not self._cond2(parent, node_ret, tk_cur):
-                    break
-                if not self._cond3(parent, tk_cur):
-                    break
-
-                # merge: replace covered children with parent
-
-                node_ret = self._merge(node_ret, parent)
-                tk_cur = self._context_tokens(node_ret)
-
-                # walk further up the tree
-
-                parent = getattr(parent, "parent", None)
-
-            if tk_cur >= self.token_budget:
-                break
-
-        return self._build_context(node_ret)
-
-    #  condition helpers
-
-    def _cond1(
-        self,
-        parent: HierarchicalChunk,
-        node_ret: list,
-    ) -> bool:
-        """at least 2 of parent's children are already in node_ret."""
-        covered = sum(
-            1
-            for n in node_ret
-            if isinstance(n, FlatChunk)
-            and n.parent is parent
-            or isinstance(n, HierarchicalChunk)
-            and n.parent is parent
-        )
-        return covered >= 2
-
-    def _cond2(
-        self,
-        parent: HierarchicalChunk,
-        node_ret: list,
-        tk_cur: int,
-    ) -> bool:
-        """
-        text length of already-recalled children ≥ adaptive threshold θ*.
-        θ*(tkcur, p) = len(p)/3 * (1 + tkcur/T)
-        grows from len(p)/3 to 2*len(p)/3 as budget fills.
-        """
-
-        child_len = sum(
-            len(n.text)
-            for n in node_ret
-            if (isinstance(n, FlatChunk) and n.parent is parent)
-            or (isinstance(n, HierarchicalChunk) and n.parent is parent)
-        )
-
-        theta_star = (len(parent.text) / 3) * (1 + tk_cur / self.token_budget)
-
-        return child_len >= theta_star
-
-    def _cond3(self, parent: HierarchicalChunk, tk_cur: int) -> bool:
-        """remaining budget can fit the parent's full text."""
-
-        parent_tokens = len(parent.text) // 4  # rough estimate
-
-        return (self.token_budget - tk_cur) >= parent_tokens
-
-    # ── Merge / context helpers ────────────────────────────────────────────────
-
-    def _merge(
-        self,
-        node_ret: list,
-        parent: HierarchicalChunk,
-    ) -> list:
-        """replace children covered by parent with parent itself."""
-
-        new_ret = [
-            n
-            for n in node_ret
-            if not (
-                (isinstance(n, FlatChunk) and n.parent is parent)
-                or (isinstance(n, HierarchicalChunk) and n.parent is parent)
-            )
-        ]
-
-        new_ret.append(parent)
-
-        return new_ret
-
-    def _context_tokens(self, node_ret: list) -> int:
-        return sum(len(n.text) // 4 for n in node_ret)
-
-    def _build_context(self, node_ret: list) -> str:
-        # deduplicate and sort by original position
-
-        seen_texts = set()
-
-        unique = []
-
-        for n in node_ret:
-            if n.text not in seen_texts:
-                seen_texts.add(n.text)
-                unique.append(n)
-
-        # sort by start position if available
-
-        unique.sort(key=lambda n: getattr(n, "start_char", 0))
-
-        return "\n\n".join(n.text for n in unique)
-
-    def _rank(
-        self, q_emb: np.ndarray, flat_chunks: list[FlatChunk]
-    ) -> list[tuple[FlatChunk, float]]:
-        scored = []
-
-        for fc in flat_chunks:
-            if fc.embedding is not None:
-                sim = self._cosine(q_emb, fc.embedding)
-            else:
-                sim = 0.0
-
-            scored.append((fc, sim))
-
-        scored.sort(key=lambda x: x[1], reverse=True)
-
-        return scored
-
-    @staticmethod
-    def _cosine(a: np.ndarray, b: np.ndarray) -> float:
-        denom = np.linalg.norm(a) * np.linalg.norm(b)
-        return float(np.dot(a, b) / denom) if denom > 0 else 0.0
-
-    @staticmethod
-    def _build_embed_fn(model_name: str):
-        """Returns a callable (texts: list[str]) -> list[np.ndarray]."""
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            model = SentenceTransformer(model_name)
-
-            def embed(texts):
-                return model.encode(texts, normalize_embeddings=True)
-
-            return embed
-        except ImportError:
-            # fallback: random embeddings (for testing without sentence-transformers)
-            import warnings
-
-            warnings.warn(
-                "sentence-transformers not installed. Using random embeddings — "
-                "retrieval quality will be random. Install with: pip install sentence-transformers"
-            )
-
-            def embed(texts):
-                return [np.random.randn(384).astype(np.float32) for _ in texts]
-
-            return embed
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -517,7 +330,7 @@ class AutoMergeRetriever:
 
 class HiChunkPipeline:
     """
-    HiChunk + Auto-Merge.
+    HiChunk.
 
     # index a document (done once per document)
     pipeline.index(document_text)
@@ -526,19 +339,14 @@ class HiChunkPipeline:
     context = pipeline.retrieve(query, token_budget=4096)
     """
 
-    def __init__(self, config: ChunkerConfig):
+    def __init__(self, config: ChunkerConfig, embedder_config=EmbedderConfig):
         self.structurer = HiChunkStructurer(config=config)
 
-        self.flat_producer = FlatChunkProducer(
-            chunk_size=config.fixed_chunk_size,
-            tokenizer=config.tokenizer,
-        )
-        self.embedder = ChunkEmbedder(embedding_model=config.embedding_model)
+        self.flat_producer = FlatChunkProducer(config=config)
 
-        self.retriever = AutoMergeRetriever(
-            token_budget=config.token_budget,
-            embedding_model=config.embedding_model,
-        )
+        self.embedder = ChunkEmbedder(
+            embed_config=embedder_config()
+        )  # WARN: () May Cause an issue
 
         self._flat_chunks: list[FlatChunk] = []
 
@@ -550,7 +358,8 @@ class HiChunkPipeline:
         """build the hierarchical structure and embed all flat chunks."""
 
         logger.info("[HiChunk] Step 1/3 — Hierarchical structuring …")
-        # ── Structure ──────────────────────────────────────────────────────────────
+
+        # structure
         self._hi_chunks = self.structurer.structure(document)
 
         logger.info(f"[HiChunk]   → {len(self._hi_chunks)} L1 sections found.")
@@ -558,32 +367,29 @@ class HiChunkPipeline:
         logger.info(f"[HiChunk]   → {total_l2} L2 sub-sections found.")
 
         logger.info("[HiChunk] Step 2/3 — Fixed-size sub-chunking (HC200) …")
-        # ── Produce ──────────────────────────────────────────────────────────────
+
+        # produce
         self._flat_chunks = self.flat_producer.produce(self._hi_chunks)
 
         logger.info(f"[HiChunk]   → {len(self._flat_chunks)} flat chunks produced.")
 
         logger.info("[HiChunk] Step 3/3 — Embedding flat chunks …")
-        # ── Embed ──────────────────────────────────────────────────────────────
+
+        #  embed
         self._flat_chunks = self.embedder.embed(document, self._flat_chunks)
 
+        self.print_tree()
+
+        print(self._hi_chunks)
+
+        print("\n\n")
+        for i in self._flat_chunks:
+            print("-----------------beginning of chunk-----------")
+            print("\n")
+            print(i)
+            print("\n")
+            print("-----------------end of chunk-----------")
         logger.info("[HiChunk] Indexing complete. ✓")
-
-    # ── Retrieval ──────────────────────────────────────────────────────────────
-    def retrieve(self, query: str, token_budget: int | None = None) -> str:
-        """retrieve the most relevant context for a query using Auto-Merge."""
-
-        if not self._flat_chunks:
-            raise RuntimeError("Call .index(document) before .retrieve().")
-
-        budget = token_budget or self.retriever.token_budget
-        old_budget = self.retriever.token_budget
-        self.retriever.token_budget = budget
-
-        context = self.retriever.retrieve(query, self._flat_chunks)
-
-        self.retriever.token_budget = old_budget
-        return context
 
     #  inspection helpers
 
@@ -613,104 +419,385 @@ class HiChunkPipeline:
 # 7.  QUICK-START DEMO
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 DEMO_DOCUMENT = """
-Introduction to Machine Learning
+An Occurrence at Owl Creek Bridge
 
-Machine learning is a subset of artificial intelligence that enables systems to
-learn and improve from experience without being explicitly programmed. It focuses
-on developing computer programs that can access data and use it to learn for themselves.
+by Ambrose Bierce
 
-The process begins with observations or data, such as examples, direct experience,
-or instruction. Machine learning algorithms use computational methods to learn
-information directly from data without relying on a predetermined equation as a model.
-
-Types of Machine Learning
-
-Supervised Learning
-
-In supervised learning, the algorithm is trained on labeled data. The model learns
-a mapping from inputs to outputs based on example input-output pairs. Common
-algorithms include linear regression, decision trees, support vector machines, and
-neural networks. The goal is to infer a function from labeled training data.
-
-Applications of supervised learning include email spam detection, image classification,
-speech recognition, and medical diagnosis. The training data consists of examples
-where the desired output is already known.
-
-Unsupervised Learning
-
-Unsupervised learning involves training on unlabeled data. The algorithm tries to
-learn the underlying structure or distribution in the data. Clustering and dimensionality
-reduction are common tasks. K-means clustering, hierarchical clustering, and principal
-component analysis (PCA) are widely used.
-
-The key challenge in unsupervised learning is evaluating results without ground truth
-labels. Applications include customer segmentation, anomaly detection, and
-recommendation systems.
-
-Reinforcement Learning
-
-Reinforcement learning is about training agents to make sequences of decisions.
-The agent learns by interacting with an environment, receiving rewards for good
-actions and penalties for bad ones. Deep Q-networks (DQN) and policy gradient
-methods are popular approaches.
-
-This paradigm is especially powerful for sequential decision-making problems such
-as game playing, robotic control, and autonomous driving. AlphaGo and ChatGPT both
-leverage reinforcement learning components.
-
-Neural Networks and Deep Learning
-
-Deep learning uses neural networks with many layers (deep neural networks) to learn
-representations of data. Convolutional neural networks (CNNs) excel at image tasks,
-while recurrent neural networks (RNNs) and transformers are powerful for sequential
-data like text and time series.
-
-The transformer architecture, introduced in "Attention is All You Need" (2017), has
-revolutionised natural language processing. Models like BERT, GPT, and T5 are all
-built on the transformer backbone and have achieved state-of-the-art results across
-a wide range of NLP benchmarks.
-
-Training and Evaluation
-
-Model training involves optimising parameters to minimise a loss function, typically
-using gradient descent and backpropagation. Regularisation techniques such as dropout,
-weight decay, and early stopping help prevent overfitting on training data.
-
-Evaluation metrics depend on the task: accuracy and F1 score for classification,
-RMSE and MAE for regression, BLEU and ROUGE for generation tasks. Cross-validation
-provides a robust estimate of generalisation performance.
-"""
+THE MILLENNIUM FULCRUM EDITION, 1988
 
 
-def demo():
-    print("=" * 60)
-    print("HiChunk + Chonkie — Quick Demo")
-    print("=" * 60)
-
-    # Using "semantic" strategy: no API key or GPU required
-    pipeline = HiChunkPipeline(config=ChunkerConfig())
-
-    pipeline.index(DEMO_DOCUMENT)
-
-    print()
-    pipeline.print_tree()
-
-    queries = [
-        "What are the main types of machine learning?",
-        "How does reinforcement learning work and what are its applications?",
-        "What is the transformer architecture and why is it important?",
-    ]
-
-    print()
-    print("─" * 60)
-    for query in queries:
-        print(f"\nQuery: {query}")
-        context = pipeline.retrieve(query, token_budget=512)
-        print(f"Retrieved context ({len(context)} chars):")
-        print(context[:400] + ("…" if len(context) > 400 else ""))
-        print("─" * 60)
 
 
-if __name__ == "__main__":
-    demo()
+I
+
+
+A man stood upon a railroad bridge in northern Alabama, looking down
+into the swift water twenty feet below. The man’s hands were behind his
+back, the wrists bound with a cord. A rope closely encircled his neck.
+It was attached to a stout cross-timber above his head and the slack
+fell to the level of his knees. Some loose boards laid upon the ties
+supporting the rails of the railway supplied a footing for him and his
+executioners—two private soldiers of the Federal army, directed by a
+sergeant who in civil life may have been a deputy sheriff. At a short
+remove upon the same temporary platform was an officer in the uniform
+of his rank, armed. He was a captain. A sentinel at each end of the
+bridge stood with his rifle in the position known as “support,” that is
+to say, vertical in front of the left shoulder, the hammer resting on
+the forearm thrown straight across the chest—a formal and unnatural
+position, enforcing an erect carriage of the body. It did not appear to
+be the duty of these two men to know what was occurring at the center
+of the bridge; they merely blockaded the two ends of the foot planking
+that traversed it.
+
+Beyond one of the sentinels nobody was in sight; the railroad ran
+straight away into a forest for a hundred yards, then, curving, was
+lost to view. Doubtless there was an outpost farther along. The other
+bank of the stream was open ground—a gentle slope topped with a
+stockade of vertical tree trunks, loopholed for rifles, with a single
+embrasure through which protruded the muzzle of a brass cannon
+commanding the bridge. Midway up the slope between the bridge and fort
+were the spectators—a single company of infantry in line, at “parade
+rest,” the butts of their rifles on the ground, the barrels inclining
+slightly backward against the right shoulder, the hands crossed upon
+the stock. A lieutenant stood at the right of the line, the point of
+his sword upon the ground, his left hand resting upon his right.
+Excepting the group of four at the center of the bridge, not a man
+moved. The company faced the bridge, staring stonily, motionless. The
+sentinels, facing the banks of the stream, might have been statues to
+adorn the bridge. The captain stood with folded arms, silent, observing
+the work of his subordinates, but making no sign. Death is a dignitary
+who when he comes announced is to be received with formal
+manifestations of respect, even by those most familiar with him. In the
+code of military etiquette silence and fixity are forms of deference.
+
+The man who was engaged in being hanged was apparently about
+thirty-five years of age. He was a civilian, if one might judge from
+his habit, which was that of a planter. His features were good—a
+straight nose, firm mouth, broad forehead, from which his long, dark
+hair was combed straight back, falling behind his ears to the collar of
+his well fitting frock coat. He wore a moustache and pointed beard, but
+no whiskers; his eyes were large and dark gray, and had a kindly
+expression which one would hardly have expected in one whose neck was
+in the hemp. Evidently this was no vulgar assassin. The liberal
+military code makes provision for hanging many kinds of persons, and
+gentlemen are not excluded.
+
+The preparations being complete, the two private soldiers stepped aside
+and each drew away the plank upon which he had been standing. The
+sergeant turned to the captain, saluted and placed himself immediately
+behind that officer, who in turn moved apart one pace. These movements
+left the condemned man and the sergeant standing on the two ends of the
+same plank, which spanned three of the cross-ties of the bridge. The
+end upon which the civilian stood almost, but not quite, reached a
+fourth. This plank had been held in place by the weight of the captain;
+it was now held by that of the sergeant. At a signal from the former
+the latter would step aside, the plank would tilt and the condemned man
+go down between two ties. The arrangement commended itself to his
+judgement as simple and effective. His face had not been covered nor
+his eyes bandaged. He looked a moment at his “unsteadfast footing,”
+then let his gaze wander to the swirling water of the stream racing
+madly beneath his feet. A piece of dancing driftwood caught his
+attention and his eyes followed it down the current. How slowly it
+appeared to move! What a sluggish stream!
+
+He closed his eyes in order to fix his last thoughts upon his wife and
+children. The water, touched to gold by the early sun, the brooding
+mists under the banks at some distance down the stream, the fort, the
+soldiers, the piece of drift—all had distracted him. And now he became
+conscious of a new disturbance. Striking through the thought of his
+dear ones was sound which he could neither ignore nor understand, a
+sharp, distinct, metallic percussion like the stroke of a blacksmith’s
+hammer upon the anvil; it had the same ringing quality. He wondered
+what it was, and whether immeasurably distant or near by— it seemed
+both. Its recurrence was regular, but as slow as the tolling of a death
+knell. He awaited each new stroke with impatience and—he knew not
+why—apprehension. The intervals of silence grew progressively longer;
+the delays became maddening. With their greater infrequency the sounds
+increased in strength and sharpness. They hurt his ear like the thrust
+of a knife; he feared he would shriek. What he heard was the ticking of
+his watch.
+
+He unclosed his eyes and saw again the water below him. “If I could
+free my hands,” he thought, “I might throw off the noose and spring
+into the stream. By diving I could evade the bullets and, swimming
+vigorously, reach the bank, take to the woods and get away home. My
+home, thank God, is as yet outside their lines; my wife and little ones
+are still beyond the invader’s farthest advance.”
+
+As these thoughts, which have here to be set down in words, were
+flashed into the doomed man’s brain rather than evolved from it the
+captain nodded to the sergeant. The sergeant stepped aside.
+
+
+
+
+II
+
+
+Peyton Farquhar was a well to do planter, of an old and highly
+respected Alabama family. Being a slave owner and like other slave
+owners a politician, he was naturally an original secessionist and
+ardently devoted to the Southern cause. Circumstances of an imperious
+nature, which it is unnecessary to relate here, had prevented him from
+taking service with that gallant army which had fought the disastrous
+campaigns ending with the fall of Corinth, and he chafed under the
+inglorious restraint, longing for the release of his energies, the
+larger life of the soldier, the opportunity for distinction. That
+opportunity, he felt, would come, as it comes to all in wartime.
+Meanwhile he did what he could. No service was too humble for him to
+perform in the aid of the South, no adventure too perilous for him to
+undertake if consistent with the character of a civilian who was at
+heart a soldier, and who in good faith and without too much
+qualification assented to at least a part of the frankly villainous
+dictum that all is fair in love and war.
+
+One evening while Farquhar and his wife were sitting on a rustic bench
+near the entrance to his grounds, a gray-clad soldier rode up to the
+gate and asked for a drink of water. Mrs. Farquhar was only too happy
+to serve him with her own white hands. While she was fetching the water
+her husband approached the dusty horseman and inquired eagerly for news
+from the front.
+
+“The Yanks are repairing the railroads,” said the man, “and are getting
+ready for another advance. They have reached the Owl Creek bridge, put
+it in order and built a stockade on the north bank. The commandant has
+issued an order, which is posted everywhere, declaring that any
+civilian caught interfering with the railroad, its bridges, tunnels, or
+trains will be summarily hanged. I saw the order.”
+
+“How far is it to the Owl Creek bridge?” Farquhar asked.
+
+“About thirty miles.”
+
+“Is there no force on this side of the creek?”
+
+“Only a picket post half a mile out, on the railroad, and a single
+sentinel at this end of the bridge.”
+
+“Suppose a man—a civilian and student of hanging—should elude the
+picket post and perhaps get the better of the sentinel,” said Farquhar,
+smiling, “what could he accomplish?”
+
+The soldier reflected. “I was there a month ago,” he replied. “I
+observed that the flood of last winter had lodged a great quantity of
+driftwood against the wooden pier at this end of the bridge. It is now
+dry and would burn like tinder.”
+
+The lady had now brought the water, which the soldier drank. He thanked
+her ceremoniously, bowed to her husband and rode away. An hour later,
+after nightfall, he repassed the plantation, going northward in the
+direction from which he had come. He was a Federal scout.
+
+
+
+
+III
+
+
+As Peyton Farquhar fell straight downward through the bridge he lost
+consciousness and was as one already dead. From this state he was
+awakened—ages later, it seemed to him—by the pain of a sharp pressure
+upon his throat, followed by a sense of suffocation. Keen, poignant
+agonies seemed to shoot from his neck downward through every fiber of
+his body and limbs. These pains appeared to flash along well defined
+lines of ramification and to beat with an inconceivably rapid
+periodicity. They seemed like streams of pulsating fire heating him to
+an intolerable temperature. As to his head, he was conscious of nothing
+but a feeling of fullness—of congestion. These sensations were
+unaccompanied by thought. The intellectual part of his nature was
+already effaced; he had power only to feel, and feeling was torment. He
+was conscious of motion. Encompassed in a luminous cloud, of which he
+was now merely the fiery heart, without material substance, he swung
+through unthinkable arcs of oscillation, like a vast pendulum. Then all
+at once, with terrible suddenness, the light about him shot upward with
+the noise of a loud splash; a frightful roaring was in his ears, and
+all was cold and dark. The power of thought was restored; he knew that
+the rope had broken and he had fallen into the stream. There was no
+additional strangulation; the noose about his neck was already
+suffocating him and kept the water from his lungs. To die of hanging at
+the bottom of a river!—the idea seemed to him ludicrous. He opened his
+eyes in the darkness and saw above him a gleam of light, but how
+distant, how inaccessible! He was still sinking, for the light became
+fainter and fainter until it was a mere glimmer. Then it began to grow
+and brighten, and he knew that he was rising toward the surface—knew it
+with reluctance, for he was now very comfortable. “To be hanged and
+drowned,” he thought, “that is not so bad; but I do not wish to be
+shot. No; I will not be shot; that is not fair.”
+
+He was not conscious of an effort, but a sharp pain in his wrist
+apprised him that he was trying to free his hands. He gave the struggle
+his attention, as an idler might observe the feat of a juggler, without
+interest in the outcome. What splendid effort!—what magnificent, what
+superhuman strength! Ah, that was a fine endeavor! Bravo! The cord fell
+away; his arms parted and floated upward, the hands dimly seen on each
+side in the growing light. He watched them with a new interest as first
+one and then the other pounced upon the noose at his neck. They tore it
+away and thrust it fiercely aside, its undulations resembling those of
+a water snake. “Put it back, put it back!” He thought he shouted these
+words to his hands, for the undoing of the noose had been succeeded by
+the direst pang that he had yet experienced. His neck ached horribly;
+his brain was on fire, his heart, which had been fluttering faintly,
+gave a great leap, trying to force itself out at his mouth. His whole
+body was racked and wrenched with an insupportable anguish! But his
+disobedient hands gave no heed to the command. They beat the water
+vigorously with quick, downward strokes, forcing him to the surface. He
+felt his head emerge; his eyes were blinded by the sunlight; his chest
+expanded convulsively, and with a supreme and crowning agony his lungs
+engulfed a great draught of air, which instantly he expelled in a
+shriek!
+
+He was now in full possession of his physical senses. They were,
+indeed, preternaturally keen and alert. Something in the awful
+disturbance of his organic system had so exalted and refined them that
+they made record of things never before perceived. He felt the ripples
+upon his face and heard their separate sounds as they struck. He looked
+at the forest on the bank of the stream, saw the individual trees, the
+leaves and the veining of each leaf—he saw the very insects upon them:
+the locusts, the brilliant bodied flies, the gray spiders stretching
+their webs from twig to twig. He noted the prismatic colors in all the
+dewdrops upon a million blades of grass. The humming of the gnats that
+danced above the eddies of the stream, the beating of the dragon flies’
+wings, the strokes of the water spiders’ legs, like oars which had
+lifted their boat—all these made audible music. A fish slid along
+beneath his eyes and he heard the rush of its body parting the water.
+
+He had come to the surface facing down the stream; in a moment the
+visible world seemed to wheel slowly round, himself the pivotal point,
+and he saw the bridge, the fort, the soldiers upon the bridge, the
+captain, the sergeant, the two privates, his executioners. They were in
+silhouette against the blue sky. They shouted and gesticulated,
+pointing at him. The captain had drawn his pistol, but did not fire;
+the others were unarmed. Their movements were grotesque and horrible,
+their forms gigantic.
+
+Suddenly he heard a sharp report and something struck the water smartly
+within a few inches of his head, spattering his face with spray. He
+heard a second report, and saw one of the sentinels with his rifle at
+his shoulder, a light cloud of blue smoke rising from the muzzle. The
+man in the water saw the eye of the man on the bridge gazing into his
+own through the sights of the rifle. He observed that it was a gray eye
+and remembered having read that gray eyes were keenest, and that all
+famous marksmen had them. Nevertheless, this one had missed.
+
+A counter-swirl had caught Farquhar and turned him half round; he was
+again looking at the forest on the bank opposite the fort. The sound of
+a clear, high voice in a monotonous singsong now rang out behind him
+and came across the water with a distinctness that pierced and subdued
+all other sounds, even the beating of the ripples in his ears. Although
+no soldier, he had frequented camps enough to know the dread
+significance of that deliberate, drawling, aspirated chant; the
+lieutenant on shore was taking a part in the morning’s work. How coldly
+and pitilessly—with what an even, calm intonation, presaging, and
+enforcing tranquility in the men—with what accurately measured interval
+fell those cruel words:
+
+“Company!… Attention!… Shoulder arms!… Ready!… Aim!… Fire!”
+
+Farquhar dived—dived as deeply as he could. The water roared in his
+ears like the voice of Niagara, yet he heard the dull thunder of the
+volley and, rising again toward the surface, met shining bits of metal,
+singularly flattened, oscillating slowly downward. Some of them touched
+him on the face and hands, then fell away, continuing their descent.
+One lodged between his collar and neck; it was uncomfortably warm and
+he snatched it out.
+
+As he rose to the surface, gasping for breath, he saw that he had been
+a long time under water; he was perceptibly farther downstream—nearer
+to safety. The soldiers had almost finished reloading; the metal
+ramrods flashed all at once in the sunshine as they were drawn from the
+barrels, turned in the air, and thrust into their sockets. The two
+sentinels fired again, independently and ineffectually.
+
+The hunted man saw all this over his shoulder; he was now swimming
+vigorously with the current. His brain was as energetic as his arms and
+legs; he thought with the rapidity of lightning:
+
+“The officer,” he reasoned, “will not make that martinet’s error a
+second time. It is as easy to dodge a volley as a single shot. He has
+probably already given the command to fire at will. God help me, I
+cannot dodge them all!”
+
+An appalling splash within two yards of him was followed by a loud,
+rushing sound, DIMINUENDO, which seemed to travel back through the air
+to the fort and died in an explosion which stirred the very river to
+its deeps! A rising sheet of water curved over him, fell down upon him,
+blinded him, strangled him! The cannon had taken an hand in the game.
+As he shook his head free from the commotion of the smitten water he
+heard the deflected shot humming through the air ahead, and in an
+instant it was cracking and smashing the branches in the forest beyond.
+
+“They will not do that again,” he thought; “the next time they will use
+a charge of grape. I must keep my eye upon the gun; the smoke will
+apprise me—the report arrives too late; it lags behind the missile.
+That is a good gun.”
+
+Suddenly he felt himself whirled round and round—spinning like a top.
+The water, the banks, the forests, the now distant bridge, fort and
+men, all were commingled and blurred. Objects were represented by their
+colors only; circular horizontal streaks of color—that was all he saw.
+He had been caught in a vortex and was being whirled on with a velocity
+of advance and gyration that made him giddy and sick. In few moments he
+was flung upon the gravel at the foot of the left bank of the
+stream—the southern bank—and behind a projecting point which concealed
+him from his enemies. The sudden arrest of his motion, the abrasion of
+one of his hands on the gravel, restored him, and he wept with delight.
+He dug his fingers into the sand, threw it over himself in handfuls and
+audibly blessed it. It looked like diamonds, rubies, emeralds; he could
+think of nothing beautiful which it did not resemble. The trees upon
+the bank were giant garden plants; he noted a definite order in their
+arrangement, inhaled the fragrance of their blooms. A strange roseate
+light shone through the spaces among their trunks and the wind made in
+their branches the music of AEolian harps. He had not wish to perfect
+his escape—he was content to remain in that enchanting spot until
+retaken.
+
+A whiz and a rattle of grapeshot among the branches high above his head
+roused him from his dream. The baffled cannoneer had fired him a random
+farewell. He sprang to his feet, rushed up the sloping bank, and
+plunged into the forest.
+
+All that day he traveled, laying his course by the rounding sun. The
+forest seemed interminable; nowhere did he discover a break in it, not
+even a woodman’s road. He had not known that he lived in so wild a
+region. There was something uncanny in the revelation.
+
+By nightfall he was fatigued, footsore, famished. The thought of his
+wife and children urged him on. At last he found a road which led him
+in what he knew to be the right direction. It was as wide and straight
+as a city street, yet it seemed untraveled. No fields bordered it, no
+dwelling anywhere. Not so much as the barking of a dog suggested human
+habitation. The black bodies of the trees formed a straight wall on
+both sides, terminating on the horizon in a point, like a diagram in a
+lesson in perspective. Overhead, as he looked up through this rift in
+the wood, shone great golden stars looking unfamiliar and grouped in
+strange constellations. He was sure they were arranged in some order
+which had a secret and malign significance. The wood on either side was
+full of singular noises, among which—once, twice, and again—he
+distinctly heard whispers in an unknown tongue.
+
+His neck was in pain and lifting his hand to it found it horribly
+swollen. He knew that it had a circle of black where the rope had
+bruised it. His eyes felt congested; he could no longer close them. His
+tongue was swollen with thirst; he relieved its fever by thrusting it
+forward from between his teeth into the cold air. How softly the turf
+had carpeted the untraveled avenue—he could no longer feel the roadway
+beneath his feet!
+
+Doubtless, despite his suffering, he had fallen asleep while walking,
+for now he sees another scene—perhaps he has merely recovered from a
+delirium. He stands at the gate of his own home. All is as he left it,
+and all bright and beautiful in the morning sunshine. He must have
+traveled the entire night. As he pushes open the gate and passes up the
+wide white walk, he sees a flutter of female garments; his wife,
+looking fresh and cool and sweet, steps down from the veranda to meet
+him. At the bottom of the steps she stands waiting, with a smile of
+ineffable joy, an attitude of matchless grace and dignity. Ah, how
+beautiful she is! He springs forwards with extended arms. As he is
+about to clasp her he feels a stunning blow upon the back of the neck;
+a blinding white light blazes all about him with a sound like the shock
+of a cannon—then all is darkness and silence!
+
+Peyton Farquhar was dead; his body, with a broken neck, swung gently
+from side to side beneath the timbers of the Owl Creek bridge."""

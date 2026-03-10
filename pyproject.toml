@@ -112,6 +112,7 @@ dependencies = [
   "ipython>=9.9.0",
   "jupyter>=1.1.1",
   "jupyterlab>=4.5.5",
+  "tiktoken>=0.12.0",
 ]
 
 [project.scripts]

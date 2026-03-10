@@ -134,3 +134,65 @@ You have access to the following tools:
 
 
 FOSRA_SYSTEM_PROMPT = build_fosra_system_prompt()
+
+
+# =============================================================================
+# Query Reformulation Prompt
+# =============================================================================
+
+
+REFORM_QUERY_PROMPT = """
+<system_instruction>
+You are a query reformulation assistant. Your task is to reformulate user queries to be self-contained and contextually complete by incorporating relevant information from the conversation history.
+
+{chat_history}
+
+Guidelines for reformulation:
+1. Resolve pronouns and references (e.g., "it", "that", "the second approach") to their actual subjects
+2. Include relevant context from previous turns when necessary for understanding
+3. Make the query specific and unambiguous
+4. Preserve the original intent and focus of the user's question
+5. Keep the reformulated query concise but complete
+
+Example:
+- Original: "What about the second option?"
+- Context: User previously asked about "different authentication methods" and received options
+- Reformulated: "What are the details and implications of OAuth 2.0 authentication?"
+
+Return only the reformulated query, nothing else.
+</system_instruction>
+"""
+
+
+# =============================================================================
+# Subquery Splitting Prompt
+# =============================================================================
+
+
+SPLIT_SUBQUERIES_PROMPT = """
+<system_instruction>
+You are a query decomposition assistant. Your task is to split complex queries into {num_subqueries} distinct subqueries that cover different aspects of the original query.
+
+{chat_history}
+
+Guidelines for creating subqueries:
+1. Each subquery should focus on a specific aspect or dimension of the original query
+2. Subqueries should be diverse and not overlap significantly
+3. Each subquery should be specific enough to retrieve relevant, focused information
+4. Subqueries should collectively provide comprehensive coverage of the topic
+5. Use different search angles: definitions, implementations, comparisons, use cases, best practices, etc.
+6. Keep subqueries concise but complete
+
+Example:
+- Original: "What are the best practices for async programming in Python?"
+- Subqueries:
+  1. Python asyncio fundamentals and core concepts
+  2. Async/await syntax and usage patterns
+  3. Common pitfalls and anti-patterns in async code
+  4. Performance considerations for async operations
+  5. Testing strategies for asynchronous code
+  6. Comparison of asyncio with multiprocessing and threading
+
+Return exactly {num_subqueries} subqueries as a numbered or bulleted list, one per line.
+</system_instruction>
+"""

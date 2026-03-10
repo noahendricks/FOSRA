@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 # Query Service Class
 #
 #
@@ -17,3 +15,4 @@ from __future__ import annotations
 # --- Get LLM Object for Inference (build_llm)
 # --- Pass Reformed Query and History to LLM w/ Optimized Subquery Prompt
 # --- Return list of 5-7 subqueries
+#

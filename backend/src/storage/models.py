@@ -101,7 +101,7 @@ ROLE_TO_CATEGORY_MAP: dict[ConfigRole, ToolCategory] = {
 class DocORM(Base):
     """Document source."""
 
-    __tablename__ = "sources"
+    __tablename__ = "docs"
 
     doc_id: Mapped[str] = mapped_column(
         String(26), primary_key=True, default=ulid_factory
@@ -129,7 +129,7 @@ class DocORM(Base):
 class DocTopicORM(Base):
     """Document Topics ."""
 
-    __tablename__ = "sources"
+    __tablename__ = "doc_topics"
 
     topic_id: Mapped[str] = mapped_column(
         String(26), primary_key=True, default=ulid_factory
