@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
+from uuid import uuid4
 
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 from langchain_pinecone import PineconeVectorStore
 from langchain_qdrant import QdrantVectorStore
 from loguru import logger
-from pydantic import StrictStr
+from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic.v1.utils import to_camel
 
 from backend.src.domain.enums import RetrievalMode, VectorStoreType
 from backend.src.domain.schemas.config import EmbedderConfig, VectorStoreConfig
@@ -19,6 +21,25 @@ if TYPE_CHECKING:
 
 
 from qdrant_client import QdrantClient, models
+
+
+class _BaseModelFlex(BaseModel):
+    _FLEXIBLE_CONFIG = ConfigDict(
+        from_attributes=True,
+        arbitrary_types_allowed=True,
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
+
+
+class RetrievedChunk(_BaseModelFlex):
+    text: str
+    token_count: int
+    start_char: int
+    score: float
+    payload: dict[str, Any]
 
 
 class VectorService:
@@ -132,32 +153,12 @@ class VectorService:
                     points = []
 
                     # upsert
-                    for c in chunks:
-                        vector: dict[str, list[float] | models.SparseVector] = {
-                            "dense": c.metadata.dense_embedding,
-                        }
-                        if c.metadata.sparse_embedding:
-                            vector["sparse"] = models.SparseVector(
-                                indices=c.metadata.sparse_embedding["indices"],
-                                values=c.metadata.sparse_embedding["values"],
-                            )
-                        if c.metadata.late_embedding:
-                            vector["late-interaction"] = c.metadata.late_embedding
 
-                        point = {
-                            "id": c.metadata.chunk_id,
-                            "vector": vector,
-                            "payload": {
-                                "chunk": c.text,
-                                "chunk_id": c.metadata.chunk_id,
-                                "doc_id": c.metadata.doc_id,
-                                "page_number": c.metadata.page_number,
-                                "start_index": c.metadata.start_index,
-                                "end_index": c.metadata.end_index,
-                                "title": c.metadata.doc_title,
-                            },
-                        }
-                        points.append(point)
+                    points = await VectorService().build_points(
+                        chunks=chunks,
+                        embed_config=embed_config,
+                    )
+
                     if isinstance(store, QdrantClient):
                         exec_info = store.upsert(
                             collection_name=config.qdrant_config.collection_name,
@@ -234,6 +235,7 @@ class VectorService:
                                 with_payload=True,
                                 limit=10,
                             )
+                            # TODO: Transform to "RetrievedChunk" type
                             return results
 
                         case RetrievalMode.HYBRID:
@@ -265,6 +267,7 @@ class VectorService:
                                 limit=10,
                             )
 
+                            # TODO: Transform to "RetrievedChunk" type
                             return results
 
                         case RetrievalMode.LATE:
@@ -298,6 +301,7 @@ class VectorService:
                                 limit=10,
                             )
 
+                            # TODO: Transform to "RetrievedChunk" type
                             return results
                 except Exception as e:
                     raise RuntimeError(
@@ -325,3 +329,166 @@ class VectorService:
             raise ValueError("No Vector Store to Perform Actino")
         # delete vectors = vector_store.delete
         pass
+
+    @staticmethod
+    async def build_points(
+        chunks: list[Chunk], embed_config: EmbedderConfig
+    ) -> list[models.PointStruct]:
+        points = []
+        # NOTE: Called after having been embedded
+        from backend.src.services.processing.embedder_service import EmbedderService
+
+        try:
+            for i, chunk in enumerate(chunks):
+                parent = chunk.metadata.parent  # HierarchicalChunk (L2 or L1 leaf)
+
+                # Walk up to get all ancestor text for merge candidates
+                grandparent = getattr(parent, "parent", None)  # L1 if parent is L2
+
+                points.append(
+                    models.PointStruct(
+                        id=str(uuid4()),
+                        vector={
+                            "dense": chunk.metadata.dense_embedding,
+                            "sparse": chunk.metadata.sparse_embedding,
+                            "late-interaction": chunk.metadata.late_embedding,
+                        },
+                        payload={
+                            "text": chunk.text,
+                            "source_id": chunk.metadata.doc_id,
+                            "token_count": chunk.metadata.token_count,
+                            "start_char": chunk.metadata.start_char,
+                            "end_char": chunk.metadata.end_char,
+                            # Hierarchy for Auto-Merge
+                            "parent_text": parent.text if parent else None,
+                            "parent_token_count": parent.token_count if parent else 0,
+                            "parent_start_char": parent.start_char if parent else None,
+                            "parent_end_char": parent.end_char if parent else None,
+                            "parent_level": parent.level if parent else None,
+                            "grandparent_text": grandparent.text
+                            if grandparent
+                            else None,
+                            "grandparent_token_count": grandparent.token_count
+                            if grandparent
+                            else 0,
+                            "grandparent_start_char": grandparent.start_char
+                            if grandparent
+                            else None,
+                            "grandparent_level": grandparent.level
+                            if grandparent
+                            else None,
+                            # For grouping siblings during merge check
+                            "parent_id": f"{chunk.metadata.doc_id}:{parent.start_char}:{parent.end_char}"
+                            if parent
+                            else None,
+                            "grandparent_id": f"{chunk.metadata.doc_id}:{grandparent.start_char}:{grandparent.end_char}"
+                            if grandparent
+                            else None,
+                        },
+                    )
+                )
+
+            return points
+        except Exception as e:
+            raise RuntimeError("Fatal Error")
+
+    @staticmethod
+    def auto_merge(
+        results: list[RetrievedChunk],
+        token_budget: int,
+        merge_threshold: float = 0.5,  # fraction of parent's children needed
+    ) -> str:
+
+        if not results:
+            return ""
+
+        # group retrieved chunks by parent_id
+        parent_groups: dict[str, list[RetrievedChunk]] = {}
+        no_parent: list[RetrievedChunk] = []
+
+        for chunk in results:
+            pid = chunk.payload.get("parent_id")
+            if pid:
+                parent_groups.setdefault(pid, []).append(chunk)
+            else:
+                no_parent.append(chunk)
+
+        # decide what to keep: parent text or individual chunks
+        node_ret: list[tuple[str, int, int]] = []  # (text, token_count, start_char)
+        tokens_used = 0
+
+        for pid, siblings in parent_groups.items():
+            if tokens_used >= token_budget:
+                break
+
+            parent_text = siblings[0].payload.get("parent_text")
+            parent_tokens = siblings[0].payload.get("parent_token_count", 0)
+            parent_start = siblings[0].payload.get("parent_start_char", 0)
+            grandparent_id = siblings[0].payload.get("grandparent_id")
+
+            # Cond1: at least 2 siblings retrieved
+            cond1 = len(siblings) >= 2
+
+            # Cond2: covered text >= adaptive threshold
+            covered_chars = sum(
+                (c.payload["end_char"] - c.payload["start_char"]) for c in siblings
+            )
+
+            parent_chars = len(parent_text) if parent_text else 1
+            theta_star = (parent_chars / 3) * (1 + tokens_used / token_budget)
+            cond2 = covered_chars >= theta_star
+
+            # Cond3: parent fits in remaining budget
+            cond3 = (token_budget - tokens_used) >= parent_tokens
+
+            if cond1 and cond2 and cond3 and parent_text:
+                # check if we can merge further up to grandparent
+                # (only attempt if grandparent exists and budget allows)
+                grandparent_text = siblings[0].payload.get("grandparent_text")
+                grandparent_tokens = siblings[0].payload.get(
+                    "grandparent_token_count", 0
+                )
+
+                if (
+                    grandparent_text
+                    and grandparent_tokens <= (token_budget - tokens_used)
+                    and len(siblings) >= 3
+                ):  # stricter threshold for grandparent
+                    node_ret.append(
+                        (
+                            grandparent_text,
+                            grandparent_tokens,
+                            siblings[0].payload.get("grandparent_start_char", 0),
+                        )
+                    )
+
+                    tokens_used += grandparent_tokens
+                else:
+                    node_ret.append((parent_text, parent_tokens, parent_start))
+                    tokens_used += parent_tokens
+            else:
+                # keep individual chunks
+                for chunk in siblings:
+                    if tokens_used >= token_budget:
+                        break
+                    node_ret.append((chunk.text, chunk.token_count, chunk.start_char))
+                    tokens_used += chunk.token_count
+
+        # add orphan chunks (no parent)
+        for chunk in no_parent:
+            if tokens_used >= token_budget:
+                break
+            node_ret.append((chunk.text, chunk.token_count, chunk.start_char))
+            tokens_used += chunk.token_count
+
+        # deduplicate and sort by position
+        seen = set()
+        unique = []
+        for text, tokens, start in node_ret:
+            if text not in seen:
+                seen.add(text)
+                unique.append((text, tokens, start))
+
+        unique.sort(key=lambda x: x[2])  # sort by start_char = document order
+
+        return "\n\n".join(text for text, _, _ in unique)

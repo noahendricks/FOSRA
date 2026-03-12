@@ -152,7 +152,7 @@ class ChunkerConfig(_BaseModelFlex):
 
     embedding_model: str | Any = "nomic-ai/nomic-embed-text-v1.5"
     # Sentence chunking specific
-    preferred_strategy: ChunkerType = ChunkerType.CODE
+    preferred_strategy: ChunkerType = ChunkerType.NEURAL
 
 
 class LLMConfig(_BaseModelFlex):

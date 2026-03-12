@@ -16,7 +16,6 @@ from backend.src.domain.enums import VectorStoreType
 from backend.src.domain.schemas.config import (
     ChunkerConfig,
     EmbedderConfig,
-    UserPreferences,
     VectorStoreConfig,
 )
 from backend.src.domain.schemas.doc import (Doc, MDNFile, PDFMetadata, TextMetadata)
@@ -24,38 +23,50 @@ from backend.src.services.conversation import llm_service
 from backend.src.services.conversation.conversation_service import ConversationService
 from backend.src.services.processing.chunker_service import ChunkerService
 from backend.src.services.processing.embedder_service import EmbedderService
+from backend.src.services.processing.hi_chunk import HiChunk, HiChunkStructurer
 from backend.src.services.processing.loader_service import (LoaderService, to_bytes)
+from backend.src.services.processing.utils.loader import code_mimes
 from backend.src.services.retrieval.vector_service import VectorService
 
 # docs = joblib.load(".cache/docs.pkl")
 
 # working on chunker right now
-md_bytes = to_bytes(
-    "/home/roccoluxe/Documents/docs/09-frontend-ui/tsquery/reference/querying/QueryClient.md"
-)
 
-md_blob = Blob.from_data(data=md_bytes)
+py_path = "/home/roccoluxe/FOSRA/backend/src/services/processing/embedder_service.py"
 
+md_path = "/home/roccoluxe/Documents/docs/04-languages-types/typescript/02-type-system/Basic Types.md"
+
+from content_types import get_content_type as get_mime
+
+pdf_path = "/home/roccoluxe/Documents/Misc/MakingMusic_DennisDeSantis.pdf"
 pdf_bytes = to_bytes("/home/roccoluxe/Documents/Misc/MakingMusic_DennisDeSantis.pdf")
 
-pdf_blob = Blob.from_data(data=pdf_bytes)
+mime = get_mime(pdf_path)
 
-mock_mdn_pdf = MDNFile(
-    media_type="application/pdf",
-    type=pdf_blob.mimetype or "",
-    name=str(pdf_blob.path),
-    size=0,
-    bytes=pdf_bytes,
-    webkit_relative_path=pdf_blob.source,
+# i = LoaderService().parse_files([py_path])
+
+result: list[Doc] = LoaderService.parse_files([md_path])
+
+print(result)
+
+structurer = HiChunkStructurer(config=ChunkerConfig())
+
+
+chunks = asyncio.run(
+    ChunkerService()._chunk_text(doc=result[0], config=ChunkerConfig())
 )
 
-mock_mdn_md = MDNFile(
-    media_type="text/markdown",
-    type=md_blob.mimetype or "",
-    name=str(md_blob.path),
-    size=0,
-    bytes=md_blob.data,
-    webkit_relative_path=md_blob.source,
+
+embedded_chunks = asyncio.run(
+    EmbedderService().embed_chunks(chunks=chunks, config=EmbedderConfig())
 )
 
-result: list[Doc] = LoaderService.parse_files([mock_mdn_md])
+point_ids = asyncio.run(
+    VectorService.upsert(
+        chunks=embedded_chunks,
+        config=VectorStoreConfig(),
+        embed_config=EmbedderConfig(),
+    )
+)
+
+print(point_ids)

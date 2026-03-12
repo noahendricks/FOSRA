@@ -6,6 +6,7 @@ import pprint
 from pathlib import Path
 from pprint import pp
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from langchain_core.documents import Document
 from langchain_core.documents.base import Blob
@@ -19,7 +20,13 @@ from backend.src.domain.schemas.config import (
     UserPreferences,
     VectorStoreConfig,
 )
-from backend.src.domain.schemas.doc import (Doc, MDNFile, PDFMetadata, TextMetadata)
+from backend.src.domain.schemas.doc import (
+    Doc,
+    DocMetadata,
+    MDNFile,
+    PDFMetadata,
+    TextMetadata,
+)
 from backend.src.services.conversation import llm_service
 from backend.src.services.conversation.conversation_service import ConversationService
 from backend.src.services.processing.chunker_service import ChunkerService
@@ -50,112 +57,110 @@ def ulid_factory() -> str:
 class LoaderService:
     # parse files from blobs from browser, minimal changes could allow for path parsing
     @staticmethod
-    def parse_files(files: list[MDNFile]) -> list[Doc]:
+    def parse_files(files: list[str | MDNFile]) -> list[Doc]:
+        from content_types import EXTENSION_TO_CONTENT_TYPE
+        from content_types import get_content_type as get_mime
         from langchain_community.document_loaders.parsers import PyMuPDFParser
         from langchain_community.document_loaders.parsers.language.language_parser import LanguageParser
         from langchain_community.document_loaders.parsers.txt import TextParser
         from langchain_core.document_loaders import Blob
 
+        from backend.src.services.processing.utils.loader import code_mimes
+
         docs = []
 
         for file in files:
-            if not file.bytes:
-                continue
 
-            # determine route to parse based on file type
-            media_type = file.media_type.lower()
+            if isinstance(file, str):
+                # determine route to parse based on file type
+                mime_type = get_mime(file)
 
-            # !todo : currently not parsing by page, gotta figure out that and other pdf parsers
+                print(mime_type)
+            elif isinstance(file, MDNFile):
+                # NOTE: This is for browser received files as bytes, Will have to switch to magic library (magic.from_buffer) when i switch to browser ingest
+                raise NotImplementedError("MDNFiles cant be ingested yet")
+            else:
+                raise RuntimeError("Incorrect File Type at Ingestion")
+
             id = ulid_factory()
 
-            # !note: will need to set filetype, name, and other from mdn file
-            match media_type:
-                case "application/pdf":
-                    # pdf parsing
-                    blob: Blob = Blob.from_data(file.bytes, mime_type="application/pdf")
-
-                    pdf_docs: list[Document] = PyMuPDFParser(mode="single").parse(
-                        blob=blob
-                    )
-
-                    # !todo : use pdf_full to get doc hash
-                    for lc_doc in pdf_docs:
-                        lc_doc.metadata["content_type"] = "pdf"
-
-                        # parse by page, return to chunker as page, pull together but keep page info
-                        d = Doc.from_lc(lc_doc)
-                        d.id = id
-                        docs.append(d)
+            match mime_type:
+                # NOTE: deal with PDF specifics later
 
                 case "text/markdown" | "text/plain":
                     print("entered text")
-                    # text/markdown parsing
-                    blob: Blob = Blob.from_data(file.bytes, encoding="utf-8")
+                    file_bytes = to_bytes(file)
+
+                    # TODO: hash bytes
+
+                    blob: Blob = Blob.from_data(
+                        file_bytes,
+                        mime_type=mime_type,
+                        path=file,
+                    )
+
+                    print(blob)
 
                     text_docs: list[Document] = TextParser().parse(blob)
 
                     for lc_doc in text_docs:
-                        lc_doc.metadata["content_type"] = "text"
 
-                        #!todo: combine all Documents and use page content to get doc hash
-                        d: Doc = Doc.from_lc(lc_doc)
-                        d.id = ulid_factory()
+                        d: Doc = Doc(
+                            id=ulid_factory(),
+                            page_content=lc_doc.page_content,
+                            metadata=DocMetadata(mime_type=mime_type, source=file),
+                        )
+
                         docs.append(d)
 
-                case _:  # code file parsing - determine language from extension
-                    language = LoaderService._get_language_from_filename(file.name)
-                    if language:
-                        blob = Blob.from_data(file.bytes)
+                case _ if mime_type in code_mimes:
+                    "code in code mimes"
+                    file_bytes = to_bytes(file)
 
-                        parser = LanguageParser()
+                    blob: Blob = Blob.from_data(
+                        file_bytes,
+                        mime_type=mime_type,
+                        path=file,
+                    )
 
-                        code_docs = parser.parse(blob)
+                    text_docs: list[Document] = TextParser().parse(blob)
 
-                        # !todo : combine all docs and use page content to get doc hash
-                        for lc_doc in code_docs:
-                            doc = Doc.from_lc(lc_doc)
-                            doc.id = ulid_factory()
-                            docs.append(doc)
+                    for lc_doc in text_docs:
+                        #!todo: combine all documents and use page content to get doc hash
+
+                        d: Doc = Doc(
+                            id=ulid_factory(),
+                            page_content=lc_doc.page_content,
+                            metadata=DocMetadata(mime_type=mime_type, source=file),
+                        )
+
+                        docs.append(d)
+                # case "application/pdf":
+                #     # pdf parsing
+                #     file_bytes = to_bytes(file)
+                #
+                #     blob: Blob = Blob.from_data(
+                #         file_bytes,
+                #         mime_type=mime_type,
+                #         path=file,
+                #     )
+                #
+                #     print(blob)
+                #
+                #     pdf_docs: list[Document] = PyMuPDFParser(mode="single").parse(
+                #         blob=blob
+                #     )
+                #
+                #     for lc_doc in pdf_docs:
+                #         lc_doc.metadata["mime_type"] = mime_type
+                #
+                #         d.id = id
+                #         docs.append(d)
+
+                case _:
+                    pass
 
         return docs
-
-    @staticmethod
-    def _get_language_from_filename(filename: str) -> str | None:
-        extension_map = {
-            ".c": "c",
-            ".cpp": "cpp",
-            ".cc": "cpp",
-            ".cxx": "cpp",
-            ".cs": "csharp",
-            ".cobol": "cobol",
-            ".cpy": "cobol",
-            ".ex": "elixir",
-            ".exs": "elixir",
-            ".go": "go",
-            ".java": "java",
-            ".js": "javascript",
-            ".mjs": "javascript",
-            ".cjs": "javascript",
-            ".jsx": "javascript",
-            ".kt": "kotlin",
-            ".kts": "kotlin",
-            ".lua": "lua",
-            ".pl": "perl",
-            ".pm": "perl",
-            ".py": "python",
-            ".rb": "ruby",
-            ".rs": "rust",
-            ".scala": "scala",
-            ".sc": "scala",
-            ".sql": "sql",
-            ".ts": "typescript",
-            ".tsx": "typescript",
-        }
-
-        import os
-
-        _, ext = os.path.splitext(filename.lower())
-        return extension_map.get(ext)
 
 
 async def _chunk(result):
@@ -167,126 +172,4 @@ async def _chunk(result):
 
 
 if __name__ == "__main__":
-
-    import joblib
-
-    # user_dirs = [
-    #     "/home/roccoluxe/Documents/docs/01-ai-ml/ai-sdk/01-core-text-generation",
-    #     "/home/roccoluxe/Documents/docs/01-ai-ml/ai-sdk/00-getting-started",
-    #     "/home/roccoluxe/Documents/docs/01-ai-ml/ai-sdk/02-structured-output",
-    # ]
-    #
-    # path_dirs = [Path(p) for p in user_dirs]
-    #
-    # dir_files: list[MDNFile] = []
-    # for path in path_dirs:
-    #     if path.is_dir():
-    #         files = path.glob("*")
-    #         for file in files:
-    #             if not file.is_dir():
-    #                 print(file.as_posix())
-    #                 mime = mimetypes.guess_file_type(file.as_posix())
-    #                 dir_files.append(
-    #                     MDNFile(
-    #                         type=mime if mime else "text",
-    #                         size=999,
-    #                         name=file.name,
-    #                         bytes=to_bytes(file.as_posix()),
-    #                         media_type=mime if mime else "text",
-    #                     )
-    # )
-
-    cache = Path(".cache")
-
-    # docs = LoaderService.parse_files(dir_files)
-
-    # pp([d.to_dict() for d in dir_files])
-
-    md_bytes = to_bytes(
-        "/home/roccoluxe/Documents/docs/09-frontend-ui/tsquery/reference/querying/QueryClient.md"
-    )
-
-    md_blob = Blob.from_data(data=md_bytes)
-
-    pdf_bytes = to_bytes(
-        "/home/roccoluxe/Documents/Misc/MakingMusic_DennisDeSantis.pdf"
-    )
-
-    pdf_blob = Blob.from_data(data=pdf_bytes)
-
-    mock_mdn_pdf = MDNFile(
-        media_type="application/pdf",
-        type=pdf_blob.mimetype or "",
-        name=str(pdf_blob.path),
-        size=0,
-        bytes=pdf_bytes,
-        webkit_relative_path=pdf_blob.source,
-    )
-
-    mock_mdn_md = MDNFile(
-        media_type="text/markdown",
-        type=md_blob.mimetype or "",
-        name=str(md_blob.path),
-        size=0,
-        bytes=md_blob.data,
-        webkit_relative_path=md_blob.source,
-    )
-
-    result: list[Doc] = LoaderService.parse_files([mock_mdn_md])
-
-    from backend.src.services.processing.hi_chunk import HiChunkPipeline
-
-    chunker = HiChunkPipeline(config=ChunkerConfig())
-
-    out = chunker.index(document=result[0].page_content)
-
-    #
-    # chunks = asyncio.run(
-    #     ChunkerService().chunk_documents(docs=result, config=ChunkerConfig())
-    # )
-    #
-    # embedded_chunks = []
-    #
-    # for c in chunks:
-    #     embedded_chunks.append(
-    #         asyncio.run(
-    #             EmbedderService().embed_chunks(chunks=c, config=EmbedderConfig())
-    #         )
-    #     )
-    #
-    # ids = asyncio.run(
-    #     VectorService().upsert(
-    #         config=VectorStoreConfig(),
-    #         chunks=[c for sub in embedded_chunks for c in sub],
-    #         embed_config=EmbedderConfig(),
-    #     )
-    # )
-    #
-    # print("DEBUGPRINT[91]: loader_service.py:242 (before asyncio.run()")
-    #
-    # async def print_stream():
-    #     vector_results = await VectorService().search(
-    #         config=VectorStoreConfig(),
-    #         embed_config=EmbedderConfig(),
-    #         query="what is evaluator optimizer?",
-    #     )
-    #     if not vector_results:
-    #         print("no results")
-    #         raise RuntimeError()
-    #
-    #     cc = await ConversationService().parse_retrievals(
-    #         retrievals=vector_results, store_type=VectorStoreType.QDRANT
-    #     )
-    #
-    #     if not cc:
-    #         raise RuntimeError()
-    #
-    #     res = await llm_service.LLMService().generate_llm_response(
-    #         chat_history=[], sources=cc, convo_id="1234", user_prefs=UserPreferences()
-    #     )
-    #     async for chunk in res:
-    #         print(chunk.content, end="", flush=True)
-    #
-    # asyncio.run(print_stream())
-    #
-    # print("DEBUGPRINT[93]: loader_service.py:243 (after asyncio.run()")
+    pass

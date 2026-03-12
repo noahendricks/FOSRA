@@ -4,12 +4,14 @@ import builtins
 from datetime import datetime
 from typing import Any, Literal, Self
 
+from chonkie.types import Chunk as ChonkieChunk
 from langchain_core.documents import Document
+from numpy import ndarray
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.v1.utils import to_camel
 from qdrant_client.models import SparseVector
 
-from backend.src.services.processing.hi_chunk import HierarchicalChunk
+from backend.src.services.processing.utils.loader import code_mimes, text_mimes
 from backend.src.storage.models import ulid_factory
 from backend.src.storage.utils.converters import DomainStruct
 
@@ -37,6 +39,7 @@ class MDNFile(DomainStruct):
 
 class BaseDocumentMetadata(BaseModel):
     source: str | None = None
+    mime_type: str | None = None
 
 
 class PDFMetadata(BaseDocumentMetadata):
@@ -131,81 +134,79 @@ CodeMetadataUnion = FunctionsClassesMetadata | SimplifiedCodeMetadata | ImportsM
 
 
 # main doc with typed metadata - used everywhere Document(LC) would be
+from langchain_core.documents import Document
+
+
+class DocMetadata(_BaseModelFlex):
+    source: str
+    mime_type: str
+
+
 class Doc(BaseModel):
     id: str
-    type: Literal["Document"] = "Document"
     page_content: str
-    metadata: (
-        PDFMetadata
-        | TextMetadata
-        | FunctionsClassesMetadata
-        | SimplifiedCodeMetadata
-        | ImportsMetadata
-    )
-
-    @classmethod
-    def from_lc(cls, doc: Document) -> Self:
-        meta_dict = doc.metadata or {}
-        content_type = meta_dict.get("content_type", "text")
-
-        # route to correct metadata model
-        metadata_map = {
-            "pdf": PDFMetadata,
-            "text": TextMetadata,
-            "html": TextMetadata,
-            "markdown": TextMetadata,
-            "functions_classes": FunctionsClassesMetadata,
-            "simplified_code": SimplifiedCodeMetadata,
-            "imports": ImportsMetadata,
-        }
-
-        model_class = metadata_map.get(content_type, TextMetadata)
-
-        return cls(
-            page_content=doc.page_content,
-            metadata=model_class.model_validate(meta_dict),
-            id=str(ulid_factory()),
-        )
-
-    def to_lc(self) -> Document:
-        return Document(
-            page_content=self.page_content,
-            metadata=self.metadata.model_dump(by_alias=True, exclude_none=True),
-            id=self.id,
-        )
+    metadata: DocMetadata
 
     @property
     def is_pdf(self) -> bool:
-        return isinstance(self.metadata, PDFMetadata)
+        return self.metadata.mime_type == "application/pdf"
 
     @property
     def is_code(self) -> bool:
-        return isinstance(
-            self.metadata,
-            (FunctionsClassesMetadata, SimplifiedCodeMetadata, ImportsMetadata),
-        )
+        return self.metadata.mime_type in code_mimes
 
     @property
     def is_text(self) -> bool:
-        return isinstance(self.metadata, TextMetadata)
+        return self.metadata.mime_type in text_mimes
+
+
+class HierarchicalChunk(_BaseModelFlex):
+    """a chunk in the hierarchical tree produced by hichunk."""
+
+    text: str
+    token_count: int
+    level: int  # 1 = coarsest section, 2 = subsection, …
+    start_char: int = 0
+    end_char: int = 0
+    children: list["HierarchicalChunk"] = Field(default_factory=list)
+    parent: "HierarchicalChunk | None" = None
+    metadata: DocMetadata
+
+    @property
+    def is_leaf(self) -> bool:
+        return len(self.children) == 0
+
+    def __repr__(self):
+        snippet = self.text[:60].replace("\n", " ")
+        return f"HierarchicalChunk(level={self.level}, tokens={self.token_count}, text='{snippet}…')"
 
 
 class ChunkMetadata(_BaseModelFlex):
-    chunk_id: str
-    doc_id: str
-    doc_title: str
-    page_number: int | None
-    token_count: int | None
-    start_index: int | None
-    end_index: int | None
-    start_char: str | None
-    end_char: str | None
-    parent: HierarchicalChunk | None = None
+    chunk_id: str | None = None
+    doc_id: str | None = None
+    doc_title: str | None = None
+    page_number: int | None = None
+    token_count: int | None = None
+    start_char: int | None = None
+    end_char: int | None = None
     dense_embedding: list[float] = []
     sparse_embedding: Any | SparseVector = None
     late_embedding: list[float] = []
+    parent: HierarchicalChunk | None = None
 
 
 class Chunk(_BaseModelFlex):
     text: str
     metadata: ChunkMetadata
+
+    @classmethod
+    def from_chonkie(cls, chunk: ChonkieChunk) -> Self:
+
+        _meta = ChunkMetadata(
+            chunk_id=chunk.id,
+            start_char=chunk.start_index,
+            end_char=chunk.end_index,
+            token_count=chunk.token_count,
+        )
+
+        return cls(text=chunk.text, metadata=_meta)

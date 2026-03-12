@@ -138,3 +138,33 @@ class LLMService:
             "DEBUGPRINT[90]: llm_service.py:135 (before return llm.astream(input=lc_messages))"
         )
         return llm.astream(input=lc_messages)
+
+    @staticmethod
+    async def generate_filters(parent_chunks: list[Chunk]):
+
+        # TODO: Pull in existing filters from the DB
+
+        # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
+
+        # TODO: Accumulate LLM Filter Classification in List
+
+        # TODO: Pass all Generated Filters to LLM For Consolidation
+
+        # TODO: Return 2-3 Filters
+
+        pass
+
+    @staticmethod
+    async def generate_summary(parent_chunks: list[Chunk]):
+
+        # TODO: Pull in existing filters from the DB
+
+        # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
+
+        # TODO: Accumulate LLM Filter Classification in List
+
+        # TODO: Pass all Generated Filters to LLM For Consolidation
+
+        # TODO: Return 2-3 Filters
+
+        pass

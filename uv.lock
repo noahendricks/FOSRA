@@ -1104,6 +1104,15 @@ wheels = [
 ]
 
 [[package]]
+name = "code-chunker"
+version = "1.3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/71/e5/67357da7b5f87bd200bc96a19e593c63f0c4794f2fab9780f0c452b560b5/code_chunker-1.3.2.tar.gz", hash = "sha256:73b68e18bc092d52aca7d70d52a6feee9f8ca9446863bbdb34110b9d899c46aa", size = 33292, upload-time = "2025-05-10T17:44:57.41Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/bc/bbda6befb69d0496b273cc1b4d155d62ae9c58fec50da5ea7a79ec0be3ed/code_chunker-1.3.2-py3-none-any.whl", hash = "sha256:3e7bbea5ddd94a61c5dad571f79f8f2640c713cf237b671ad16f8c353b22a8d5", size = 39728, upload-time = "2025-05-10T17:44:56.168Z" },
+]
+
+[[package]]
 name = "code2flow"
 version = "2.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1190,6 +1199,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8b/ac/ea19242153b5e8be412a726a70e82c7b5c1537c83f61b20995b2eda3dcd7/configparser-7.2.0.tar.gz", hash = "sha256:b629cc8ae916e3afbd36d1b3d093f34193d851e11998920fdcfc4552218b7b70", size = 51273, upload-time = "2025-03-08T16:04:09.339Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/09/fe/f61e7129e9e689d9e40bbf8a36fb90f04eceb477f4617c02c6a18463e81f/configparser-7.2.0-py3-none-any.whl", hash = "sha256:fee5e1f3db4156dcd0ed95bc4edfa3580475537711f67a819c966b389d09ce62", size = 17232, upload-time = "2025-03-08T16:04:07.743Z" },
+]
+
+[[package]]
+name = "content-types"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/d3/bf844cce155dfa692d4d6acb4db89a9295e581c182b22dddf2677d43c6e9/content_types-0.3.0.tar.gz", hash = "sha256:f873a77a5a79a2c960286247b65690d1f80be59e34c9b3cf62129e7afd5225e6", size = 13987, upload-time = "2025-10-01T23:00:09.87Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/88/4319b7e2229d63dc02c8811bcca1b944486f85510ec9b35aeef278caef09/content_types-0.3.0-py3-none-any.whl", hash = "sha256:f242fce326b6c0d76abd91819a402e3be805c5e0d78ea06792a9cb66a5fa9376", size = 10082, upload-time = "2025-10-01T23:00:07.811Z" },
 ]
 
 [[package]]
@@ -2133,7 +2151,9 @@ dependencies = [
     { name = "black" },
     { name = "blake3" },
     { name = "chonkie", extra = ["all", "genie", "st", "viz"] },
+    { name = "code-chunker" },
     { name = "code2flow" },
+    { name = "content-types" },
     { name = "deepagents" },
     { name = "docling" },
     { name = "docling-core", extra = ["chunking"] },
@@ -2258,7 +2278,9 @@ requires-dist = [
     { name = "black", specifier = ">=25.12.0" },
     { name = "blake3", specifier = ">=1.0.8" },
     { name = "chonkie", extras = ["all", "genie", "st", "viz"], specifier = ">=1.4.0" },
+    { name = "code-chunker", specifier = ">=1.3.2" },
     { name = "code2flow", specifier = ">=2.5.1" },
+    { name = "content-types", specifier = ">=0.3.0" },
     { name = "deepagents", specifier = ">=0.3.8" },
     { name = "docling", extras = ["chunking"], specifier = ">=2.59.0" },
     { name = "docling-core", extras = ["chunking"], specifier = ">=2.50.0" },
@@ -8608,6 +8630,10 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/23/2c9fe0c9c27f7f6cb865abcea8a4568f29f00acaeadfc6a37f6801f84cb4/torch-2.10.0-2-cp313-none-macosx_11_0_arm64.whl", hash = "sha256:e521c9f030a3774ed770a9c011751fb47c4d12029a3d6522116e48431f2ff89e", size = 79498254, upload-time = "2026-02-10T21:44:44.095Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/c6/4dfe238342ffdcec5aef1c96c457548762d33c40b45a1ab7033bb26d2ff2/torch-2.10.0-3-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:80b1b5bfe38eb0e9f5ff09f206dcac0a87aadd084230d4a36eea5ec5232c115b", size = 915627275, upload-time = "2026-03-11T14:16:11.325Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/f0/72bf18847f58f877a6a8acf60614b14935e2f156d942483af1ffc081aea0/torch-2.10.0-3-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:46b3574d93a2a8134b3f5475cfb98e2eb46771794c57015f6ad1fb795ec25e49", size = 915523474, upload-time = "2026-03-11T14:17:44.422Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/39/590742415c3030551944edc2ddc273ea1fdfe8ffb2780992e824f1ebee98/torch-2.10.0-3-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:b1d5e2aba4eb7f8e87fbe04f86442887f9167a35f092afe4c237dfcaaef6e328", size = 915632474, upload-time = "2026-03-11T14:15:13.666Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/8e/34949484f764dde5b222b7fe3fede43e4a6f0da9d7f8c370bb617d629ee2/torch-2.10.0-3-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:0228d20b06701c05a8f978357f657817a4a63984b0c90745def81c18aedfa591", size = 915523882, upload-time = "2026-03-11T14:14:46.311Z" },
     { url = "https://files.pythonhosted.org/packages/c9/6f/f2e91e34e3fcba2e3fc8d8f74e7d6c22e74e480bbd1db7bc8900fdf3e95c/torch-2.10.0-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:5c4d217b14741e40776dd7074d9006fd28b8a97ef5654db959d8635b2fe5f29b", size = 146004247, upload-time = "2026-01-21T16:24:29.335Z" },
     { url = "https://files.pythonhosted.org/packages/98/fb/5160261aeb5e1ee12ee95fe599d0541f7c976c3701d607d8fc29e623229f/torch-2.10.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:6b71486353fce0f9714ca0c9ef1c850a2ae766b409808acd58e9678a3edb7738", size = 915716445, upload-time = "2026-01-21T16:22:45.353Z" },
     { url = "https://files.pythonhosted.org/packages/6a/16/502fb1b41e6d868e8deb5b0e3ae926bbb36dab8ceb0d1b769b266ad7b0c3/torch-2.10.0-cp313-cp313-win_amd64.whl", hash = "sha256:c2ee399c644dc92ef7bc0d4f7e74b5360c37cdbe7c5ba11318dda49ffac2bc57", size = 113757050, upload-time = "2026-01-21T16:24:19.204Z" },
