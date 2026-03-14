@@ -140,6 +140,8 @@ from langchain_core.documents import Document
 class DocMetadata(_BaseModelFlex):
     source: str
     mime_type: str
+    doc_id: str
+    doc_title: str
 
 
 class Doc(BaseModel):
@@ -169,7 +171,7 @@ class HierarchicalChunk(_BaseModelFlex):
     start_char: int = 0
     end_char: int = 0
     children: list["HierarchicalChunk"] = Field(default_factory=list)
-    parent: "HierarchicalChunk | None" = None
+    parent: "HierarchicalChunk | None" = Field(default=None, validate_default=False)
     metadata: DocMetadata
 
     @property
@@ -182,6 +184,16 @@ class HierarchicalChunk(_BaseModelFlex):
 
 
 class ChunkMetadata(_BaseModelFlex):
+    _FLEXIBLE_CONFIG = ConfigDict(
+        from_attributes=True,
+        arbitrary_types_allowed=True,
+        alias_generator=to_camel,
+        populate_by_name=True,
+        validate_default=False,
+    )
+
+    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
+
     chunk_id: str | None = None
     doc_id: str | None = None
     doc_title: str | None = None
@@ -192,7 +204,7 @@ class ChunkMetadata(_BaseModelFlex):
     dense_embedding: list[float] = []
     sparse_embedding: Any | SparseVector = None
     late_embedding: list[float] = []
-    parent: HierarchicalChunk | None = None
+    parent: HierarchicalChunk | None = Field(default=None, validate_default=False)
 
 
 class Chunk(_BaseModelFlex):

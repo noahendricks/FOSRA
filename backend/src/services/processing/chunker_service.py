@@ -25,16 +25,7 @@ if TYPE_CHECKING:
 
 from uuid import uuid4
 
-from chonkie import (
-    BaseChunker,
-    LateChunker,
-    NeuralChunker,
-    RecursiveChunker,
-    SemanticChunker,
-    SentenceTransformerEmbeddings,
-    Visualizer,
-    chunker,
-)
+from chonkie import Visualizer, chunker
 
 viz = Visualizer()
 
@@ -128,9 +119,7 @@ class ChunkerService:
 
         chunks.file_path = doc.metadata.source
 
-        # from chonkie chunks to domain chunks
-
-        # domain_chunks = [Chunk.from_chonkie(chunk=c) for c in chunks]
+        # TODO: tsrts
 
         return chunks
 
@@ -145,51 +134,7 @@ class ChunkerService:
 
         return chunks
 
-    # FIX: NOT WORKING
-    # chunker_type = config.preferred_strategy if config else ChunkerType.SEMANTIC
-    # @staticmethod
-    # async def _chunk_pdf(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
-    #     """Handle PDF chunking with page-based approach."""
-    #
-    # if not doc.is_pdf or not isinstance(doc.metadata, PDFMetadata):
-    #     raise ValueError("PDF Doc Chunk Attempt Failed: Doc is not PDF")
-    #
-    # chunker = ChunkerService()._get_chunker(config)
-    #
-    # if chunker is None:
-    #     raise RuntimeError("PDF Chunker from _get_chunker returned None")
-    #
-    # # token count approximation for 300 token threshold
-    #
-    # estimated_tokens = len(doc.page_content.split()) * 1.3  # rough conversion
-    #
-    # if estimated_tokens > 250:
-    #     # chunk within the page using text chunker
-    #     chunks = await HiChunk().index(doc)
-    #
-    #     from pprint import pp
-    # else:
-    #     # keep as single chunk (page)
-    #     chunk_meta: ChunkMetadata = ChunkMetadata(
-    #         chunk_id=str(uuid4()),
-    #         doc_title=doc.metadata.source
-    #         if doc.metadata.source
-    #         else "Unknown File Name",
-    #         page_number=doc.metadata.page,
-    #         token_count=int(estimated_tokens),
-    #         start_char=0,
-    #         end_char=len(doc.page_content),
-    #     )
-    #
-    #     chunk: Chunk = Chunk(text=doc.page_content, metadata=chunk_meta)
-    #
-    #     chunks = [chunk]
-    #     from pprint import pp
-    #
-    #     for c in chunks:
-    #         pp(
-    #             c,
-    #         )
-    #         print("\n \n")
-    # return chunks
-    # FIX: END
+    # NOTE: ADD PDF CHUNKING LATER
+    #       needs page level chunking,
+    #       page number attribution,
+    #       and metadata attribution

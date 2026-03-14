@@ -10,6 +10,8 @@ from langchain_qdrant import QdrantVectorStore
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, StrictStr
 from pydantic.v1.utils import to_camel
+from qdrant_client.conversions.common_types import QueryResponse
+from qdrant_client.models import ScoredPoint
 
 from backend.src.domain.enums import RetrievalMode, VectorStoreType
 from backend.src.domain.schemas.config import EmbedderConfig, VectorStoreConfig
@@ -43,14 +45,7 @@ class RetrievedChunk(_BaseModelFlex):
 
 
 class VectorService:
-    # config and store type match case primary implementation
-    # Pydantic Model as JSONB  on USER ORM
-    # configs should be pulled from user table in DB and should be either populated with defaults ,none or user custom settings
-    # initialize store via langchain
-    # get config from user id via request
 
-    # initial active: qdrant, pinecone, milvus ,elasticsearch,and opensearch
-    # <- remove once exception handling present - needs to fail fast
     @staticmethod
     def _get_store(
         config: VectorStoreConfig, embedder_config: EmbedderConfig
@@ -177,7 +172,7 @@ class VectorService:
 
             case _:
                 try:
-                    # HACK: LOW EXTENSIBILITY: only qdrant currently fully implemented
+                    # NOTE: LOW EXTENSIBILITY: only qdrant currently fully implemented
                     if isinstance(store, VectorStore):
                         ids: list[str] = await store.aadd_texts(
                             texts=[c.text for c in chunks],
@@ -235,8 +230,7 @@ class VectorService:
                                 with_payload=True,
                                 limit=10,
                             )
-                            # TODO: Transform to "RetrievedChunk" type
-                            return results
+                            return VectorService()._to_retrieved_chunks(results.points)
 
                         case RetrievalMode.HYBRID:
                             logger.debug("ENTERED RETRIEVAL HYBRID")
@@ -267,8 +261,8 @@ class VectorService:
                                 limit=10,
                             )
 
-                            # TODO: Transform to "RetrievedChunk" type
-                            return results
+                            #
+                            return VectorService()._to_retrieved_chunks(results.points)
 
                         case RetrievalMode.LATE:
                             logger.debug("ENTERED RETRIEVAL LATE")
@@ -292,7 +286,7 @@ class VectorService:
                                 ),
                             ]
 
-                            results = store.query_points(
+                            results: QueryResponse = store.query_points(
                                 collection_name=config.qdrant_config.collection_name,
                                 prefetch=prefetch,
                                 query=embedded_queries.late,
@@ -301,8 +295,8 @@ class VectorService:
                                 limit=10,
                             )
 
-                            # TODO: Transform to "RetrievedChunk" type
-                            return results
+                            return VectorService()._to_retrieved_chunks(results.points)
+
                 except Exception as e:
                     raise RuntimeError(
                         f"Fatal Error While Searching using {retrieval_mode}: {e}"
@@ -335,7 +329,7 @@ class VectorService:
         chunks: list[Chunk], embed_config: EmbedderConfig
     ) -> list[models.PointStruct]:
         points = []
-        # NOTE: Called after having been embedded
+        # NOTE: Called with embedded chunks
         from backend.src.services.processing.embedder_service import EmbedderService
 
         try:
@@ -398,16 +392,21 @@ class VectorService:
         token_budget: int,
         merge_threshold: float = 0.5,  # fraction of parent's children needed
     ) -> str:
+        # NOTE: Called after search with retrieved chunks to merge any possible ancestors
 
+        print("auto")
         if not results:
             return ""
 
         # group retrieved chunks by parent_id
+        # {parent_id: [child chunks (L1, L2 or L3)]}
         parent_groups: dict[str, list[RetrievedChunk]] = {}
         no_parent: list[RetrievedChunk] = []
 
         for chunk in results:
+            print(type(chunk))
             pid = chunk.payload.get("parent_id")
+            # append chunks on parent id
             if pid:
                 parent_groups.setdefault(pid, []).append(chunk)
             else:
@@ -492,3 +491,20 @@ class VectorService:
         unique.sort(key=lambda x: x[2])  # sort by start_char = document order
 
         return "\n\n".join(text for text, _, _ in unique)
+
+    @staticmethod
+    def _to_retrieved_chunks(results: list[ScoredPoint]):
+        retrieved_chunks = []
+
+        for sp in results:
+            if sp.payload:
+                rc = RetrievedChunk(
+                    score=sp.score,
+                    payload=sp.payload,
+                    text=sp.payload.get("text", "Text Error"),
+                    start_char=sp.payload.get("start_char", 0),
+                    token_count=sp.payload.get("token_count", 0),
+                )
+                retrieved_chunks.append(rc)
+
+        return retrieved_chunks

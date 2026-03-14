@@ -60,29 +60,29 @@ class FlatChunkProducer:
         self.token_chunker = TokenChunker(**config.token_config.model_dump())
 
     def produce(self, hi_chunks: list[HierarchicalChunk]) -> list[Chunk]:
-        flat: list[Chunk] = []
+        flat = []
         for h in hi_chunks:
             flat.extend(self._flatten(h))
         return flat
 
     def _flatten(self, node: HierarchicalChunk) -> list[Chunk]:
         if node.is_leaf:
-            raw = self.token_chunker.chunk(node.text)
-            result = []
-            for r in raw:
-                meta = ChunkMetadata(
-                    token_count=r.token_count,
-                    start_char=node.start_char + r.start_index,
-                    end_char=node.start_char + r.end_index,
-                    parent=node,
-                )
-                chunk = Chunk(text=r.text, metadata=meta)
-                result.append(chunk)
-            return result
-        else:
-            result = []
-            for child in node.children:
-                result.extend(self._flatten(child))
+            if node.token_count < 5 or node.text.strip() == "":
+                return []
+
+            meta = ChunkMetadata(
+                token_count=node.token_count,
+                start_char=node.start_char,
+                end_char=node.end_char,
+                parent=node,
+            )
+
+            return [Chunk(text=node.text, metadata=meta)]
+
+        result = []
+
+        for child in node.children:
+            result.extend(self._flatten(child))
             return result
 
 
@@ -185,26 +185,31 @@ class HiChunkStructurer:
                         level=2,
                         start_char=char_offset + sub.start_index,
                         end_char=char_offset + sub.end_index,
-                        parent=l1,
                         metadata=doc.metadata,
                     )
                     l1.children.append(l2)
 
+                    l2.parent = l1
+
                     # step 3: l3 within each l2 (if requested)
                     if self.config.max_levels >= 3 and len(sub.text) > 128:
                         l3_raw = self.token_chunker.chunk(sub.text)
-                        sub_offset = char_offset + sub.start_index
-                        for seg in l3_raw:
-                            l3 = HierarchicalChunk(
-                                text=seg.text,
-                                token_count=seg.token_count,
-                                level=3,
-                                start_char=sub_offset + seg.start_index,
-                                end_char=sub_offset + seg.end_index,
-                                parent=l2,
-                                metadata=doc.metadata,
-                            )
-                            l2.children.append(l3)
+
+                        if len(l3_raw) > 1 or (
+                            len(l3_raw) == 1 and l3_raw[0].text != sub.text
+                        ):
+                            sub_offset = char_offset + sub.start_index
+                            for seg in l3_raw:
+                                l3 = HierarchicalChunk(
+                                    text=seg.text,
+                                    token_count=seg.token_count,
+                                    level=3,
+                                    start_char=sub_offset + seg.start_index,
+                                    end_char=sub_offset + seg.end_index,
+                                    metadata=doc.metadata,
+                                )
+                                l2.children.append(l3)
+                                l3.parent = l2
 
             l1_chunks.append(l1)
 
@@ -225,40 +230,27 @@ class HiChunk:
     ) -> list[Chunk]:
         """build the hierarchical structure and embed all flat chunks."""
 
-        logger.info("[HiChunk] Step 1/3 — Hierarchical structuring …")
+        print("[HiChunk] Step 1/3 — Hierarchical structuring …")
 
         # HI Chunks
         _hi_chunks = structurer.structure(document)
 
-        logger.info(f"[HiChunk]   → {len(_hi_chunks)} L1 sections found.")
+        print(f"[HiChunk]   → {len(_hi_chunks)} L1 sections found.")
 
         # L2 Count
         total_l2 = sum(len(h.children) for h in _hi_chunks)
 
-        logger.info(f"[HiChunk]   → {total_l2} L2 sub-sections found.")
-        logger.info("[HiChunk] Step 2/3 — Fixed-size sub-chunking (HC200) …")
+        print(f"[HiChunk]   → {total_l2} L2 sub-sections found.")
+        print("[HiChunk] Step 2/3 — Fixed-size sub-chunking (HC200) …")
 
         # Flat Chunks
         _flat_chunks = structurer.flat_producer.produce(_hi_chunks)
 
-        logger.info(f"[HiChunk]   → {len(_flat_chunks)} flat chunks produced.")
+        print(f"[HiChunk]   → {len(_flat_chunks)} flat chunks produced.")
 
-        logger.info("[HiChunk] Step 3/3 — Embedding flat chunks …")
-
-        # print(_hi_chunks)
+        print("[HiChunk] Step 3/3 — Embedding flat chunks …")
 
         return _flat_chunks
-
-        # print("\n\n")
-        # for i in _flat_chunks:
-        #     print("-----------------beginning of chunk-----------")
-        #     print("\n")
-        #     print(i)
-        #     print("\n")
-        #     print("-----------------end of chunk-----------")
-        # logger.info("[HiChunk] Indexing complete. ✓")
-
-    #  inspection helpers
 
     @staticmethod
     def _print_tree(hi_chunks: list[HierarchicalChunk], max_nodes: int = 20) -> None:

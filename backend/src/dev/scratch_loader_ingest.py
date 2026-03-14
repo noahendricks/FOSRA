@@ -45,7 +45,7 @@ mime = get_mime(pdf_path)
 
 # i = LoaderService().parse_files([py_path])
 
-result: list[Doc] = LoaderService.parse_files([md_path])
+result: list[Doc] = LoaderService._parse_files([md_path])
 
 print(result)
 

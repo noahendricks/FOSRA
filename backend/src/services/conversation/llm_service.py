@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import litellm
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import PromptTemplate
 from langchain_litellm import ChatLiteLLM
 from loguru import logger
 
@@ -13,7 +14,7 @@ from backend.src.domain.schemas.config import (
     ScoredRetrieval,
     UserPreferences,
 )
-from backend.src.domain.schemas.doc import Doc
+from backend.src.domain.schemas.doc import Chunk, Doc
 from backend.src.services.conversation.utils.llm_utils import (
     build_model_string,
     filter_none_values,
@@ -44,14 +45,15 @@ PROVIDER_TO_LITELLM_MAP: dict[str, str] = {
     "OPENROUTER": "openrouter",
 }
 
-# =============================================================================
-# Helper Functions
-# =============================================================================
 
-
-# =============================================================================
-# LLM Service Class
-# =============================================================================
+from backend.src.services.conversation.utils.prompts import (
+    COVERAGE_CHECK_PROMPT,
+    DOC_TOPIC_GEN_PROMPT,
+    FOSRA_CITATION_INSTRUCTIONS,
+    GRAPH_QUERY_GEN_PROMPT,
+    GRAPH_SEARCH_PROMPT,
+    SPLIT_SUBQUERIES_PROMPT,
+)
 
 
 class LLMService:
@@ -140,8 +142,9 @@ class LLMService:
         return llm.astream(input=lc_messages)
 
     @staticmethod
-    async def generate_filters(parent_chunks: list[Chunk]):
+    async def generate_chunk_summaries(parent_chunks: list[Chunk]):
 
+        # NOTE: Better to do all at once or one at a time?
         # TODO: Pull in existing filters from the DB
 
         # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
@@ -155,9 +158,162 @@ class LLMService:
         pass
 
     @staticmethod
-    async def generate_summary(parent_chunks: list[Chunk]):
+    async def generate_graph_query(parent_chunks: list[Chunk]):
+        return
 
+    @staticmethod
+    async def generate_graph_search(parent_chunks: list[Chunk]):
+        return
+
+    @staticmethod
+    async def split_to_subqueries(parent_chunks: list[Chunk]):
+        return
+
+    @staticmethod
+    async def check_coverage(parent_chunks: list[Chunk]):
+        return
+
+    @staticmethod
+    async def summarize_document():
+        return
+
+    @staticmethod
+    async def _summarize_single(doc: str):
+        MOCK_TOPICS = [
+            # TanStack Query / general data fetching docs
+            "data_fetching",
+            "cache_invalidation",
+            "cache_mutation",
+            "configuration",
+            "pagination",
+            "error_handling",
+            "optimistic_updates",
+            "prefetching",
+            "query_filters",
+            "subscriptions",
+            "devtools",
+            "ssr_hydration",
+            # Source code structural
+            "authentication",
+            "data_transformation",
+            "file_io",
+            "api_client",
+            "middleware",
+            "database_access",
+            "validation",
+            "event_handling",
+            "state_management",
+            "routing",
+            # Meta / navigation — always present
+            "navigation",
+        ]
+
+        # TODO: Return 2-3 Filters
+        config: LLMConfig = LLMConfig(
+            config_id=0,
+            config_name="the config name",
+            provider="openrouter",
+            model="qwen/qwen3.5-27b",
+            api_key="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",
+            api_base="https://openrouter.ai/api/v1",
+        )
+
+        model_string: str = build_model_string(
+            provider=config.provider,
+            model_name=config.model,
+            custom_provider=config.custom_provider,
+        )
+
+        kwargs: dict[str, Any] = {
+            "model": model_string,
+            "api_key": config.api_key,
+            "streaming": True,
+        }
+
+        if config.api_base:
+            kwargs["api_base"] = config.api_base
+
+        if config.litellm_params:
+            kwargs.update(config.litellm_params)
+
+        llm: ChatLiteLLM = ChatLiteLLM(**filter_none_values(kwargs))
+
+        prompt = DOC_TOPIC_GEN_PROMPT.format(
+            existing_topics=MOCK_TOPICS, chunk_text=doc
+        )
+        return llm.astream(input=prompt)
+
+    async def _summarize_with_context(parent_chunks: list[Chunk]):
         # TODO: Pull in existing filters from the DB
+        MOCK_TOPICS = [
+            # TanStack Query / general data fetching docs
+            "data_fetching",
+            "cache_invalidation",
+            "cache_mutation",
+            "configuration",
+            "pagination",
+            "error_handling",
+            "optimistic_updates",
+            "prefetching",
+            "query_filters",
+            "subscriptions",
+            "devtools",
+            "ssr_hydration",
+            # Source code structural
+            "authentication",
+            "data_transformation",
+            "file_io",
+            "api_client",
+            "middleware",
+            "database_access",
+            "validation",
+            "event_handling",
+            "state_management",
+            "routing",
+            # Meta / navigation — always present
+            "navigation",
+        ]
+
+        # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
+
+        # TODO: Accumulate LLM Filter Classification in List
+
+        # TODO: Pass all Generated Filters to LLM For Consolidation
+
+        # TODO: Return 2-3 Filters
+
+        pass
+
+    async def _summarize_all(parent_chunks: list[Chunk]):
+        # TODO: Pull in existing filters from the DB
+        MOCK_TOPICS = [
+            # TanStack Query / general data fetching docs
+            "data_fetching",
+            "cache_invalidation",
+            "cache_mutation",
+            "configuration",
+            "pagination",
+            "error_handling",
+            "optimistic_updates",
+            "prefetching",
+            "query_filters",
+            "subscriptions",
+            "devtools",
+            "ssr_hydration",
+            # Source code structural
+            "authentication",
+            "data_transformation",
+            "file_io",
+            "api_client",
+            "middleware",
+            "database_access",
+            "validation",
+            "event_handling",
+            "state_management",
+            "routing",
+            # Meta / navigation — always present
+            "navigation",
+        ]
 
         # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
 
