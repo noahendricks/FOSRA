@@ -8,7 +8,9 @@ type GlobalKeyMap struct {
 	SessionOverlay key.Binding
 	NewSession     key.Binding
 	Quit           key.Binding
-	Help           key.Binding
+
+	// Layout
+	ToggleSidebar key.Binding
 
 	// Focus
 	FocusInput    key.Binding
@@ -25,7 +27,6 @@ type GlobalKeyMap struct {
 	ShowSources key.Binding
 }
 
-// DefaultKeyMap returns sensible defaults.
 var DefaultKeyMap = GlobalKeyMap{
 	SessionOverlay: key.NewBinding(
 		key.WithKeys("ctrl+s"),
@@ -39,17 +40,17 @@ var DefaultKeyMap = GlobalKeyMap{
 		key.WithKeys("ctrl+c", "ctrl+q"),
 		key.WithHelp("ctrl+c", "quit"),
 	),
-	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "help"),
+	ToggleSidebar: key.NewBinding(
+		key.WithKeys("ctrl+b"),
+		key.WithHelp("ctrl+b", "sidebar"),
 	),
 	FocusInput: key.NewBinding(
-		key.WithKeys("i", "tab"),
-		key.WithHelp("i/tab", "focus input"),
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "focus"),
 	),
 	FocusMessages: key.NewBinding(
 		key.WithKeys("esc"),
-		key.WithHelp("esc", "focus messages"),
+		key.WithHelp("esc", "cancel"),
 	),
 	Send: key.NewBinding(
 		key.WithKeys("enter"),
@@ -77,18 +78,21 @@ var DefaultKeyMap = GlobalKeyMap{
 	),
 }
 
-// ShortHelp implements help.KeyMap.
+// ShortHelp returns key bindings for the persistent help bar.
 func (k GlobalKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Send, k.SessionOverlay, k.ToggleRAG, k.Help, k.Quit}
+	return []key.Binding{
+		k.FocusMessages, k.FocusInput, k.SessionOverlay,
+		k.ToggleSidebar, k.ToggleRAG, k.Quit,
+	}
 }
 
-// FullHelp implements help.KeyMap.
+// FullHelp returns all key bindings grouped by category.
 func (k GlobalKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Send, k.FocusInput, k.FocusMessages},
-		{k.SessionOverlay, k.NewSession},
+		{k.SessionOverlay, k.NewSession, k.ToggleSidebar},
 		{k.AttachDoc, k.ToggleRAG, k.ShowSources},
 		{k.ScrollUp, k.ScrollDown},
-		{k.Help, k.Quit},
+		{k.Quit},
 	}
 }

@@ -1,85 +1,121 @@
 package ui
 
 import (
-	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/exp/charmtone"
-	"github.com/roccoluxe/fosra-tui/tui/internal/session"
 )
 
-type TextInput struct {
-	input       textinput.Model
-	session     *session.Session
-	width       int
-	ragEnabled  bool
-	isStreaming bool
+// ChatInput is the multi-line input area at the bottom of the chat.
+// Uses textarea for shift+enter newlines, enter to send.
+type ChatInput struct {
+	Area   textarea.Model
+	styles Styles
+	width  int
 }
 
-func NewTextInput(ragEnabled bool) TextInput {
-	m := textinput.New()
-	m.Placeholder = "Ask anything..."
-	m.Focus()
+func NewChatInput(styles Styles) ChatInput {
+	ta := textarea.New()
+	ta.Placeholder = "Ask anything..."
+	ta.ShowLineNumbers = false
+	ta.SetHeight(InputMinHeight)
+	ta.CharLimit = 0 // no limit
+	ta.Focus()
 
-	return TextInput{
-		input:      m,
-		width:      80,
-		ragEnabled: ragEnabled,
+	// Style the textarea to blend with the input pane
+	s := ta.Styles()
+	s.Focused.Base = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBgAlt)).
+		Foreground(lipgloss.Color(colorFg))
+	s.Blurred.Base = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBgAlt)).
+		Foreground(lipgloss.Color(colorFgDim))
+	s.Focused.Placeholder = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorComment))
+	s.Blurred.Placeholder = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorComment))
+	s.Focused.CursorLine = lipgloss.NewStyle()
+	s.Blurred.CursorLine = lipgloss.NewStyle()
+	s.Cursor.Color = lipgloss.Color(colorCyan)
+	s.Cursor.Blink = true
+	ta.SetStyles(s)
+
+	return ChatInput{
+		Area:   ta,
+		styles: styles,
+		width:  80,
 	}
 }
 
-func (i *TextInput) SetWidth(w int) { i.width = w }
-
-func (i *TextInput) ToggleFocus() {
-	if i.input.Focused() {
-		i.input.Blur()
-	} else {
-		i.input.Focus()
+func (i *ChatInput) SetWidth(w int) {
+	i.width = w
+	// textarea width minus padding and prompt
+	taW := w - 6
+	if taW < 20 {
+		taW = 20
 	}
+	i.Area.SetWidth(taW)
 }
 
-func (i TextInput) View(ragEnabled bool, isStreaming bool) string {
+// Update forwards messages to the textarea.
+func (i *ChatInput) Update(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	i.Area, cmd = i.Area.Update(msg)
+	return cmd
+}
+
+// value returns the current input text.
+func (i *ChatInput) Value() string {
+	return i.Area.Value()
+}
+
+// reset clears the input.
+func (i *ChatInput) Reset() {
+	i.Area.Reset()
+}
+
+func (i *ChatInput) Focus() tea.Cmd {
+	return i.Area.Focus()
+}
+
+func (i *ChatInput) Blur() {
+	i.Area.Blur()
+}
+
+func (i *ChatInput) Focused() bool {
+	return i.Area.Focused()
+}
+
+func (i *ChatInput) View(ragEnabled bool, isStreaming bool) string {
+	// Prompt indicator
 	indicator := "›"
-	indicatorColor := charmtone.Malibu
-
 	if isStreaming {
 		indicator = "…"
-		indicatorColor = charmtone.Sardine
 	}
 
+	prompt := i.styles.InputPrompt.Render(indicator)
+
+	// RAG badge
 	var ragBadge string
 	if ragEnabled {
-		ragBadge = lipgloss.NewStyle().
-			Foreground(charmtone.Damson).
-			Background(charmtone.Malibu).
-			Padding(0, 1).
-			MarginRight(1).
-			Render("RAG")
+		ragBadge = i.styles.InputRAG.Render("RAG") + " "
 	}
 
-	prompt := lipgloss.NewStyle().
-		Foreground(indicatorColor).
-		MarginRight(1).
-		Render(indicator)
-
-	inputContent := i.input.View()
-
-	inner := lipgloss.JoinHorizontal(lipgloss.Center,
+	// compose: RAG badge + prompt + textarea
+	inner := lipgloss.JoinHorizontal(lipgloss.Top,
 		ragBadge,
 		prompt,
-		inputContent,
+		" ",
+		i.Area.View(),
 	)
 
-	outerWidth := i.width - 2
+	// pick style based on focus
+	paneStyle := i.styles.InputPane
+	if i.Area.Focused() {
+		paneStyle = i.styles.InputFocused
+	}
 
-	bar := lipgloss.NewStyle().
-		Background(charmtone.Guppy).
-		Foreground(charmtone.Bengal).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderTop(true).
-		BorderForeground(charmtone.Thunder).
-		Padding(0, 1).
-		Width(outerWidth).
+	return paneStyle.
+		Width(i.width).
 		Render(inner)
-
-	return bar
 }

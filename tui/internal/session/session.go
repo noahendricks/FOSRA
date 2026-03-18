@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"time"
 
 	"charm.land/lipgloss/v2"
@@ -19,34 +20,71 @@ const (
 type Source struct {
 	DocName string
 	Excerpt string
-	Score   float64 // relevance score 0–1
+	Score   float64 // relevance score 0-1
 	Page    int
 	ChunkID string
 }
 
-// Message is a single chat turn.
-type Message struct {
-	ID          string
-	Role        Role
-	Content     string
-	Sources     []Source // populated for assistant messages when RAG is on
-	Timestamp   time.Time
-	IsStreaming bool   // true while the LLM is still writing this message
-	Error       string // non-empty if generation failed
+// ToolCall represents a tool/function invocation by an agent.
+type ToolCall struct {
+	Name   string // e.g. "search_codebase", "read_file"
+	Args   string // human-readable argument summary
+	Output string // tool output content
+	Status string // "running", "done", "error"
 }
 
-// Session is a named conversation.
+// TodoStatus tracks individual task progress.
+type TodoStatus string
+
+const (
+	TodoStatusPending    TodoStatus = "pending"
+	TodoStatusInProgress TodoStatus = "in_progress"
+	TodoStatusDone       TodoStatus = "done"
+)
+
+// TodoItem is a single task in an agent's task list.
+type TodoItem struct {
+	Text   string
+	Status TodoStatus
+}
+
+// message is a single chat turn.
+type Message struct {
+	ID        string
+	Role      Role
+	Content   string
+	Timestamp time.Time
+
+	// Streaming state
+	IsStreaming bool
+	Error       string
+
+	// Rich content blocks (populated by agent/LLM)
+	Sources    []Source   // RAG source citations
+	ToolCalls  []ToolCall // tool invocations with output
+	Todos      []TodoItem // agent task list
+	ThinkingMs int        // thinking duration in ms (0 = not shown)
+}
+
+// session is a named conversation.
 type Session struct {
 	ID         string
 	Title      string
 	Messages   []Message
 	RAGEnabled bool
-	ModelName  string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+
+	// model info
+	ModelName    string
+	Provider     string
+	ContextUsed  float64 // 0-1 fraction of context window used
+	ContextTotal int     // total context tokens
+	Cost         float64 // running cost in dollars
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
-// Manager holds all sessions and tracks the active one.
+// manager holds all sessions and tracks the active one.
 type Manager struct {
 	Sessions []*Session
 	ActiveID string
@@ -67,16 +105,17 @@ var sessionCounter int
 func NewSession(title string) *Session {
 	sessionCounter++
 	return &Session{
-		ID:         time.Now().Format("20060102-150405"),
+		ID:         fmt.Sprintf("%s-%d", time.Now().Format("20060102-150405"), sessionCounter),
 		Title:      title,
 		RAGEnabled: true,
 		ModelName:  "gpt-4o",
+		Provider:   "OpenAI",
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 	}
 }
 
-// Active returns the currently active session, or nil.
+// active returns the currently active session, or nil.
 func (m *Manager) Active() *Session {
 	for _, s := range m.Sessions {
 		if s.ID == m.ActiveID {
@@ -86,13 +125,13 @@ func (m *Manager) Active() *Session {
 	return nil
 }
 
-// Add appends a session and makes it active.
+// add appends a session and makes it active.
 func (m *Manager) Add(s *Session) {
 	m.Sessions = append(m.Sessions, s)
 	m.ActiveID = s.ID
 }
 
-// Switch changes the active session.
+// switch changes the active session.
 func (m *Manager) Switch(id string) {
 	m.ActiveID = id
 }
@@ -116,8 +155,7 @@ func (m *Manager) UpdateLastMessage(msg Message) {
 	s.Messages[len(s.Messages)-1] = msg
 }
 
-// ---- Lipgloss style helpers used in list rendering ----
-
+// style helpers for list rendering.
 var (
 	ActiveDot   = lipgloss.NewStyle().Foreground(lipgloss.Color("#7DCFFF")).Render("●")
 	InactiveDot = lipgloss.NewStyle().Foreground(lipgloss.Color("#414868")).Render("○")

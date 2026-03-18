@@ -5,16 +5,13 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/harmonica"
 )
 
-// ─── Tick message ─────────────────────────────────────────────────────────────
-
 const animFPS = 60
 
-// AnimTickMsg is sent on every animation frame.
 type AnimTickMsg time.Time
 
 func AnimTick() tea.Cmd {
@@ -174,4 +171,46 @@ func indentString(s string, n int) string {
 		lines[i] = pad + l
 	}
 	return strings.Join(lines, "\n")
+}
+
+// SidebarAnim drives the collapsible sidebar width via spring physics.
+type SidebarAnim struct {
+	spring SpringAnim
+	open   bool
+	maxW   int // target width when fully open
+}
+
+func NewSidebarAnim(maxWidth int) SidebarAnim {
+	sa := SidebarAnim{
+		spring: NewSpring(170, 16),
+		open:   true,
+		maxW:   maxWidth,
+	}
+	sa.spring.pos = float64(maxWidth)
+	sa.spring.SetTarget(float64(maxWidth))
+	return sa
+}
+
+func (s *SidebarAnim) Toggle() {
+	s.open = !s.open
+	if s.open {
+		s.spring.SetTarget(float64(s.maxW))
+	} else {
+		s.spring.SetTarget(0)
+	}
+}
+
+func (s *SidebarAnim) IsOpen() bool { return s.open }
+func (s *SidebarAnim) Step()        { s.spring.Step() }
+func (s *SidebarAnim) AtRest() bool { return s.spring.AtRest() }
+
+func (s *SidebarAnim) Width() int {
+	w := int(s.spring.Value() + 0.5)
+	if w < 0 {
+		return 0
+	}
+	if w > s.maxW {
+		return s.maxW
+	}
+	return w
 }

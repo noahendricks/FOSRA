@@ -31,16 +31,28 @@ func (s *Sidebar) SetSources(sources []session.Source) {
 }
 
 func (s *Sidebar) View() string {
+	if s.width < 4 || s.height < 3 {
+		return ""
+	}
+
 	innerW := s.width - 2
+	innerH := s.height - 2
+	if innerH < 1 {
+		innerH = 1
+	}
 
 	title := s.styles.SidebarTitle.
 		Width(innerW).
 		Render("Context")
 
+	sepLen := innerW
+	if sepLen < 0 {
+		sepLen = 0
+	}
 	separator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
 		Width(innerW).
-		Render(strings.Repeat("─", innerW))
+		Render(strings.Repeat("─", sepLen))
 
 	var rows []string
 	rows = append(rows, title)
@@ -69,7 +81,11 @@ func (s *Sidebar) View() string {
 			rows = append(rows, item)
 
 			// Only show up to what fits
-			if i >= s.height-6 {
+			maxItems := innerH - 4
+			if maxItems < 1 {
+				maxItems = 1
+			}
+			if i >= maxItems {
 				more := s.styles.SidebarItem.
 					Foreground(lipgloss.Color(colorComment)).
 					Render(fmt.Sprintf(" +%d more", len(s.sources)-i-1))
@@ -83,7 +99,7 @@ func (s *Sidebar) View() string {
 
 	return s.styles.Sidebar.
 		Width(innerW).
-		Height(s.height - 2).
+		Height(innerH).
 		Render(content)
 }
 
