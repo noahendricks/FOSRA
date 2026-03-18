@@ -36,6 +36,7 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+opencode/
 
 # Unit test / coverage reports
 htmlcov/

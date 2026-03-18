@@ -11,8 +11,6 @@ import (
 )
 
 // ChatPane renders the scrollable message area using a viewport bubble.
-// It supports user, assistant, system messages plus tool calls, thinking
-// indicators, todo lists, code blocks, and streaming tokens.
 type ChatPane struct {
 	styles   Styles
 	viewport viewport.Model
@@ -20,7 +18,6 @@ type ChatPane struct {
 	height   int
 	spinner  Spinner
 
-	// track content so we know when to re-render
 	lastMsgCount int
 	wasStreaming bool
 }
@@ -43,11 +40,10 @@ func NewChatPane(styles Styles) ChatPane {
 func (c *ChatPane) SetSize(w, h int) {
 	c.width = w
 	c.height = h
-	c.viewport.SetWidth(w - 2) // padding
+	c.viewport.SetWidth(w - ChatPadding*2)
 	c.viewport.SetHeight(h)
 }
 
-// update forwards messages to the viewport for scroll/mouse handling.
 func (c *ChatPane) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	c.viewport, cmd = c.viewport.Update(msg)
@@ -55,15 +51,20 @@ func (c *ChatPane) Update(msg tea.Msg) tea.Cmd {
 }
 
 // SetMessages renders all messages into the viewport content.
-// call this whenever messages change (new message, streaming token, etc.).
 func (c *ChatPane) SetMessages(messages []session.Message) {
+	// manage spinner state based on streaming
+	isStreaming := len(messages) > 0 && messages[len(messages)-1].IsStreaming
+	if isStreaming && !c.spinner.Running() {
+		c.spinner.Start()
+	} else if !isStreaming && c.spinner.Running() {
+		c.spinner.Stop()
+	}
+
 	content := c.renderAll(messages)
 	c.viewport.SetContent(content)
 
-	// auto-scroll to bottom on new messages or while streaming
-	isStreaming := len(messages) > 0 && messages[len(messages)-1].IsStreaming
+	// auto-scroll on new messages or while streaming
 	newMessage := len(messages) != c.lastMsgCount
-
 	if newMessage || isStreaming {
 		c.viewport.GotoBottom()
 	}
@@ -84,7 +85,7 @@ func (c *ChatPane) ViewEmpty() string {
 	placeholder := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorComment)).
 		Italic(true).
-		Width(c.width - 4).
+		Width(c.width - ChatPadding*2).
 		Align(lipgloss.Center).
 		AlignVertical(lipgloss.Center).
 		Height(c.height).
@@ -103,9 +104,13 @@ func (c *ChatPane) renderAll(messages []session.Message) string {
 		return ""
 	}
 
-	contentW := c.width - 4
-	var blocks []string
+	// content width with left/right padding (gutter)
+	contentW := c.width - ChatPadding*2 - 2
+	if contentW < 30 {
+		contentW = 30
+	}
 
+	var blocks []string
 	for _, msg := range messages {
 		rendered := c.renderMessage(msg, contentW)
 		blocks = append(blocks, rendered)
@@ -114,31 +119,32 @@ func (c *ChatPane) renderAll(messages []session.Message) string {
 	return strings.Join(blocks, "\n\n")
 }
 
-func (c *ChatPane) renderMessage(msg session.Message, contentW int) string {
+func (c *ChatPane) renderMessage(msg session.Message, w int) string {
 	switch msg.Role {
 	case session.RoleUser:
-		return c.renderUser(msg, contentW)
+		return c.renderUser(msg, w)
 	case session.RoleAssistant:
-		return c.renderAssistant(msg, contentW)
+		return c.renderAssistant(msg, w)
 	case session.RoleSystem:
-		return c.renderSystem(msg, contentW)
+		return c.renderSystem(msg, w)
 	default:
 		return msg.Content
 	}
 }
 
-// ── User message ──────────────────────────────────────────────────────
-
 func (c *ChatPane) renderUser(msg session.Message, w int) string {
-	label := c.styles.MessageUser.Render("you")
-	body := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorFg)).
-		Width(w).
-		Render(msg.Content)
-	return label + "\n" + body
-}
+	// thick purple left border on the body
+	bodyW := w - 3
+	if bodyW < 20 {
+		bodyW = 20
+	}
 
-// ── ASSISTANT MESSAGE ─────────────────────────────────────────────────
+	body := c.styles.UserBlock.
+		Width(bodyW).
+		Render(msg.Content)
+
+	return body
+}
 
 func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
 	var parts []string
@@ -149,10 +155,7 @@ func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
 		return strings.Join(parts, "\n")
 	}
 
-	// label
-	parts = append(parts, c.styles.MessageMeta.Render("assistant"))
-
-	// thinking indicator (shown before content when model is reasoning)
+	// thinking indicator
 	if msg.ThinkingMs > 0 {
 		parts = append(parts, c.renderThinking(msg.ThinkingMs))
 	}
@@ -162,24 +165,28 @@ func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
 		parts = append(parts, c.renderToolCall(tc, w))
 	}
 
+	// todo list (rendered before or after content depending on pipeline stage)
+	if len(msg.Todos) > 0 {
+		parts = append(parts, c.renderTodos(msg.Todos))
+	}
+
 	// main content body
 	if msg.Content != "" {
 		body := c.styles.MessageAI.Width(w).Render(msg.Content)
 		parts = append(parts, body)
 	}
 
-	// streaming cursor
+	// streaming indicator with spinner + blinking cursor
 	if msg.IsStreaming {
-		indicator := c.spinner.View() + " " + c.styles.Streaming.Render("generating...")
+		spinnerView := c.spinner.View()
+		if spinnerView == "" {
+			spinnerView = "⠋" // fallback
+		}
+		indicator := spinnerView + " " + c.styles.Streaming.Render("generating...")
 		parts = append(parts, indicator)
 	}
 
-	// todo list
-	if len(msg.Todos) > 0 {
-		parts = append(parts, c.renderTodos(msg.Todos, w))
-	}
-
-	// source citations
+	// source citations at end
 	if len(msg.Sources) > 0 {
 		parts = append(parts, c.renderSources(msg.Sources))
 	}
@@ -187,41 +194,50 @@ func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
 	return strings.Join(parts, "\n")
 }
 
-// ── SYSTEM MESSAGE ────────────────────────────────────────────────────
+// ── System message ────────────────────────────────────────────────────
 
 func (c *ChatPane) renderSystem(msg session.Message, w int) string {
 	return c.styles.MessageMeta.Width(w).Render("system: " + msg.Content)
 }
 
-// ── TOOL CALL BLOCK ───────────────────────────────────────────────────
-// Renders like:
-//   ✓ Tool  search_codebase
-//   │ Searching for: "auth middleware"
-//   │ Found 3 results
+// ── Tool call block ──────────────────────────────────
+//
+// Renders:
+//   ✱ Grep "pattern" in . (9 matches)
+//   │ matched output lines...
+//
+//   ✓ Read internal/ui/chat.go
+//   │ file content...
+//
+//   $ go build ./...
 
 func (c *ChatPane) renderToolCall(tc session.ToolCall, w int) string {
-	// Status icon
+	// status icon
 	var icon string
 	switch tc.Status {
 	case "done":
 		icon = c.styles.ToolCallCheck.Render("✓")
 	case "error":
 		icon = c.styles.MessageErr.Render("✗")
-	default:
-		icon = c.spinner.View()
+	default: // running
+		sv := c.spinner.View()
+		if sv == "" {
+			sv = c.styles.ToolCallIcon.Render("✱")
+		}
+		icon = sv
 	}
 
-	// header line: icon + "Tool" label + name + args
+	// header: icon + tool name + args
 	header := icon + " " + c.styles.ToolCallHeader.Render(tc.Name)
 	if tc.Args != "" {
-		header += " " + c.styles.ToolCallName.Render(tc.Args)
+		header += " " + c.styles.ToolCallArgs.Render(tc.Args)
 	}
 
 	if tc.Output == "" {
 		return header
 	}
 
-	// Output block with left border
+	// output with left border
 	outputW := w - 6
 	if outputW < 20 {
 		outputW = 20
@@ -234,52 +250,52 @@ func (c *ChatPane) renderToolCall(tc session.ToolCall, w int) string {
 	return header + "\n" + output
 }
 
-// ── THINKING INDICATOR ────────────────────────────────────────────────
+// ── Thinking indicator ────────────────────────────────────────────────
 
 func (c *ChatPane) renderThinking(ms int) string {
 	seconds := float64(ms) / 1000.0
-
-	label := fmt.Sprintf("Thought for %.0fs", seconds)
-	return "  " + c.styles.ThinkingLabel.Render(label)
+	label := fmt.Sprintf("thinking · %.1fs", seconds)
+	return c.styles.ThinkingLabel.Render(label)
 }
 
-// ── TODO / TASK LIST ──────────────────────────────────────────────────
-// renders:
-//   ╭──────────────────────────────╮
-//   │ ✓ Search codebase            │
-//   │ ● Analyze middleware chain   │
-//   │ ○ Summarize findings         │
-//   ╰──────────────────────────────╯
+// ── Todo / task list  ────────────────────
+//
+// Renders:
+//   # Todos
+//   [✓] Search codebase
+//   [●] Analyze middleware chain
+//   [ ] Summarize findings
 
-func (c *ChatPane) renderTodos(todos []session.TodoItem, w int) string {
+func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 	var lines []string
+
+	// header
+	lines = append(lines, c.styles.TodoHeader.Render("# Todos"))
+	lines = append(lines, "")
 
 	for _, t := range todos {
 		var line string
 		switch t.Status {
 		case session.TodoStatusDone:
-			line = c.styles.TodoDone.Render("✓") + " " + c.styles.TodoDone.Render(t.Text)
+			marker := c.styles.TodoDone.Render("[✓]")
+			text := c.styles.TodoDone.Render(t.Text)
+			line = marker + " " + text
 		case session.TodoStatusInProgress:
-			line = c.styles.TodoActive.Render("●") + " " + c.styles.TodoActive.Render(t.Text)
+			marker := c.styles.TodoActive.Render("[●]")
+			text := c.styles.TodoActive.Render(t.Text)
+			line = marker + " " + text
 		default:
-			line = c.styles.TodoPending.Render("○") + " " + c.styles.TodoPending.Render(t.Text)
+			marker := c.styles.TodoPending.Render("[ ]")
+			text := c.styles.TodoPending.Render(t.Text)
+			line = marker + " " + text
 		}
 		lines = append(lines, line)
 	}
 
-	content := strings.Join(lines, "\n")
-
-	todoW := w - 6
-	if todoW < 20 {
-		todoW = 20
-	}
-
-	return c.styles.TodoBlock.
-		Width(todoW).
-		Render(content)
+	return strings.Join(lines, "\n")
 }
 
-// ── SOURCE CITATIONS ──────────────────────────────────────────────────
+// ── Source citations ──────────────────────────────────────────────────
 
 func (c *ChatPane) renderSources(sources []session.Source) string {
 	var chips []string
@@ -288,7 +304,7 @@ func (c *ChatPane) renderSources(sources []session.Source) string {
 		label := src.DocName + " " + c.styles.SourceScore.Render(score)
 		chips = append(chips, c.styles.SourceChip.Render(label))
 	}
-	return "  " + strings.Join(chips, " ")
+	return strings.Join(chips, " ")
 }
 
 // TickSpinner advances the spinner frame. Call from App on AnimTickMsg.

@@ -51,6 +51,7 @@ func (m *ModelBar) renderEmpty() string {
 	diamond := m.styles.ModelDiamond.Render("◆")
 	inner := diamond + " " + m.styles.ModelName.Render("No session")
 	bar := m.styles.ModelBar.Render(inner)
+
 	return lipgloss.Place(m.width, ModelBarHeight, lipgloss.Center, lipgloss.Center, bar,
 		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(lipgloss.Color(colorBg))),
 	)

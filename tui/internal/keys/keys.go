@@ -5,7 +5,8 @@ import "charm.land/bubbles/v2/key"
 // GlobalKeyMap holds all app-level keybindings.
 type GlobalKeyMap struct {
 	// Navigation
-	SessionOverlay key.Binding
+	CommandPalette key.Binding // ctrl+p opens command palette
+	SessionsDirect key.Binding // ctrl+s opens sessions list directly
 	NewSession     key.Binding
 	Quit           key.Binding
 
@@ -28,7 +29,11 @@ type GlobalKeyMap struct {
 }
 
 var DefaultKeyMap = GlobalKeyMap{
-	SessionOverlay: key.NewBinding(
+	CommandPalette: key.NewBinding(
+		key.WithKeys("ctrl+p"),
+		key.WithHelp("ctrl+p", "commands"),
+	),
+	SessionsDirect: key.NewBinding(
 		key.WithKeys("ctrl+s"),
 		key.WithHelp("ctrl+s", "sessions"),
 	),
@@ -58,11 +63,11 @@ var DefaultKeyMap = GlobalKeyMap{
 	),
 	ScrollUp: key.NewBinding(
 		key.WithKeys("up", "k", "pgup"),
-		key.WithHelp("↑/k", "scroll up"),
+		key.WithHelp("up/k", "scroll up"),
 	),
 	ScrollDown: key.NewBinding(
 		key.WithKeys("down", "j", "pgdn"),
-		key.WithHelp("↓/j", "scroll down"),
+		key.WithHelp("down/j", "scroll down"),
 	),
 	AttachDoc: key.NewBinding(
 		key.WithKeys("ctrl+a"),
@@ -81,8 +86,9 @@ var DefaultKeyMap = GlobalKeyMap{
 // ShortHelp returns key bindings for the persistent help bar.
 func (k GlobalKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
-		k.FocusMessages, k.FocusInput, k.SessionOverlay,
-		k.ToggleSidebar, k.ToggleRAG, k.Quit,
+		k.FocusInput, k.ToggleSidebar,
+		k.CommandPalette, k.SessionsDirect,
+		k.ToggleRAG, k.Quit,
 	}
 }
 
@@ -90,7 +96,7 @@ func (k GlobalKeyMap) ShortHelp() []key.Binding {
 func (k GlobalKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Send, k.FocusInput, k.FocusMessages},
-		{k.SessionOverlay, k.NewSession, k.ToggleSidebar},
+		{k.CommandPalette, k.SessionsDirect, k.NewSession, k.ToggleSidebar},
 		{k.AttachDoc, k.ToggleRAG, k.ShowSources},
 		{k.ScrollUp, k.ScrollDown},
 		{k.Quit},

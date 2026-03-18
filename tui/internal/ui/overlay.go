@@ -18,12 +18,12 @@ const (
 
 // Command is a single entry in the command palette.
 type Command struct {
-	Name string // display name
-	Key  string // keybind hint (e.g. "ctrl+n")
-	ID   string // action identifier
+	Name string
+	Key  string
+	ID   string
 }
 
-// DefaultCommands returns the built-in command list.
+// DefaultCommands returns the built-in command list with updated key hints.
 func DefaultCommands() []Command {
 	return []Command{
 		{Name: "Sessions", Key: "ctrl+s", ID: "sessions"},
@@ -36,7 +36,7 @@ func DefaultCommands() []Command {
 }
 
 // CommandPalette is a centered overlay with two views:
-// primary shows commands, secondary shows sessions list.
+// commands list and sessions list.
 type CommandPalette struct {
 	styles   Styles
 	view     OverlayView
@@ -59,20 +59,17 @@ func (p *CommandPalette) SetSize(w, h int) {
 	p.height = h
 }
 
-// Reset puts the palette back to the commands view with cursor at top.
 func (p *CommandPalette) Reset() {
 	p.view = OverlayCommands
 	p.cursor = 0
 	p.filter = ""
 }
 
-// ShowSessions switches the palette to the sessions list.
 func (p *CommandPalette) ShowSessions() {
 	p.view = OverlaySessions
 	p.cursor = 0
 }
 
-// ShowCommands switches back to the commands list.
 func (p *CommandPalette) ShowCommands() {
 	p.view = OverlayCommands
 	p.cursor = 0
@@ -99,7 +96,6 @@ func (p *CommandPalette) CursorDown(n int) {
 
 func (p *CommandPalette) Cursor() int { return p.cursor }
 
-// SelectedCommand returns the command at the current cursor.
 func (p *CommandPalette) SelectedCommand() Command {
 	if p.cursor < 0 || p.cursor >= len(p.commands) {
 		return Command{}
@@ -107,7 +103,6 @@ func (p *CommandPalette) SelectedCommand() Command {
 	return p.commands[p.cursor]
 }
 
-// SelectedSessionID returns the session ID at the cursor position.
 func (p *CommandPalette) SelectedSessionID(sessions []*session.Session) string {
 	if p.cursor < 0 || p.cursor >= len(sessions) {
 		return ""
@@ -115,13 +110,14 @@ func (p *CommandPalette) SelectedSessionID(sessions []*session.Session) string {
 	return sessions[p.cursor].ID
 }
 
-// View renders the overlay content (without positioning - app.go handles that).
+// View renders the overlay content (positioning is handled by app.go).
 func (p *CommandPalette) View(sessions []*session.Session, activeID string) string {
 	boxW := p.width / 3
 	if boxW < 40 {
 		boxW = 40
 	}
-	innerW := boxW - 6 // padding + border
+	// innerW accounts for overlay Padding(1,2) = 4 horizontal + border = 2
+	innerW := boxW - 6
 
 	switch p.view {
 	case OverlaySessions:
@@ -138,35 +134,36 @@ func (p *CommandPalette) renderCommands(boxW, innerW int) string {
 	rows = append(rows, title)
 
 	for i, cmd := range p.commands {
-		name := cmd.Name
 		keyHint := p.styles.CommandKey.Render(cmd.Key)
+		keyW := lipgloss.Width(cmd.Key)
 
-		// Pad name to fill, right-align the key hint
-		nameW := innerW - lipgloss.Width(cmd.Key) - 2
-		if nameW < 10 {
-			nameW = 10
+		// available width for the name: innerW minus key hint minus gap
+		nameW := innerW - keyW - 3
+		if nameW < 8 {
+			nameW = 8
+		}
+
+		name := cmd.Name
+		if len(name) > nameW {
+			name = name[:nameW-1] + "…"
 		}
 		padded := fmt.Sprintf("%-*s", nameW, name)
 
-		line := padded + " " + keyHint
+		line := " " + padded + " " + keyHint
 
-		style := p.styles.CommandItem
 		if i == p.cursor {
-			style = p.styles.SessionActive
+			rows = append(rows, p.styles.SessionActive.Render(line))
+		} else {
+			rows = append(rows, p.styles.CommandItem.Render(line))
 		}
-		rows = append(rows, style.Width(innerW).Render(line))
 	}
 
-	// navigation hint at bottom
-	hint := p.styles.HelpDesc.Render("↑↓ navigate · enter select · esc close")
+	hint := p.styles.HelpDesc.Render("  ↑↓ navigate · enter select · esc close")
 	rows = append(rows, "")
 	rows = append(rows, hint)
 
 	content := strings.Join(rows, "\n")
-
-	return p.styles.Overlay.
-		Width(boxW).
-		Render(content)
+	return p.styles.Overlay.Width(boxW).Render(content)
 }
 
 func (p *CommandPalette) renderSessions(sessions []*session.Session, activeID string, boxW, innerW int) string {
@@ -179,37 +176,32 @@ func (p *CommandPalette) renderSessions(sessions []*session.Session, activeID st
 		empty := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorComment)).
 			Italic(true).
-			Render("No sessions")
+			Render("  No sessions")
 		rows = append(rows, empty)
 	} else {
 		for i, sess := range sessions {
-			// Active dot indicator
 			dot := session.InactiveDot
 			if sess.ID == activeID {
 				dot = session.ActiveDot
 			}
 
 			name := truncate(sess.Title, innerW-6)
-			line := dot + " " + name
+			line := " " + dot + " " + name
 
-			style := p.styles.SessionItem
 			if i == p.cursor {
-				style = p.styles.SessionActive
+				rows = append(rows, p.styles.SessionActive.Render(line))
+			} else {
+				rows = append(rows, p.styles.SessionItem.Render(line))
 			}
-			rows = append(rows, style.Width(innerW).Render(line))
 		}
 	}
 
-	// NAVIGATION HINT
-	hint := p.styles.HelpDesc.Render("↑↓ navigate · enter select · backspace back · esc close")
+	hint := p.styles.HelpDesc.Render("  ↑↓ navigate · enter select · backspace back · esc close")
 	rows = append(rows, "")
 	rows = append(rows, hint)
 
 	content := strings.Join(rows, "\n")
-
-	return p.styles.Overlay.
-		Width(boxW).
-		Render(content)
+	return p.styles.Overlay.Width(boxW).Render(content)
 }
 
 func truncate(s string, n int) string {

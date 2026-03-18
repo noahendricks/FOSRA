@@ -57,8 +57,9 @@ func NewSpinner(style lipgloss.Style) Spinner {
 	return Spinner{style: style}
 }
 
-func (s *Spinner) Start() { s.running = true }
-func (s *Spinner) Stop()  { s.running = false; s.frame = 0 }
+func (s *Spinner) Start()        { s.running = true }
+func (s *Spinner) Stop()         { s.running = false; s.frame = 0 }
+func (s *Spinner) Running() bool { return s.running }
 
 func (s *Spinner) Tick() {
 	if s.running {
@@ -72,6 +73,8 @@ func (s Spinner) View() string {
 	}
 	return s.style.Render(spinnerFrames[s.frame])
 }
+
+// ── Blink cursor (used for streaming text cursor) ────────────────────
 
 type BlinkCursor struct {
 	visible bool
@@ -98,40 +101,7 @@ func (c BlinkCursor) View() string {
 	return " "
 }
 
-type OverlayAnim struct {
-	spring SpringAnim
-	open   bool
-}
-
-func NewOverlayAnim() OverlayAnim {
-	return OverlayAnim{
-		spring: NewSpring(180, 18),
-	}
-}
-
-func (o *OverlayAnim) Open() {
-	o.open = true
-	o.spring.SetTarget(1.0)
-}
-
-func (o *OverlayAnim) Close() {
-	o.open = false
-	o.spring.SetTarget(0.0)
-}
-
-func (o *OverlayAnim) Toggle() {
-	if o.open {
-		o.Close()
-	} else {
-		o.Open()
-	}
-}
-
-func (o *OverlayAnim) Step() { o.spring.Step() }
-
-func (o *OverlayAnim) Progress() float64 { return o.spring.Value() }
-func (o *OverlayAnim) IsOpen() bool      { return o.open }
-func (o *OverlayAnim) AtRest() bool      { return o.spring.AtRest() }
+// ── Message reveal (spring-based slide-in for new messages) ──────────
 
 type MessageReveal struct {
 	spring SpringAnim
@@ -156,10 +126,48 @@ func (m *MessageReveal) Step() {
 	}
 }
 
+func (m *MessageReveal) Active() bool { return m.active }
+
 func (m *MessageReveal) Offset(width int) int {
-	shifted := int(float64(width) * (1.0 - m.spring.Value()))
-	return shifted
+	return int(float64(width) * (1.0 - m.spring.Value()))
 }
+
+// ── Sidebar toggle (instant, no animation) ───────────────────────────
+
+type SidebarToggle struct {
+	open bool
+	maxW int
+}
+
+func NewSidebarToggle(maxWidth int) SidebarToggle {
+	return SidebarToggle{open: true, maxW: maxWidth}
+}
+
+func (s *SidebarToggle) Toggle()      { s.open = !s.open }
+func (s *SidebarToggle) IsOpen() bool { return s.open }
+
+func (s *SidebarToggle) Width() int {
+	if s.open {
+		return s.maxW
+	}
+	return 0
+}
+
+// ── Overlay toggle (instant, no animation) ───────────────────────────
+
+type OverlayToggle struct {
+	open bool
+}
+
+func NewOverlayToggle() OverlayToggle {
+	return OverlayToggle{}
+}
+
+func (o *OverlayToggle) Open()        { o.open = true }
+func (o *OverlayToggle) Close()       { o.open = false }
+func (o *OverlayToggle) IsOpen() bool { return o.open }
+
+// ── Helpers ──────────────────────────────────────────────────────────
 
 func indentString(s string, n int) string {
 	if n <= 0 {
@@ -171,46 +179,4 @@ func indentString(s string, n int) string {
 		lines[i] = pad + l
 	}
 	return strings.Join(lines, "\n")
-}
-
-// SidebarAnim drives the collapsible sidebar width via spring physics.
-type SidebarAnim struct {
-	spring SpringAnim
-	open   bool
-	maxW   int // target width when fully open
-}
-
-func NewSidebarAnim(maxWidth int) SidebarAnim {
-	sa := SidebarAnim{
-		spring: NewSpring(170, 16),
-		open:   true,
-		maxW:   maxWidth,
-	}
-	sa.spring.pos = float64(maxWidth)
-	sa.spring.SetTarget(float64(maxWidth))
-	return sa
-}
-
-func (s *SidebarAnim) Toggle() {
-	s.open = !s.open
-	if s.open {
-		s.spring.SetTarget(float64(s.maxW))
-	} else {
-		s.spring.SetTarget(0)
-	}
-}
-
-func (s *SidebarAnim) IsOpen() bool { return s.open }
-func (s *SidebarAnim) Step()        { s.spring.Step() }
-func (s *SidebarAnim) AtRest() bool { return s.spring.AtRest() }
-
-func (s *SidebarAnim) Width() int {
-	w := int(s.spring.Value() + 0.5)
-	if w < 0 {
-		return 0
-	}
-	if w > s.maxW {
-		return s.maxW
-	}
-	return w
 }

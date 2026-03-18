@@ -21,10 +21,8 @@ type App struct {
 
 	// state
 	sessions     *session.Manager
-	sidebarAnim  SidebarAnim
-	overlayAnim  OverlayAnim
-	animRunning  bool
-	overlayOpen  bool
+	sidebarAnim  SidebarToggle
+	overlayAnim  OverlayToggle
 	windowWidth  int
 	windowHeight int
 }
@@ -42,8 +40,8 @@ func NewApp() App {
 		helpBar:     NewHelpBar(styles),
 		palette:     NewCommandPalette(styles),
 		sessions:    mgr,
-		sidebarAnim: NewSidebarAnim(SidebarWidth),
-		overlayAnim: NewOverlayAnim(),
+		sidebarAnim: NewSidebarToggle(SidebarWidth),
+		overlayAnim: NewOverlayToggle(),
 	}
 }
 
@@ -66,18 +64,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AnimTickMsg:
 		return a.handleAnimTick()
 
+	case mockPipelineStep:
+		return a.handleMockStep(msg.step)
+
+	case mockStreamChunk:
+		return a.handleMockStream(msg)
+
 	case tea.KeyPressMsg:
 		if cmd := a.handleKey(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 		// if overlay is open, don't forward keys to input/chat
-		if a.overlayOpen {
+		if a.overlayAnim.IsOpen() {
 			return a, tea.Batch(cmds...)
 		}
 	}
 
 	// forward to input
-	if !a.overlayOpen {
+	if !a.overlayAnim.IsOpen() {
 		cmds = append(cmds, a.input.Update(msg))
 	}
 
@@ -92,7 +96,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	km := keys.DefaultKeyMap
 
 	// overlay-specific keys when open
-	if a.overlayOpen {
+	if a.overlayAnim.IsOpen() {
 		switch {
 		case key.Matches(msg, km.FocusMessages): // esc = close overlay
 			a.closeOverlay()
@@ -118,12 +122,16 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, km.Quit):
 		return tea.Quit
-	case key.Matches(msg, km.SessionOverlay):
+	case key.Matches(msg, km.CommandPalette):
 		a.openOverlay()
+		return nil
+	case key.Matches(msg, km.SessionsDirect):
+		a.openOverlay()
+		a.palette.ShowSessions()
 		return nil
 	case key.Matches(msg, km.ToggleSidebar):
 		a.sidebarAnim.Toggle()
-		a.startAnim()
+		a.relayout()
 		return nil
 	case key.Matches(msg, km.NewSession):
 		s := session.NewSession("New conversation")
@@ -153,17 +161,13 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (a *App) openOverlay() {
-	a.overlayOpen = true
 	a.overlayAnim.Open()
 	a.palette.Reset()
 	a.input.Blur()
-	a.startAnim()
 }
 
 func (a *App) closeOverlay() {
-	a.overlayOpen = false
 	a.overlayAnim.Close()
-	a.startAnim()
 }
 
 func (a *App) paletteUp() {
@@ -199,7 +203,7 @@ func (a *App) paletteSelect() tea.Cmd {
 		case "toggle_sidebar":
 			a.sidebarAnim.Toggle()
 			a.closeOverlay()
-			a.startAnim()
+			a.relayout()
 		case "toggle_rag":
 			if s := a.sessions.Active(); s != nil {
 				s.RAGEnabled = !s.RAGEnabled
@@ -233,7 +237,9 @@ func (a *App) sendMessage() tea.Cmd {
 	})
 	a.input.Reset()
 	a.syncSession()
-	return nil
+
+	// kick off mock pipeline to demonstrate the rendering
+	return StartMockPipeline()
 }
 
 // syncSession updates the chat pane with current session messages.
@@ -245,26 +251,8 @@ func (a *App) syncSession() {
 	a.chat.SetMessages(s.Messages)
 }
 
-func (a *App) startAnim() {
-	a.animRunning = true
-}
-
 func (a *App) handleAnimTick() (tea.Model, tea.Cmd) {
-	// Step all active animations
-	a.sidebarAnim.Step()
-	a.overlayAnim.Step()
 	a.chat.TickSpinner()
-
-	// Relayout with animated sidebar width
-	a.relayout()
-
-	// Check if all animations are at rest
-	allRest := a.sidebarAnim.AtRest() && a.overlayAnim.AtRest()
-	if allRest && !a.animRunning {
-		// Don't stop the tick - spinner always needs it
-	}
-	a.animRunning = !allRest
-
 	return a, AnimTick()
 }
 
@@ -276,8 +264,8 @@ func (a *App) relayout() {
 		chatColW = 20
 	}
 
-	// heights: modelbar + chat + input + helpbar
-	chatH := a.windowHeight - ModelBarHeight - InputMinHeight - HelpBarHeight
+	// heights: modelbar + chat + input (with top border) + helpbar
+	chatH := a.windowHeight - ModelBarHeight - InputTotalHeight - HelpBarHeight
 	if chatH < 4 {
 		chatH = 4
 	}
@@ -316,7 +304,7 @@ func (a App) View() tea.View {
 		inputView,
 	)
 
-	// ── Right column: sidebar (animated width) ──
+	// ── Right column: sidebar ──
 	sidebarW := a.sidebarAnim.Width()
 	var layout string
 	if sidebarW > 0 {
@@ -337,29 +325,25 @@ func (a App) View() tea.View {
 		Render(fullLayout)
 
 	// ── Overlay (compositor layer) ──
-	if a.overlayOpen || !a.overlayAnim.AtRest() {
-		progress := a.overlayAnim.Progress()
-		if progress > 0.01 {
-			overlayContent := a.palette.View(a.sessions.Sessions, a.sessions.ActiveID)
+	if a.overlayAnim.IsOpen() {
+		overlayContent := a.palette.View(a.sessions.Sessions, a.sessions.ActiveID)
 
-			// Center the overlay
-			overlayW := lipgloss.Width(overlayContent)
-			overlayH := lipgloss.Height(overlayContent)
-			ox := (a.windowWidth - overlayW) / 2
-			oy := (a.windowHeight-overlayH)/2 - int(float64(3)*(1.0-progress))
+		overlayW := lipgloss.Width(overlayContent)
+		overlayH := lipgloss.Height(overlayContent)
+		ox := (a.windowWidth - overlayW) / 2
+		oy := (a.windowHeight - overlayH) / 2
 
-			baseLayer := lipgloss.NewLayer(fullScreen)
-			overlayLayer := lipgloss.NewLayer(overlayContent).
-				X(ox).
-				Y(oy).
-				Z(1)
+		baseLayer := lipgloss.NewLayer(fullScreen)
+		overlayLayer := lipgloss.NewLayer(overlayContent).
+			X(ox).
+			Y(oy).
+			Z(1)
 
-			comp := lipgloss.NewCompositor(baseLayer, overlayLayer)
-			v := tea.NewView(comp.Render())
-			v.AltScreen = true
-			v.MouseMode = tea.MouseModeCellMotion
-			return v
-		}
+		comp := lipgloss.NewCompositor(baseLayer, overlayLayer)
+		v := tea.NewView(comp.Render())
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
 	}
 
 	v := tea.NewView(fullScreen)
