@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/roccoluxe/fosra-tui/tui/internal/session"
 )
 
-// StatusBar renders the bottom status line.
 type StatusBar struct {
 	styles Styles
 	width  int
@@ -25,18 +24,18 @@ func (sb StatusBar) View(sess *session.Session, ragEnabled bool, isStreaming boo
 		return sb.styles.StatusBar.Width(sb.width).Render(" No active session")
 	}
 
-	// Left section: session title + model
+	// left section: session title + model
 	title := truncate(sess.Title, 30)
 	model := sess.ModelName
 	left := sb.styles.StatusItem.Render(fmt.Sprintf(" %s  %s", title, model))
 
-	// Center: streaming indicator
+	// center: streaming indicator
 	center := ""
 	if isStreaming {
 		center = sb.styles.Streaming.Render(" generating…")
 	}
 
-	// Right section: RAG toggle + message count
+	// right section: RAG toggle + message count
 	var ragBadge string
 	if ragEnabled {
 		ragBadge = sb.styles.StatusRAGOn.Render("RAG ✓")
@@ -46,7 +45,7 @@ func (sb StatusBar) View(sess *session.Session, ragEnabled bool, isStreaming boo
 	msgCount := fmt.Sprintf("%d msgs", len(sess.Messages))
 	right := sb.styles.StatusItem.Render(ragBadge + "  " + msgCount + " ")
 
-	// Layout: left + spacer + center + spacer + right
+	// layout: left + spacer + center + spacer + right
 	leftW := lipgloss.Width(left)
 	rightW := lipgloss.Width(right)
 	centerW := lipgloss.Width(center)

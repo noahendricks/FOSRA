@@ -3,20 +3,17 @@ package ui
 import (
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/roccoluxe/fosra-tui/tui/internal/session"
 )
 
-// ChatPane renders the scrollable message history.
 type ChatPane struct {
 	styles    Styles
 	width     int
 	height    int
-	scrollPos int // number of lines scrolled from bottom
+	scrollPos int
 
-	// Animation state per message (indexed by message slice position)
 	reveals []MessageReveal
 	cursor  BlinkCursor
 	spinner Spinner
@@ -27,6 +24,8 @@ func NewChatPane(styles Styles) ChatPane {
 		styles:  styles,
 		cursor:  NewBlinkCursor(20),
 		spinner: NewSpinner(styles.Spinner),
+		width:   0,
+		height:  0,
 	}
 }
 
@@ -35,33 +34,16 @@ func (c *ChatPane) SetSize(w, h int) {
 	c.height = h
 }
 
-// OnNewMessage prepares a reveal animation for the newest message.
-func (c *ChatPane) OnNewMessage(count int) {
-	for len(c.reveals) < count {
-		rev := NewMessageReveal()
-		rev.Trigger()
-		c.reveals = append(c.reveals, rev)
-	}
-}
-
-// Step advances all animations one frame.
-func (c *ChatPane) Step() {
-	for i := range c.reveals {
-		c.reveals[i].Step()
-	}
-	c.cursor.Tick()
-	c.spinner.Tick()
-}
-
 func (c *ChatPane) ScrollUp() { c.scrollPos++ }
+
 func (c *ChatPane) ScrollDown() {
 	if c.scrollPos > 0 {
 		c.scrollPos--
 	}
 }
+
 func (c *ChatPane) ScrollToBottom() { c.scrollPos = 0 }
 
-// View renders all messages.
 func (c *ChatPane) View(messages []session.Message) string {
 	if len(messages) == 0 {
 		placeholder := lipgloss.NewStyle().
@@ -71,21 +53,21 @@ func (c *ChatPane) View(messages []session.Message) string {
 			Align(lipgloss.Center).
 			MarginTop(c.height / 3).
 			Render("No messages yet. Start a conversation ↓")
-		return c.styles.ChatPane.Width(c.width - 2).Height(c.height - 2).Render(placeholder)
+		return c.styles.ChatPane.Width(c.width - 2).Height(c.height).Render(placeholder)
 	}
 
 	var lines []string
+
 	for i, msg := range messages {
 		rendered := c.renderMessage(msg, i)
 		lines = append(lines, rendered)
-		lines = append(lines, "") // spacer
+		lines = append(lines, "")
 	}
 
 	content := strings.Join(lines, "\n")
 
-	// Clip to height with scroll offset
 	allLines := strings.Split(content, "\n")
-	visible := c.height - 4 // account for border + padding
+	visible := c.height - 4
 	total := len(allLines)
 
 	start := total - visible - c.scrollPos
@@ -106,76 +88,59 @@ func (c *ChatPane) View(messages []session.Message) string {
 }
 
 func (c *ChatPane) renderMessage(msg session.Message, idx int) string {
-	innerWidth := c.width - 6
-
-	var b strings.Builder
+	contentW := c.width - 6
 
 	switch msg.Role {
 	case session.RoleUser:
-		b.WriteString(c.styles.MessageUser.Render("  you"))
+		return c.renderUserBubble(msg.Content, contentW)
+
 	case session.RoleAssistant:
-		b.WriteString(c.styles.MessageAI.Render("  ai"))
-		if c.spinner.running && idx == len(c.reveals)-1 {
-			b.WriteString(" " + c.spinner.View())
+		var parts []string
+
+		if msg.Error != "" {
+			errLine := c.styles.MessageErr.Render("Error: " + msg.Error)
+			parts = append(parts, errLine)
+			return strings.Join(parts, "\n")
 		}
-	case session.RoleSystem:
-		b.WriteString(c.styles.MessageMeta.Render("  sys"))
-	}
 
-	// Timestamp
-	b.WriteString("  ")
-	b.WriteString(c.styles.MessageMeta.Render(msg.Timestamp.Format(time.Kitchen)))
-	b.WriteString("\n")
+		label := c.styles.MessageMeta.Render("assistant")
+		parts = append(parts, label)
 
-	// Content
-	if msg.Error != "" {
-		b.WriteString(c.styles.MessageErr.Width(innerWidth).Render("⚠ " + msg.Error))
-	} else {
-		content := msg.Content
+		body := c.styles.MessageAI.
+			Width(contentW).
+			Render(msg.Content)
+		parts = append(parts, body)
+
 		if msg.IsStreaming {
-			content += c.cursor.View()
+			indicator := c.styles.Streaming.Render("generating...")
+			parts = append(parts, indicator)
 		}
-		switch msg.Role {
-		case session.RoleUser:
-			b.WriteString(c.renderUserBubble(content, innerWidth))
-		default:
-			b.WriteString(c.styles.MessageAI.Width(innerWidth).Render(content))
+
+		if len(msg.Sources) > 0 {
+			parts = append(parts, c.renderSources(msg.Sources))
 		}
+
+		return strings.Join(parts, "\n")
+
+	case session.RoleSystem:
+		return c.styles.MessageMeta.
+			Width(contentW).
+			Render("system: " + msg.Content)
+
+	default:
+		return msg.Content
 	}
-
-	// RAG sources
-	if len(msg.Sources) > 0 {
-		b.WriteString("\n")
-		b.WriteString(c.renderSources(msg.Sources))
-	}
-
-	rendered := b.String()
-
-	// Apply reveal animation (indent slides in from left)
-	if idx < len(c.reveals) && c.reveals[idx].active {
-		offset := c.reveals[idx].Offset(innerWidth)
-		rendered = indentString(rendered, offset)
-	}
-
-	return rendered
 }
 
 func (c *ChatPane) renderUserBubble(content string, width int) string {
-	bubbleWidth := min(width*3/4, len(content)+4)
-	bubble := lipgloss.NewStyle().
+	label := c.styles.MessageUser.Render("you")
+
+	body := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorFg)).
-		Background(lipgloss.Color(colorBgHighlight)).
-		Padding(0, 1).
-		Width(bubbleWidth).
-		Align(lipgloss.Right).
+		Width(width).
 		Render(content)
 
-	// Right-align by padding left
-	pad := width - lipgloss.Width(bubble)
-	if pad < 0 {
-		pad = 0
-	}
-	return strings.Repeat(" ", pad) + bubble
+	return label + "\n" + body
 }
 
 func (c *ChatPane) renderSources(sources []session.Source) string {

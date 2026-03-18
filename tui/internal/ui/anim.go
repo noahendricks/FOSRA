@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/harmonica"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // ─── Tick message ─────────────────────────────────────────────────────────────
@@ -23,10 +23,6 @@ func AnimTick() tea.Cmd {
 	})
 }
 
-// ─── Spring animator ──────────────────────────────────────────────────────────
-
-// SpringAnim tracks a single spring-animated float value.
-// Use it for smooth slide-in/out, opacity fades, scale effects, etc.
 type SpringAnim struct {
 	spring   harmonica.Spring
 	pos      float64
@@ -40,28 +36,20 @@ func NewSpring(stiffness, damping float64) SpringAnim {
 	}
 }
 
-// SetTarget moves the spring toward a new value.
 func (a *SpringAnim) SetTarget(t float64) { a.target = t }
 
-// Step advances the spring one frame.
 func (a *SpringAnim) Step() {
 	a.pos, a.velocity = a.spring.Update(a.pos, a.velocity, a.target)
 }
 
-// Value returns the current animated position.
 func (a *SpringAnim) Value() float64 { return a.pos }
 
-// AtRest returns true when the spring has settled.
 func (a *SpringAnim) AtRest() bool {
 	return math.Abs(a.pos-a.target) < 0.01 && math.Abs(a.velocity) < 0.01
 }
 
-// ─── Spinner ──────────────────────────────────────────────────────────────────
-
-// Frames for the thinking spinner.
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-// Spinner tracks a braille animation for streaming / loading states.
 type Spinner struct {
 	frame   int
 	running bool
@@ -81,7 +69,6 @@ func (s *Spinner) Tick() {
 	}
 }
 
-// View renders the spinner, or empty string when stopped.
 func (s Spinner) View() string {
 	if !s.running {
 		return ""
@@ -89,13 +76,10 @@ func (s Spinner) View() string {
 	return s.style.Render(spinnerFrames[s.frame])
 }
 
-// ─── Typing cursor ────────────────────────────────────────────────────────────
-
-// BlinkCursor renders a blinking block cursor appended to streaming text.
 type BlinkCursor struct {
 	visible bool
 	ticks   int
-	rate    int // blink every N ticks
+	rate    int
 }
 
 func NewBlinkCursor(rateFrames int) BlinkCursor {
@@ -117,9 +101,6 @@ func (c BlinkCursor) View() string {
 	return " "
 }
 
-// ─── Overlay slide spring ─────────────────────────────────────────────────────
-
-// OverlayAnim drives the vertical slide-in of the session overlay.
 type OverlayAnim struct {
 	spring SpringAnim
 	open   bool
@@ -127,7 +108,6 @@ type OverlayAnim struct {
 
 func NewOverlayAnim() OverlayAnim {
 	return OverlayAnim{
-		// stiff spring with moderate damping → snappy slide
 		spring: NewSpring(180, 18),
 	}
 }
@@ -152,14 +132,10 @@ func (o *OverlayAnim) Toggle() {
 
 func (o *OverlayAnim) Step() { o.spring.Step() }
 
-// Progress returns 0→1 slide progress.
 func (o *OverlayAnim) Progress() float64 { return o.spring.Value() }
 func (o *OverlayAnim) IsOpen() bool      { return o.open }
 func (o *OverlayAnim) AtRest() bool      { return o.spring.AtRest() }
 
-// ─── Message reveal animation ─────────────────────────────────────────────────
-
-// MessageReveal animates a new message sliding in via spring.
 type MessageReveal struct {
 	spring SpringAnim
 	active bool
@@ -183,14 +159,10 @@ func (m *MessageReveal) Step() {
 	}
 }
 
-// Offset returns how many characters to shift/clip for the reveal effect.
-// Use this as a left-margin or opacity approximation in terminal rendering.
 func (m *MessageReveal) Offset(width int) int {
 	shifted := int(float64(width) * (1.0 - m.spring.Value()))
 	return shifted
 }
-
-// ─── Utility: indent string by N spaces ──────────────────────────────────────
 
 func indentString(s string, n int) string {
 	if n <= 0 {

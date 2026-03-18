@@ -3,7 +3,7 @@ package session
 import (
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Role identifies who sent a message.

@@ -1,8 +1,16 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"charm.land/lipgloss/v2"
+)
 
-// Tokyo-Night-inspired palette
+const (
+	SidebarWidth       = 30
+	HeaderHeight       = 3
+	InputHeight        = 3
+	MinWidthForSidebar = 80
+)
+
 const (
 	colorBg          = "#1a1b26"
 	colorBgAlt       = "#16161e"
@@ -22,14 +30,16 @@ const (
 	colorTeal        = "#1abc9c"
 )
 
-// Styles groups all lipgloss styles used throughout the app.
 type Styles struct {
 	// App shell
-	App          lipgloss.Style
-	StatusBar    lipgloss.Style
-	StatusItem   lipgloss.Style
-	StatusRAGOn  lipgloss.Style
-	StatusRAGOff lipgloss.Style
+	App        lipgloss.Style
+	StatusBar  lipgloss.Style
+	StatusItem lipgloss.Style
+
+	// Header
+	Header    lipgloss.Style
+	Badge     lipgloss.Style
+	ModelInfo lipgloss.Style
 
 	// Chat pane
 	ChatPane    lipgloss.Style
@@ -48,11 +58,20 @@ type Styles struct {
 	InputBox     lipgloss.Style
 	InputFocused lipgloss.Style
 
+	// Sidebar
+	Sidebar      lipgloss.Style
+	SidebarTitle lipgloss.Style
+	SidebarItem  lipgloss.Style
+
 	// Session overlay
-	OverlayBg     lipgloss.Style
+	Overlay       lipgloss.Style
 	OverlayTitle  lipgloss.Style
 	SessionItem   lipgloss.Style
 	SessionActive lipgloss.Style
+
+	// RAG status
+	StatusRAGOn  lipgloss.Style
+	StatusRAGOff lipgloss.Style
 
 	// Help bar
 	HelpKey  lipgloss.Style
@@ -61,37 +80,38 @@ type Styles struct {
 
 	// Misc
 	Spinner lipgloss.Style
-	Badge   lipgloss.Style
 }
 
 func NewStyles() Styles {
 	s := Styles{}
 
+	// ── App shell ──────────────────────────────────────────────
 	s.App = lipgloss.NewStyle().
 		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorFg))
 
-	s.StatusBar = lipgloss.NewStyle().
+	// ── Header ─────────────────────────────────────────────────
+	s.Header = lipgloss.NewStyle().
 		Background(lipgloss.Color(colorBgAlt)).
 		Foreground(lipgloss.Color(colorFgDim)).
 		Padding(0, 1)
 
-	s.StatusItem = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorFgDim)).
-		Padding(0, 1)
-
-	s.StatusRAGOn = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorGreen)).
+	s.Badge = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorBgAlt)).
+		Background(lipgloss.Color(colorBlue)).
+		Padding(0, 1).
 		Bold(true)
 
-	s.StatusRAGOff = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorComment))
+	s.ModelInfo = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorFgDim)).
+		Background(lipgloss.Color(colorBgHighlight)).
+		Padding(0, 2).
+		MarginLeft(1)
 
-	// Chat
+	// ── Chat ───────────────────────────────────────────────────
 	s.ChatPane = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(colorBorder)).
-		Padding(0, 1)
+		BorderForeground(lipgloss.Color(colorBorder))
 
 	s.MessageUser = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBlue)).
@@ -111,7 +131,7 @@ func NewStyles() Styles {
 	s.Streaming = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorCyan))
 
-	// Sources
+	// ── Sources ────────────────────────────────────────────────
 	s.SourceChip = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBgAlt)).
 		Background(lipgloss.Color(colorPurple)).
@@ -122,19 +142,34 @@ func NewStyles() Styles {
 	s.SourceScore = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorYellow))
 
-	// Input
+	// ── Input ──────────────────────────────────────────────────
 	s.InputPane = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(colorBorder)).
-		Padding(0, 1)
+		BorderForeground(lipgloss.Color(colorBorder))
 
 	s.InputFocused = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(colorBlue)).
 		Padding(0, 1)
 
-	// Session overlay
-	s.OverlayBg = lipgloss.NewStyle().
+	// ── Sidebar ────────────────────────────────────────────────
+	s.Sidebar = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBgAlt)).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(colorBorder))
+
+	s.SidebarTitle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorPurple)).
+		Bold(true).
+		MarginBottom(1).
+		Padding(0, 1)
+
+	s.SidebarItem = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorFgDim)).
+		Padding(0, 1)
+
+	// ── Session overlay ────────────────────────────────────────
+	s.Overlay = lipgloss.NewStyle().
 		Background(lipgloss.Color(colorBgAlt)).
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(colorPurple)).
@@ -155,7 +190,25 @@ func NewStyles() Styles {
 		Padding(0, 1).
 		Bold(true)
 
-	// Help
+	// ── Status bar ─────────────────────────────────────────────
+	s.StatusBar = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBgAlt)).
+		Foreground(lipgloss.Color(colorFgDim)).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderBottom(true).
+		BorderForeground(lipgloss.Color(colorBorder))
+
+	s.StatusItem = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorFgDim))
+
+	s.StatusRAGOn = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorGreen)).
+		Bold(true)
+
+	s.StatusRAGOff = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorComment))
+
+	// ── Help ───────────────────────────────────────────────────
 	s.HelpKey = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBlue))
 
@@ -165,15 +218,9 @@ func NewStyles() Styles {
 	s.HelpSep = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder))
 
-	// Misc
+	// ── Misc ───────────────────────────────────────────────────
 	s.Spinner = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorCyan))
-
-	s.Badge = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorBgAlt)).
-		Background(lipgloss.Color(colorBlue)).
-		Padding(0, 1).
-		Bold(true)
 
 	return s
 }
