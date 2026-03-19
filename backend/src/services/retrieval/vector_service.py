@@ -131,7 +131,6 @@ class VectorService:
     async def upsert(
         config: VectorStoreConfig, embed_config: EmbedderConfig, chunks: list[Chunk]
     ) -> list[models.PointStruct] | None:
-        #  Config [holds preferred and all user config for each -- if a user changes any field it updates on their pref JSONB field]
         store = VectorService._get_store(config, embed_config)
 
         logger.debug(f"store type: {type(store)}")

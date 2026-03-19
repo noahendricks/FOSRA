@@ -4,10 +4,11 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/roccoluxe/fosra-tui/tui/internal/session"
 )
 
 // ChatInput is the multi-line input area at the bottom of the chat.
+// It renders just the prompt + textarea content; the surrounding border
+// is drawn by the inputContainer in app.go.
 type ChatInput struct {
 	Area   textarea.Model
 	styles Styles
@@ -56,13 +57,13 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 	return ta
 }
 
-func (i *ChatInput) SetWidth(w int) {
+// SetSize sets both the outer width and height for the input.
+// The textarea width is reduced by 3 to account for the ">" prompt
+// (1 char left-pad + 1 char ">" + 1 char space).
+func (i *ChatInput) SetSize(w, h int) {
 	i.width = w
-	i.Area.SetWidth(max(1, w-2))
-}
-
-func (i *ChatInput) SetHeight(h int) {
 	i.height = max(InputMinHeight, h)
+	i.Area.SetWidth(max(1, w-3))
 	i.Area.SetHeight(i.height)
 }
 
@@ -94,17 +95,11 @@ func (i *ChatInput) Focused() bool {
 	return i.Area.Focused()
 }
 
-func (i *ChatInput) View(_ *session.Session) string {
-	if i.height > 1 {
-		i.Area.SetHeight(i.height)
-	}
+// View renders the prompt + textarea content. No border — the container
+// in app.go handles that.
+func (i *ChatInput) View() string {
 	prompt := i.styles.InputPrompt.Render(">")
-	inner := lipgloss.JoinHorizontal(lipgloss.Top, prompt, i.Area.View())
-	paneStyle := i.styles.InputPane
-	if i.Area.Focused() {
-		paneStyle = i.styles.InputFocused
-	}
-	return paneStyle.Width(i.width).Render(inner)
+	return lipgloss.JoinHorizontal(lipgloss.Top, prompt, i.Area.View())
 }
 
 func truncateInputLabel(s string, limit int) string {

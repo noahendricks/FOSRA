@@ -18,6 +18,11 @@ type App struct {
 	helpBar HelpBar
 	palette CommandPalette
 
+	// layout
+	splitLayout    SplitPaneLayout
+	chatContainer  Container
+	inputContainer Container
+
 	// state
 	sessions     *session.Manager
 	sidebarAnim  SidebarToggle
@@ -31,12 +36,26 @@ func NewApp() App {
 	mgr := session.NewManager()
 
 	return App{
-		styles:      styles,
-		chat:        NewChatPane(styles),
-		input:       NewChatInput(styles),
-		sidebar:     NewSidebar(styles),
-		helpBar:     NewHelpBar(styles),
-		palette:     NewCommandPalette(styles),
+		styles:  styles,
+		chat:    NewChatPane(styles),
+		input:   NewChatInput(styles),
+		sidebar: NewSidebar(styles),
+		helpBar: NewHelpBar(styles),
+		palette: NewCommandPalette(styles),
+
+		// vertical 90/10 split (messages / editor); no horizontal ratio used yet
+		splitLayout: NewSplitPaneLayout(EditorVerticalRatio, 1.0),
+
+		// chat container: padding 1,1,0,1 (top, right, bottom, left) — matches opencode
+		chatContainer: NewContainer(
+			WithPadding(1, 1, 0, 1),
+		),
+
+		// input container: top border only (drawn by Container.Render)
+		inputContainer: NewContainer(
+			WithBorder(true, false, false, false),
+		),
+
 		sessions:    mgr,
 		sidebarAnim: NewSidebarToggle(SidebarWidth),
 		overlayAnim: NewOverlayToggle(),
@@ -268,16 +287,21 @@ func (a *App) relayout() {
 		chatColW = 20
 	}
 
-	inputH := InputTotalHeight
-	// heights: chat + input (with top border) + helpbar
-	chatH := a.windowHeight - inputH - HelpBarHeight
-	if chatH < 4 {
-		chatH = 4
-	}
+	// The split layout governs the vertical space above the help bar.
+	contentH := a.windowHeight - HelpBarHeight
+	a.splitLayout.SetSize(chatColW, contentH)
 
-	a.chat.SetSize(chatColW, chatH)
-	a.input.SetWidth(chatColW)
-	a.input.SetHeight(InputMinHeight)
+	// ── Chat (top panel) ──
+	topH := a.splitLayout.TopHeight()
+	a.chatContainer.SetSize(chatColW, topH)
+	a.chat.SetSize(a.chatContainer.ContentWidth(), a.chatContainer.ContentHeight())
+
+	// ── Input (bottom panel) ──
+	bottomH := a.splitLayout.BottomHeight()
+	a.inputContainer.SetSize(chatColW, bottomH)
+	a.input.SetSize(a.inputContainer.ContentWidth(), a.inputContainer.ContentHeight())
+
+	// ── Sidebar & overlays ──
 	a.sidebar.SetSize(sidebarW, a.windowHeight-HelpBarHeight)
 	a.helpBar.SetWidth(a.windowWidth)
 	a.palette.SetSize(a.windowWidth, a.windowHeight)
@@ -286,16 +310,24 @@ func (a *App) relayout() {
 func (a App) View() tea.View {
 	sess := a.sessions.Active()
 
-	// ── Chat area ──
-	var chatView string
+	// ── Chat area (wrapped in chatContainer) ──
+	var chatContent string
 	if sess != nil && len(sess.Messages) > 0 {
-		chatView = a.chat.View()
+		chatContent = a.chat.View()
 	} else {
-		chatView = a.chat.ViewEmpty()
+		chatContent = a.chat.ViewEmpty()
 	}
+	chatView := a.chatContainer.Render(chatContent)
 
-	// ── Input area ──
-	inputView := a.input.View(sess)
+	// ── Input area (wrapped in inputContainer with focus-dependent border) ──
+	inputContent := a.input.View()
+
+	var inputView string
+	if a.input.Focused() {
+		inputView = a.inputContainer.Render(inputContent, lipgloss.Color(colorBlue))
+	} else {
+		inputView = a.inputContainer.Render(inputContent, lipgloss.Color(colorBorder))
+	}
 
 	// ── Left column: chat + input ──
 	leftCol := lipgloss.JoinVertical(lipgloss.Left,

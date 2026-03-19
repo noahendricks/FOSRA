@@ -83,7 +83,7 @@ class FlatChunkProducer:
 
         for child in node.children:
             result.extend(self._flatten(child))
-            return result
+        return result
 
 
 class HiChunkStructurer:
@@ -222,7 +222,6 @@ class HiChunkStructurer:
 
 
 class HiChunk:
-
     @staticmethod
     def index(
         document: Doc,

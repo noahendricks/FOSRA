@@ -1,43 +1,26 @@
-import sys
-from pydantic import BaseModel
+from __future__ import annotations
+
 import json
+from typing import TYPE_CHECKING, Annotated, Any
+
+from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
+from pydantic import BaseModel
+
+from backend.src.api.dependencies import get_db_session, get_session_factory
 from backend.src.api.request_context import RequestContext
-from backend.src.api.schemas.source_api_schemas import SourceGroupResponse
-from backend.src.domain.enums import (
-    ChunkerType,
-    DocumentType,
-    MessageRole,
-    ParserType,
-)
-from backend.src.domain.schemas import (
-    ChunkerConfig,
-    EmbedderConfig,
-    ParserConfig,
-    RetrievedResult,
-    SourceFull,
-    StorageConfig,
-    VectorStoreConfig,
-)
-from backend.src.services.conversation.llm_service import generate_llm_response
-from backend.src.services.retrieval.vector_service import VectorService
-from backend.src.services.workspace.workspace_service import WorkspaceService
 from backend.src.api.schemas import (
     ConvoFullResponse,
     ConvoRequest,
     ConvoUpdateRequest,
+    MessageRequest,
     MessageResponse,
     NewConvoRequest,
-    MessageRequest,
     SourceResponseDeep,
     WorkspaceFullResponse,
     WorkspaceRequest,
 )
-from backend.src.api.dependencies import get_db_session, get_session_factory
-from typing import TYPE_CHECKING, Annotated, Any
-from fastapi import APIRouter, Body, Depends, Query, Request
-
 from backend.src.api.schemas.api_schemas import (
     ConvoDeleteRequest,
     ConvoListItemResponse,
@@ -51,25 +34,35 @@ from backend.src.api.schemas.api_schemas import (
     WorkspaceDeleteRequest,
     WorkspaceUpdateRequest,
 )
-from backend.src.services.conversation.conversation_service import ConversationService
-from backend.src.storage.utils.converters import ulid_factory, domain_to_response
-from backend.src.tasks.ingesting import ingest_files
-from backend.src.tasks.processing import (
-    chunk_sources,
-    embed_documents,
-    embed_query,
-    parse_files,
+from backend.src.api.schemas.source_api_schemas import (
+    ChunkResponse,
+    ChunkWithScoreResponse,
+    SourceGroupResponse,
 )
-
+from backend.src.domain.enums import DocumentType, MessageRole
+from backend.src.domain.schemas.config import (
+    EmbedderConfig,
+    ScoredRetrieval,
+    VectorStoreConfig,
+)
+from backend.src.services.conversation.conversation_service import ConversationService
+from backend.src.services.conversation.llm_service import LLMService
+from backend.src.services.conversation.query_service import QueryService
+from backend.src.services.retrieval.reranker_service import RerankerService
+from backend.src.services.retrieval.vector_service import RetrievedChunk, VectorService
+from backend.src.services.workspace.workspace_service import WorkspaceService
+from backend.src.storage.utils.converters import domain_to_response, ulid_factory
 
 if TYPE_CHECKING:
     from langchain_core.messages import AIMessageChunk
-    from litellm import AsyncIterator
-
-from backend.src.services.retrieval.impls._utils import group_by_source, SourceGroup
 
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
+
+
+# ======================================================================
+# Helpers
+# ======================================================================
 
 
 class FileUpload(BaseModel):
@@ -78,13 +71,102 @@ class FileUpload(BaseModel):
     files: list[bytes]
 
 
+def extract_text_from_parts(parts: list[UIMessagePart]) -> str:
+    """Extract plain text from a list of UI message parts."""
+    text_parts = []
+    for part in parts:
+        if isinstance(part, TextPart) and part.type == "text":
+            text_parts.append(part.text)
+    return "\n".join(text_parts)
+
+
+def _retrieved_chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
+    """Convert a ``RetrievedChunk`` (from vector search / reranking) into
+    the ``ScoredRetrieval`` shape that LLMService and citation formatting
+    expect.
+    """
+    return ScoredRetrieval(
+        rank=rank,
+        score=chunk.score,
+        text=chunk.text,
+        doc_title=chunk.payload.get("doc_title", ""),
+        chunk_id=chunk.payload.get("chunk_id", str(rank)),
+        doc_id=chunk.payload.get("source_id", ""),
+        page_number=chunk.payload.get("page_number", 0),
+        start_index=chunk.start_char,
+        end_index=chunk.payload.get("end_char", chunk.start_char + len(chunk.text)),
+    )
+
+
+def _chunks_to_source_groups(
+    chunks: list[RetrievedChunk],
+) -> list[SourceGroupResponse]:
+    """Build ``SourceGroupResponse`` objects grouped by source_id."""
+    from collections import defaultdict
+
+    groups: dict[str, list[tuple[int, RetrievedChunk]]] = defaultdict(list)
+    for idx, chunk in enumerate(chunks):
+        source_id = chunk.payload.get("source_id", "unknown")
+        groups[source_id].append((idx, chunk))
+
+    result: list[SourceGroupResponse] = []
+    for source_id, items in groups.items():
+        chunk_responses: list[ChunkWithScoreResponse] = []
+        top_score = 0.0
+        for idx, chunk in items:
+            top_score = max(top_score, chunk.score)
+            chunk_responses.append(
+                ChunkWithScoreResponse(
+                    chunk=ChunkResponse(
+                        chunk_id=chunk.payload.get("chunk_id", str(idx)),
+                        source_id=source_id,
+                        source_hash="",
+                        start_index=chunk.start_char,
+                        end_index=chunk.payload.get(
+                            "end_char", chunk.start_char + len(chunk.text)
+                        ),
+                        token_count=chunk.token_count,
+                        text=chunk.text,
+                    ),
+                    similarity_score=chunk.score,
+                    reranker_score=chunk.score,
+                )
+            )
+
+        result.append(
+            SourceGroupResponse(
+                source=SourceResponseDeep(
+                    id=source_id,
+                    type=None,
+                    name=source_id,
+                    document_type=DocumentType.DOC,
+                    result_score=top_score,
+                ),
+                chunks=chunk_responses,
+                top_score=top_score,
+                chunk_count=len(chunk_responses),
+            )
+        )
+
+    return result
+
+
+# ======================================================================
+# File upload (placeholder)
+# ======================================================================
+
+
 @router.post("/file_upload")
 async def intercept_file_binary(
     req: Annotated[FileUpload, Body()],
 ):
-    # breakpoint()
-    print(req)
+    logger.debug("file_upload received {} files", len(req.files))
     return None
+
+
+# ======================================================================
+# Workspace CRUD
+# ======================================================================
 
 
 @router.get("/{user_id}/list_workspaces")
@@ -92,38 +174,28 @@ async def list_user_workspaces(
     user_id: str,
     session=Depends(get_db_session),
 ) -> list[WorkspaceFullResponse]:
-    try:
-        all_workspaces = await WorkspaceService().get_all_workspaces(
-            user_id=user_id, session=session
-        )
-
-        logger.info(all_workspaces)
-
-        return all_workspaces
-    except Exception:
-        raise
+    all_workspaces = await WorkspaceService().get_all_workspaces(
+        user_id=user_id, session=session
+    )
+    return all_workspaces
 
 
 @router.get("/{user_id}/{workspace_id}/")
 async def get_existing_workspace(
     request: Annotated[WorkspaceRequest, Query()], session=Depends(get_db_session)
 ) -> WorkspaceFullResponse:
-    requested_workspace: WorkspaceFullResponse = (
-        await WorkspaceService().retrieve_workspace_by_id(
-            workspace_request=request, session=session
-        )
+    return await WorkspaceService().retrieve_workspace_by_id(
+        workspace_request=request, session=session
     )
-    return requested_workspace
 
 
 @router.post("/{user_id}/create_workspace/")
 async def new_workspace(
     request: Annotated[NewWorkspaceRequest, Query()], session=Depends(get_db_session)
 ) -> NewWorkspaceResponse:
-    new_workspace: NewWorkspaceResponse = await WorkspaceService().create_workspace(
+    return await WorkspaceService().create_workspace(
         create_workspace=request, session=session
     )
-    return new_workspace
 
 
 @router.put("/{user_id}/{workspace_id}/")
@@ -131,53 +203,42 @@ async def update_workspace(
     request: Annotated[WorkspaceUpdateRequest, Query()],
     session=Depends(get_db_session),
 ) -> WorkspaceFullResponse:
-    requested_workspace = await WorkspaceService().update_workspace(
+    return await WorkspaceService().update_workspace(
         workspace_update=request, session=session
     )
-    return requested_workspace
 
 
 @router.delete("{user_id}/delete_workspaces/")
 async def delete_workspaces(
-    request: Annotated[WorkspaceDeleteRequest, Query()], session=Depends(get_db_session)
+    request: Annotated[WorkspaceDeleteRequest, Query()],
+    session=Depends(get_db_session),
 ) -> bool:
-    is_deleted = await WorkspaceService().delete_list_of_workspaces(
+    return await WorkspaceService().delete_list_of_workspaces(
         workspace_request=request, session=session
     )
 
-    return is_deleted
+
+# ======================================================================
+# Conversation CRUD
+# ======================================================================
 
 
 @router.get("/{user_id}/{convo_id}/get_convo")
 async def get_convo(
     user_id: str, convo_id: str, session=Depends(get_db_session)
 ) -> ConvoFullResponse:
-    try:
-        convo: ConvoFullResponse = await ConversationService().get_conversation_by_id(
-            user_id=user_id,
-            convo_id=convo_id,
-            session=session,
-        )
-
-        return convo
-    except Exception as e:
-        raise e
+    return await ConversationService().get_conversation_by_id(
+        user_id=user_id, convo_id=convo_id, session=session
+    )
 
 
 @router.get("/{user_id}/{workspace_id}/get_convos_list/")
 async def get_list_of_convos(
     user_id: str, workspace_id: str, session=Depends(get_db_session)
 ) -> list[ConvoListItemResponse]:
-    # breakpoint()
-    convo_list: list[
-        ConvoListItemResponse
-    ] = await ConversationService().list_workspace_conversations(
-        user_id=user_id,
-        workspace_id=workspace_id,
-        session=session,
+    return await ConversationService().list_workspace_conversations(
+        user_id=user_id, workspace_id=workspace_id, session=session
     )
-
-    return convo_list
 
 
 @router.post("/user/profile")
@@ -189,57 +250,38 @@ async def new_temporary_convo(request):
 async def create_new_convo(
     request: Annotated[NewConvoRequest, Query()], session=Depends(get_db_session)
 ) -> NewConvoResponse:
-    try:
-        # TODO: Error Occurring but still storing; Potentially has to do with workspace id and values passed
-        new_convo: NewConvoResponse = await ConversationService().create_conversation(
-            new_convo=request, session=session
-        )
-        return new_convo
-
-    except Exception as e:
-        raise e
+    return await ConversationService().create_conversation(
+        new_convo=request, session=session
+    )
 
 
 @router.put("/{workspace_id}/{convo_id}")
 async def update_convo(
     request: Annotated[ConvoUpdateRequest, Query()], session=Depends(get_db_session)
 ) -> ConvoFullResponse:
-    try:
-        # WARN: Not Correct; Need to implement
-        convo_update = await ConversationService().update_conversation(
-            session=session, convo_update=request
-        )
-
-        return convo_update
-    except Exception as e:
-        raise e
+    # WARN: Not fully implemented yet
+    return await ConversationService().update_conversation(
+        session=session, convo_update=request
+    )
 
 
 @router.post("/{convo_id}/archive/")
 async def archive_conversation(
     request: Annotated[ConvoRequest, Query()], session=Depends(get_db_session)
 ) -> list[str]:
-    try:
-        archived_convos: list[str] = await WorkspaceService().archive_convo(
-            convo_request=request, session=session
-        )
-        return archived_convos
-    except Exception as e:
-        raise e
+    return await WorkspaceService().archive_convo(
+        convo_request=request, session=session
+    )
 
 
 @router.post("/{convo_id}/restore/")
 async def restore_conversation(
     request: Annotated[ConvoRequest, Query()], session=Depends(get_db_session)
 ) -> list[str]:
-    try:
-        restored_convos: list[str] = await WorkspaceService().restore_convo(
-            convo_request=request, session=session
-        )
-        # TODO: Add is_archived to ORM Models and Schemas
-        return restored_convos
-    except Exception as e:
-        raise e
+    # TODO: Add is_archived to ORM Models and Schemas
+    return await WorkspaceService().restore_convo(
+        convo_request=request, session=session
+    )
 
 
 @router.delete("/user/profile/{user_id}")
@@ -251,29 +293,14 @@ async def delete_temporary_convo(request):
 async def delete_convo(
     request: Annotated[ConvoDeleteRequest, Query()], session=Depends(get_db_session)
 ) -> bool:
-    try:
-        convo_update: bool = await ConversationService().delete_conversation(
-            session=session, convo_request=request
-        )
-
-        return convo_update
-    except Exception as e:
-        raise e
+    return await ConversationService().delete_conversation(
+        session=session, convo_request=request
+    )
 
 
-def extract_text_from_parts(parts: list[UIMessagePart]) -> str:
-    text_parts = []
-    file_parts: dict[str, dict[str, Any]] = {}
-    for part in parts:
-        if isinstance(part, TextPart) and part.type == "text":
-            text_parts.append(part.text)
-        if isinstance(part, FilePart) and part.type == "file":
-            file_parts[part.filename if part.filename else ""] = {
-                "url": part.url,
-                "mediaType": part.media_type,
-            }
-
-    return "\n".join(text_parts)
+# ======================================================================
+# Chat  —  send_message_stream
+# ======================================================================
 
 
 @router.post("/{convo_id}/send_message/")
@@ -282,14 +309,29 @@ async def send_message_stream(
     db_session=Depends(get_db_session),
     session_factory=Depends(get_session_factory),
 ):
+    """SSE endpoint: save user message, run retrieval pipeline, stream
+    LLM response in Vercel AI SDK format.
+
+    Pipeline (Phase A):
+        1. Save user message
+        2. Reform query  (QueryService)
+        3. Vector search  (VectorService)
+        4. Rerank  (RerankerService / FlashRank)
+        5. Stream LLM response  (LLMService)
+        6. Save assistant message
+
+    TODO (Phase D):  File ingestion (parse → chunk → embed → upsert) is
+    currently disabled.  It will be re-enabled when the retrieval pipeline
+    is extracted into a LangGraph subagent.
+    """
+
     async def stream():
         try:
             async with session_factory() as session:
-                logger.debug("entry")
                 if not req.convo_id:
-                    raise ValueError("No ConvoId Provided in Attempt to Send Message")
+                    raise ValueError("No convo_id provided")
 
-                # get context bundle from db from user info
+                # -- Context bundle ----------------------------------------
                 ctx = await RequestContext.from_request(
                     user_id=req.user_id,
                     workspace_id=req.workspace_id,
@@ -298,160 +340,90 @@ async def send_message_stream(
                 )
 
                 text_part_id: str = ulid_factory()
-
-                cleaned_messages: list[UIMessage] = []
-
                 new_message = req.messages[-1]
-
-                user_query: str = extract_text_from_parts(req.messages[-1].parts)
+                user_query: str = extract_text_from_parts(new_message.parts)
 
                 def emit_chunk(chunk: dict[str, Any]) -> str:
                     return f"data: {json.dumps(chunk)}\n\n"
 
-                # note: these should be gotten from ctx when configured correctly
-                storage_config = StorageConfig()
-                parser_config = ParserConfig(preferrend_parser_type=ParserType.MARKDOWN)
-                chunker_config = ChunkerConfig(preferred_chunker_type=ChunkerType.TOKEN)
-                embedder_config = EmbedderConfig()
-                vector_config = VectorStoreConfig(
-                    host="localhost", port=6333, api_base=None
-                )
+                # Use preferences from context (defaults until prefs are loaded from DB)
+                user_prefs = ctx.preferences
+                embedder_config = user_prefs.embedder or EmbedderConfig()
+                vector_config = user_prefs.vector_store or VectorStoreConfig()
+                reranker_config = user_prefs.reranker
 
-                logger.debug("prior to message save")
-
+                # -- 1. Save user message ----------------------------------
                 message: MessageResponse = await ConversationService().save_message(
                     message=new_message,
-                    convo_id=ctx.convo_id if ctx.convo_id else "",
+                    convo_id=ctx.convo_id or "",
                     session=db_session,
                     user_id=ctx.user_id,
                 )
+                message_id: str = message.message_id or ""
 
-                logger.debug("after message save")
-
-                message_id: str = message.message_id if message.message_id else ""
-
-                logger.debug("prior to ingest")
-
-                # begin the source retrieval
-                # should be extracted to distinct external function
+                # -- 2. Query reformulation --------------------------------
                 yield emit_chunk(
                     {
                         "type": "data-rag-status",
-                        "data": {"stage": "fetching", "progress": 0.1},
+                        "data": {"stage": "reformulating", "progress": 0.1},
                     }
                 )
 
-                logger.debug(sys.getsizeof(new_message))
+                llm_config = LLMService._resolve_llm_config(user_prefs)
 
-                # ui file parts from request to filecontent obj
-                files = await ingest_files(
-                    files=[i for i in new_message.parts if isinstance(i, FilePart)],
-                    session=session,
-                    storage_config=storage_config,
+                reformed_query = await QueryService.reform_query(
+                    user_query=user_query,
+                    chat_history=None,  # TODO: pass prior turn history
+                    existing_topics=None,
+                    llm_config=llm_config,
                 )
+                logger.debug("Reformed query: {}", reformed_query)
 
+                # -- 3. Vector search --------------------------------------
                 yield emit_chunk(
                     {
                         "type": "data-rag-status",
-                        "data": {"stage": "processing", "progress": 0.25},
+                        "data": {"stage": "searching", "progress": 0.4},
                     }
                 )
 
-                print(
-                    "DEBUGPRINT[70]: workspace.py:457 (before parsed = await parse_files()"
-                )
-                parsed = await parse_files(
-                    files_list=files,
-                    config=parser_config,
-                    session_factory=session_factory,
-                )
+                retrieved_chunks: list[RetrievedChunk] = []
+                try:
+                    raw_results = await VectorService.search(
+                        config=vector_config,
+                        embed_config=embedder_config,
+                        query=reformed_query,
+                    )
+                    if raw_results:
+                        retrieved_chunks = raw_results
+                except Exception as search_err:
+                    logger.warning(
+                        "Vector search failed (collection may not exist yet): {}",
+                        search_err,
+                    )
 
-                print(f"DEBUGPRINT[71]: workspace.py:458: parsed={parsed}")
-
-                chunked = await chunk_sources(config=chunker_config, sources=parsed)
-
+                # -- 4. Rerank ---------------------------------------------
                 yield emit_chunk(
                     {
                         "type": "data-rag-status",
-                        "data": {"stage": "chunking", "progress": 0.35},
+                        "data": {"stage": "reranking", "progress": 0.6},
                     }
                 )
 
-                embedded: list[SourceFull] = await embed_documents(
-                    sources=chunked,
-                    config=embedder_config,
-                    session_factory=session_factory,
-                )
+                if retrieved_chunks:
+                    reranker = RerankerService(config=reranker_config)
+                    retrieved_chunks = reranker.rerank(
+                        query=reformed_query,
+                        chunks=retrieved_chunks,
+                    )
+                    logger.debug("Reranked to {} chunks", len(retrieved_chunks))
 
-                yield emit_chunk(
-                    {
-                        "type": "data-rag-status",
-                        "data": {"stage": "embedding", "progress": 0.45},
-                    }
-                )
-
-                yield emit_chunk(
-                    {
-                        "type": "data-rag-status",
-                        "data": {"stage": "storing vectors", "progress": 0.55},
-                    }
-                )
-
-                upsert = await VectorService().upsert(
-                    sources=embedded,
-                    config=vector_config,
-                    session_factory=session_factory,
-                )
-
-                vector_config.config_name = "test config"
-                vector_config.config_id = 1
-
-                logger.debug("after ingest, before search")
-
-                yield emit_chunk(
-                    {
-                        "type": "data-rag-status",
-                        "data": {"stage": "searching", "progress": 0.75},
-                    }
-                )
-
-                query = await embed_query(
-                    query=user_query,
-                    config=embedder_config,
-                    session=session,
-                )
-
-                # raw returned sources
-                search: list[RetrievedResult] = await VectorService().search(
-                    query_vector=query,
-                    query_text=user_query,
-                    config=vector_config,
-                    session=session,
-                )
-
-                # end of the source retrieval pipeline
-
-                logger.debug("after search")
-
-                # NOTE: Currently throwing: "expected str got array"
-
-                # sources grouped as backend domain objects
-                sources_grouped: list[SourceGroup] = group_by_source(results=search)
-
-                # sources grouped as the shape the shape frontend expects
-                source_groups_response: list[SourceGroupResponse] = [
-                    domain_to_response(group, SourceGroupResponse)
-                    for group in sources_grouped
-                ]
-                # NOTE: EMPTY
-
-                # sources in the shape sse stream expects
+                # -- 5. Build source payloads for frontend -----------------
+                source_groups = _chunks_to_source_groups(retrieved_chunks)
                 sources_as_dicts: list[dict[str, Any]] = [
-                    group.model_dump(mode="json") for group in source_groups_response
+                    group.model_dump(mode="json") for group in source_groups
                 ]
 
-                # NOTE: EMPTY
-                # rag status complete message
                 yield emit_chunk(
                     {
                         "type": "data-rag-status",
@@ -459,80 +431,63 @@ async def send_message_stream(
                     }
                 )
 
-                logger.debug(f"SOURCES AFTER ENCODED TO STRING")
-
-                sources_json = json.dumps(
-                    [group.model_dump(mode="json") for group in source_groups_response]
-                )
-                # NOTE: EMPTY
-
-                # NOTE: EMPTY
-
-                # NOTE: source retrieval pipeline currently accomodates batch return rather than one by one
+                # Send source groups to frontend
                 for src in sources_as_dicts:
-                    yield emit_chunk(
-                        {
-                            "type": "rag-source",
-                            "source": src,
-                        }
-                    )
+                    yield emit_chunk({"type": "rag-source", "source": src})
 
                 yield emit_chunk({"type": "start", "messageId": message_id})
                 yield emit_chunk({"type": "text-start", "id": text_part_id})
 
-            # TODO: Add LLM Initialization checks and remediation
+                # -- 6. Stream LLM response --------------------------------
+                scored_sources: list[ScoredRetrieval] = [
+                    _retrieved_chunk_to_scored(c, i)
+                    for i, c in enumerate(retrieved_chunks)
+                ]
 
-            # call llm
-            stream: AsyncIterator[AIMessageChunk] = await generate_llm_response(
-                chat_history=req.messages if req.messages else [],
-                convo_id=req.convo_id,
-                sources=sources_grouped,
-                user_prefs=None,
-            )
-
-            # text to be saved to llm message
-            full_text = ""
-
-            logger.debug("prior to stream")
-
-            # sse stream each chunk from the llm
-            async for chunk in stream:
-                content = chunk.content
-                if content:
-                    text_chunk: str = (
-                        content if isinstance(content, str) else str(content)
-                    )
-                    full_text += text_chunk
-
-                    # vercel ai format
-                    yield f"data: {json.dumps({'type': 'text-delta', 'id': text_part_id, 'delta': text_chunk})}\n\n"
-
-            logger.debug("after stream")
-
-            # text stream ended sse event
-            yield f"data: {json.dumps({'type': 'text-end', 'id': text_part_id})}\n\n"
-
-            logger.info(sources_grouped)
-
-            # assistant message saved as message obj
-            _ = await ConversationService().save_message(
-                message=MessageResponse(
-                    role=MessageRole.ASSISTANT,
-                    text=full_text,
-                    user_id=req.user_id,
-                    attached_sources=sources_as_dicts,
+                llm_stream = await LLMService.generate_llm_response(
+                    chat_history=req.messages or [],
+                    sources=scored_sources,
                     convo_id=req.convo_id,
-                ),
-                convo_id=req.convo_id,
-                user_id=req.user_id,
-                session=session,
-            )
-            # TODO: yield assistant message id
+                    user_prefs=user_prefs,
+                )
 
-            yield f"data: {json.dumps({'type': 'finish', 'finishReason': 'stop'})}\n\n"
+                full_text = ""
+
+                async for chunk in llm_stream:
+                    content = chunk.content
+                    if content:
+                        text_chunk = (
+                            content if isinstance(content, str) else str(content)
+                        )
+                        full_text += text_chunk
+                        yield emit_chunk(
+                            {
+                                "type": "text-delta",
+                                "id": text_part_id,
+                                "delta": text_chunk,
+                            }
+                        )
+
+                yield emit_chunk({"type": "text-end", "id": text_part_id})
+
+                # -- 7. Save assistant message -----------------------------
+                _ = await ConversationService().save_message(
+                    message=MessageResponse(
+                        role=MessageRole.ASSISTANT,
+                        text=full_text,
+                        user_id=req.user_id,
+                        attached_sources=sources_as_dicts,
+                        convo_id=req.convo_id,
+                    ),
+                    convo_id=req.convo_id,
+                    user_id=req.user_id,
+                    session=session,
+                )
+
+                yield emit_chunk({"type": "finish", "finishReason": "stop"})
 
         except Exception as e:
-            logger.error(f"Stream error: {e}")
+            logger.error("Stream error: {}", e)
             yield f"data: {json.dumps({'type': 'error', 'errorText': str(e)})}\n\n"
 
     return StreamingResponse(
@@ -599,31 +554,3 @@ AI SDK UIMessageChunk types (for reference):
    - type: 'start-step' - Step begins
    - type: 'finish-step' - Step ends
 """
-
-
-@router.post("/stub/stub")
-async def zod_stub_sources(
-    convo_id: str,
-    request: Request,
-    db_session=Depends(get_db_session),
-    session_factory=Depends(get_session_factory),
-) -> SourceGroupResponse:
-    retrieval_result = SourceGroupResponse(
-        chunk_count=0,
-        chunks=[],
-        source=SourceResponseDeep(
-            document_type=DocumentType.DOC,
-            hash="",
-            metadata={},
-            name="",
-            origin_path="",
-            origin_type="",
-            result_score=0,
-            source_id="",
-            source_summary="",
-            summary_embedding="",
-        ),
-        top_score=0,
-    )
-
-    return retrieval_result

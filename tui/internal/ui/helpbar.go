@@ -28,11 +28,11 @@ func (h *HelpBar) View(sess *session.Session) string {
 	}
 
 	help := h.styles.HelpBarRight.Render("ctrl+p help")
-	info := h.renderStatusInfo(sess)
+	// info := h.renderStatusInfo(sess)
 	state := h.renderState(sess)
 	model := h.styles.InputModel.Render(h.modelLabel(sess, 18))
 
-	left := help + info
+	left := help
 	right := state + model
 	fillW := h.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if fillW < 0 {

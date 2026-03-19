@@ -10,12 +10,15 @@ const (
 	SidebarMinWidth    = 34
 	SidebarMaxWidth    = 46
 	InputMinHeight     = 1
-	InputBorderHeight  = 1 // top border on input pane
-	InputTotalHeight   = InputMinHeight + InputBorderHeight
 	InputMaxHeight     = 6
 	HelpBarHeight      = 1
 	MinWidthForSidebar = 96
 	ChatPadding        = 1 // left/right gutter inside chat area
+
+	// EditorVerticalRatio is the fraction of vertical space given to the
+	// top (messages) panel. The remaining fraction goes to the bottom
+	// (editor) panel. 0.90 = 90% messages, 10% editor (matches opencode).
+	EditorVerticalRatio = 0.90
 )
 
 // tokyo night color palette.
@@ -87,11 +90,9 @@ type Styles struct {
 	SourceScore lipgloss.Style
 
 	// input area
-	InputPane    lipgloss.Style
-	InputFocused lipgloss.Style
-	InputPrompt  lipgloss.Style
-	InputRAG     lipgloss.Style
-	InputModel   lipgloss.Style // inverted pill: provider / model
+	InputPrompt lipgloss.Style
+	InputRAG    lipgloss.Style
+	InputModel  lipgloss.Style // inverted pill: provider / model
 
 	// sidebar
 	Sidebar              lipgloss.Style
@@ -271,24 +272,8 @@ func NewStyles() Styles {
 		Foreground(lipgloss.Color(colorYellow))
 
 	// ── input ──────────────────────────────────────────────────
-	s.InputPane = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBg)).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderTop(true).
-		BorderBottom(false).
-		BorderLeft(false).
-		BorderRight(false).
-		BorderForeground(lipgloss.Color(colorBorder))
-
-	// focused border = Primary (blue)
-	s.InputFocused = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBg)).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderTop(true).
-		BorderBottom(false).
-		BorderLeft(false).
-		BorderRight(false).
-		BorderForeground(lipgloss.Color(colorBlue))
+	// NOTE: Border is now handled by the inputContainer in app.go.
+	// Only the prompt style and ancillary badges live here.
 
 	// prompt ">" in Primary (blue)
 	s.InputPrompt = lipgloss.NewStyle().

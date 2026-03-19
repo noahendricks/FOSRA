@@ -63,7 +63,6 @@ class SemanticChunkerConfig(_BaseModelFlex):
 
 
 class LateChunkerConfig(_BaseModelFlex):
-
     model_config = {"arbitrary_types_allowed": True}
 
     embedding_model: Any = "nomic-ai/modernbert-embed-base"
@@ -322,9 +321,9 @@ class RerankerConfig(_BaseModelFlex):
     config_id: str = ""
     config_name: str = "New Reranker Config"
     api_key: SecretStr | None = None
-    # default to fastembed
-    RerankProvider: RerankerType = RerankerType.FASTEMBED
-    model: str | None = "jinaai/jina-reranker-v1-turbo-en"
+    # default to FlashRank (CPU-only, no API key needed)
+    RerankProvider: RerankerType = RerankerType.FLASHRANK
+    model: str | None = "ms-marco-MiniLM-L-12-v2"
     top_k: int = 10
     score_threshold: float | None = None
     return_scores: bool = True

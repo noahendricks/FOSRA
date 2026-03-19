@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
-import litellm
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.prompts import PromptTemplate
-from langchain_litellm import ChatLiteLLM
 from loguru import logger
 
-from backend.src.api.schemas.api_schemas import UIMessage
 from backend.src.domain.schemas.config import (
     LLMConfig,
     ScoredRetrieval,
@@ -16,47 +12,54 @@ from backend.src.domain.schemas.config import (
 )
 from backend.src.domain.schemas.doc import Chunk, Doc
 from backend.src.services.conversation.utils.llm_utils import (
-    build_model_string,
-    filter_none_values,
+    build_llm,
     format_sources_section,
     langchain_chat_history_to_str,
     ui_messages_to_lc_messages,
 )
-from backend.src.services.conversation.utils.prompts import FOSRA_SYSTEM_PROMPT
+from backend.src.services.conversation.utils.prompts import (
+    DOC_TOPIC_GEN_PROMPT,
+    FOSRA_SYSTEM_PROMPT,
+)
 
 if TYPE_CHECKING:
-    pass
+    from langchain_community.chat_models import ChatLiteLLM
 
-litellm.drop_params = True
-
-
-PROVIDER_TO_LITELLM_MAP: dict[str, str] = {
-    "OPENAI": "openai",
-    "ANTHROPIC": "anthropic",
-    "COHERE": "cohere",
-    "GROQ": "groq",
-    "TOGETHER": "together_ai",
-    "MISTRAL": "mistral",
-    "REPLICATE": "replicate",
-    "HUGGINGFACE": "huggingface",
-    "BEDROCK": "bedrock",
-    "VERTEX_AI": "vertex_ai",
-    "PALM": "palm",
-    "OPENROUTER": "openrouter",
-}
-
-
-from backend.src.services.conversation.utils.prompts import (
-    COVERAGE_CHECK_PROMPT,
-    DOC_TOPIC_GEN_PROMPT,
-    FOSRA_CITATION_INSTRUCTIONS,
-    GRAPH_QUERY_GEN_PROMPT,
-    GRAPH_SEARCH_PROMPT,
-    SPLIT_SUBQUERIES_PROMPT,
-)
+    from backend.src.api.schemas.api_schemas import UIMessage
 
 
 class LLMService:
+    """Thin wrapper around LiteLLM for FOSRA's generation needs.
+
+    Every method accepts an ``LLMConfig`` (or extracts one from
+    ``UserPreferences``) so callers control which model is used.
+    """
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_llm_config(user_prefs: UserPreferences | None) -> LLMConfig:
+        """Pick the best available LLM config from user preferences.
+
+        Precedence: llm_default > llm_logic > llm_fast > llm_heavy > fallback.
+        """
+        if user_prefs:
+            for cfg in (
+                user_prefs.llm_default,
+                user_prefs.llm_logic,
+                user_prefs.llm_fast,
+                user_prefs.llm_heavy,
+            ):
+                if cfg is not None:
+                    return cfg
+        # Last-resort fallback (will need a valid API key at runtime)
+        return LLMConfig()
+
+    # ------------------------------------------------------------------
+    # 1. Chat Response Generation (streaming)
+    # ------------------------------------------------------------------
 
     @staticmethod
     async def generate_llm_response(
@@ -64,263 +67,127 @@ class LLMService:
         sources: list[ScoredRetrieval],
         convo_id: str,
         user_prefs: UserPreferences | None,
-    ):
+    ) -> AsyncIterator:
+        """Stream an LLM response given chat history and retrieved sources.
+
+        Uses the user's configured LLM from ``user_prefs``.  Injects the
+        FOSRA system prompt and citation instructions around the retrieved
+        ``sources``.
+        """
+        config = LLMService._resolve_llm_config(user_prefs)
+        llm: ChatLiteLLM = build_llm(config)
+
+        # Convert UI messages to LangChain format
         lc_messages: list[BaseMessage] = ui_messages_to_lc_messages(
             ui_messages=chat_history
         )
 
+        if not lc_messages:
+            raise ValueError("No messages provided to generate response")
+
+        # The last user message is the current question
+        newest_message: BaseMessage = lc_messages.pop()
+
         source_content: str = format_sources_section(sources)
 
-        # if not lc_messages:
-        #     raise ValueError("No messages provided to generate response")
-
-        # newest_message: BaseMessage = lc_messages[-1]
-        newest_message: BaseMessage = HumanMessage(
-            content="what are is evaluator optimizer?"
+        instruction_text = (
+            "Please provide a detailed, comprehensive answer to the user's "
+            "question using the information from their personal knowledge "
+            "sources. Make sure to cite all information appropriately and "
+            "engage in a conversational manner."
         )
 
-        config: LLMConfig = LLMConfig(
-            config_id=0,
-            config_name="the config name",
-            provider="ollama",
-            model="qwen2.5:7b",
-            api_key="dummy",
-            api_base="http://localhost:11434",
+        human_message_content = (
+            f"{source_content}\n\n"
+            f"User's question:\n"
+            f"<user_query>\n{newest_message.content}\n</user_query>\n\n"
+            f"{instruction_text}"
         )
 
-        model_string: str = build_model_string(
-            provider=config.provider,
-            model_name=config.model,
-            custom_provider=config.custom_provider,
-        )
-
-        kwargs: dict[str, Any] = {
-            "model": model_string,
-            "api_key": config.api_key,
-            "streaming": True,
-        }
-
-        if config.api_base:
-            print("DEBUGPRINT[87]: llm_service.py:94 (after if config.api_base:)")
-            kwargs["api_base"] = config.api_base
-
-        if config.litellm_params:
-            print("DEBUGPRINT[88]: llm_service.py:98 (after if config.litellm_params:)")
-            kwargs.update(config.litellm_params)
-
-        llm: ChatLiteLLM = ChatLiteLLM(**filter_none_values(kwargs))
-        print(
-            "DEBUGPRINT[89]: llm_service.py:109 (after llm: ChatLiteLLM = ChatLiteLLM(**filter_…)"
-        )
-
-        system_prompt: str = FOSRA_SYSTEM_PROMPT
-
-        instruction_text = "Please provide a detailed, comprehensive answer to the user's question using the information from their personal knowledge sources. Make sure to cite all information appropriately and engage in a conversational manner."
-
-        human_message_content: str = f"""
-        {source_content}
-        User's question:
-        <user_query>
-            {newest_message.content}
-        </user_query>
-        
-        {instruction_text}
-        """
-
-        lc_messages.append(
-            SystemMessage(content=system_prompt),
-        )
-        lc_messages.append(
+        # Build final message list: system → history → current turn
+        final_messages: list[BaseMessage] = [
+            SystemMessage(content=FOSRA_SYSTEM_PROMPT),
+            *lc_messages,  # prior conversation turns (minus the latest)
             HumanMessage(content=human_message_content),
-        )
-
-        print(lc_messages)
-
-        print(
-            "DEBUGPRINT[90]: llm_service.py:135 (before return llm.astream(input=lc_messages))"
-        )
-        return llm.astream(input=lc_messages)
-
-    @staticmethod
-    async def generate_chunk_summaries(parent_chunks: list[Chunk]):
-
-        # NOTE: Better to do all at once or one at a time?
-        # TODO: Pull in existing filters from the DB
-
-        # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
-
-        # TODO: Accumulate LLM Filter Classification in List
-
-        # TODO: Pass all Generated Filters to LLM For Consolidation
-
-        # TODO: Return 2-3 Filters
-
-        pass
-
-    @staticmethod
-    async def generate_graph_query(parent_chunks: list[Chunk]):
-        return
-
-    @staticmethod
-    async def generate_graph_search(parent_chunks: list[Chunk]):
-        return
-
-    @staticmethod
-    async def split_to_subqueries(parent_chunks: list[Chunk]):
-        return
-
-    @staticmethod
-    async def check_coverage(parent_chunks: list[Chunk]):
-        return
-
-    @staticmethod
-    async def summarize_document():
-        return
-
-    @staticmethod
-    async def _summarize_single(doc: str):
-        MOCK_TOPICS = [
-            # TanStack Query / general data fetching docs
-            "data_fetching",
-            "cache_invalidation",
-            "cache_mutation",
-            "configuration",
-            "pagination",
-            "error_handling",
-            "optimistic_updates",
-            "prefetching",
-            "query_filters",
-            "subscriptions",
-            "devtools",
-            "ssr_hydration",
-            # Source code structural
-            "authentication",
-            "data_transformation",
-            "file_io",
-            "api_client",
-            "middleware",
-            "database_access",
-            "validation",
-            "event_handling",
-            "state_management",
-            "routing",
-            # Meta / navigation — always present
-            "navigation",
         ]
 
-        # TODO: Return 2-3 Filters
-        config: LLMConfig = LLMConfig(
-            config_id=0,
-            config_name="the config name",
-            provider="openrouter",
-            model="qwen/qwen3.5-27b",
-            api_key="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",
-            api_base="https://openrouter.ai/api/v1",
+        logger.debug(
+            "Generating LLM response for convo={} with {} sources",
+            convo_id,
+            len(sources),
         )
+        return llm.astream(input=final_messages)
 
-        model_string: str = build_model_string(
-            provider=config.provider,
-            model_name=config.model,
-            custom_provider=config.custom_provider,
-        )
+    # ------------------------------------------------------------------
+    # 2. Document Topic Classification
+    # ------------------------------------------------------------------
 
-        kwargs: dict[str, Any] = {
-            "model": model_string,
-            "api_key": config.api_key,
-            "streaming": True,
-        }
+    @staticmethod
+    async def classify_chunk_topic(
+        chunk_text: str,
+        existing_topics: list[str],
+        *,
+        llm_config: LLMConfig,
+    ) -> AsyncIterator:
+        """Classify a single chunk into a topic using the LLM.
 
-        if config.api_base:
-            kwargs["api_base"] = config.api_base
-
-        if config.litellm_params:
-            kwargs.update(config.litellm_params)
-
-        llm: ChatLiteLLM = ChatLiteLLM(**filter_none_values(kwargs))
-
+        Returns a streaming iterator (caller should collect and parse JSON).
+        """
+        llm: ChatLiteLLM = build_llm(llm_config)
         prompt = DOC_TOPIC_GEN_PROMPT.format(
-            existing_topics=MOCK_TOPICS, chunk_text=doc
+            existing_topics=existing_topics, chunk_text=chunk_text
         )
         return llm.astream(input=prompt)
 
-    async def _summarize_with_context(parent_chunks: list[Chunk]):
-        # TODO: Pull in existing filters from the DB
-        MOCK_TOPICS = [
-            # TanStack Query / general data fetching docs
-            "data_fetching",
-            "cache_invalidation",
-            "cache_mutation",
-            "configuration",
-            "pagination",
-            "error_handling",
-            "optimistic_updates",
-            "prefetching",
-            "query_filters",
-            "subscriptions",
-            "devtools",
-            "ssr_hydration",
-            # Source code structural
-            "authentication",
-            "data_transformation",
-            "file_io",
-            "api_client",
-            "middleware",
-            "database_access",
-            "validation",
-            "event_handling",
-            "state_management",
-            "routing",
-            # Meta / navigation — always present
-            "navigation",
-        ]
+    @staticmethod
+    async def generate_chunk_summaries(
+        parent_chunks: list[Chunk],
+        existing_topics: list[str] | None = None,
+        *,
+        llm_config: LLMConfig,
+    ) -> list[dict[str, Any]]:
+        """Classify a batch of parent chunks into topics.
 
-        # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
+        TODO: Implement batched classification (3 chunks at a time),
+        accumulate, then consolidate with a second LLM pass.
+        """
+        # Placeholder — will be implemented when topic pipeline is wired up
+        logger.warning("generate_chunk_summaries is not yet implemented")
+        return []
 
-        # TODO: Accumulate LLM Filter Classification in List
+    # ------------------------------------------------------------------
+    # 3. Graph stubs (Phase B / C)
+    # ------------------------------------------------------------------
 
-        # TODO: Pass all Generated Filters to LLM For Consolidation
+    @staticmethod
+    async def generate_graph_query(query: str, *, llm_config: LLMConfig) -> str | None:
+        """Generate a Cypher query for the code knowledge graph.
 
-        # TODO: Return 2-3 Filters
+        TODO: Phase B implementation.
+        """
+        logger.warning("generate_graph_query is not yet implemented")
+        return None
 
-        pass
+    @staticmethod
+    async def generate_graph_search(
+        query: str, *, llm_config: LLMConfig
+    ) -> dict[str, Any] | None:
+        """Generate vector search parameters for the code graph.
 
-    async def _summarize_all(parent_chunks: list[Chunk]):
-        # TODO: Pull in existing filters from the DB
-        MOCK_TOPICS = [
-            # TanStack Query / general data fetching docs
-            "data_fetching",
-            "cache_invalidation",
-            "cache_mutation",
-            "configuration",
-            "pagination",
-            "error_handling",
-            "optimistic_updates",
-            "prefetching",
-            "query_filters",
-            "subscriptions",
-            "devtools",
-            "ssr_hydration",
-            # Source code structural
-            "authentication",
-            "data_transformation",
-            "file_io",
-            "api_client",
-            "middleware",
-            "database_access",
-            "validation",
-            "event_handling",
-            "state_management",
-            "routing",
-            # Meta / navigation — always present
-            "navigation",
-        ]
+        TODO: Phase B implementation.
+        """
+        logger.warning("generate_graph_search is not yet implemented")
+        return None
 
-        # TODO: Pass 3 Parent Chunks at a time to LLM For Classification
+    # ------------------------------------------------------------------
+    # 4. Document summarization stub
+    # ------------------------------------------------------------------
 
-        # TODO: Accumulate LLM Filter Classification in List
+    @staticmethod
+    async def summarize_document(text: str, *, llm_config: LLMConfig) -> str | None:
+        """Produce a concise summary of a full document.
 
-        # TODO: Pass all Generated Filters to LLM For Consolidation
-
-        # TODO: Return 2-3 Filters
-
-        pass
+        TODO: Implement when document-level metadata pipeline is built.
+        """
+        logger.warning("summarize_document is not yet implemented")
+        return None
