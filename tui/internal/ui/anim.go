@@ -135,20 +135,33 @@ func (m *MessageReveal) Offset(width int) int {
 // ── Sidebar toggle (instant, no animation) ───────────────────────────
 
 type SidebarToggle struct {
-	open bool
-	maxW int
+	open  bool
+	baseW int
 }
 
 func NewSidebarToggle(maxWidth int) SidebarToggle {
-	return SidebarToggle{open: true, maxW: maxWidth}
+	return SidebarToggle{open: true, baseW: maxWidth}
 }
 
 func (s *SidebarToggle) Toggle()      { s.open = !s.open }
 func (s *SidebarToggle) IsOpen() bool { return s.open }
 
-func (s *SidebarToggle) Width() int {
+func (s *SidebarToggle) Width(totalWidth int) int {
 	if s.open {
-		return s.maxW
+		width := s.baseW
+		if totalWidth >= MinWidthForSidebar {
+			width = int(float64(totalWidth) * 0.28)
+		}
+		if width < SidebarMinWidth {
+			width = SidebarMinWidth
+		}
+		if width > SidebarMaxWidth {
+			width = SidebarMaxWidth
+		}
+		if width >= totalWidth-20 {
+			width = max(0, totalWidth-20)
+		}
+		return width
 	}
 	return 0
 }

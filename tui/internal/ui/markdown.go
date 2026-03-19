@@ -135,7 +135,8 @@ func markdownStyleConfig() ansi.StyleConfig {
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Color: stringPtr(colorFg),
+					Prefix: " ",
+					Color:  stringPtr(colorFg),
 				},
 				Margin: uintPtr(markdownMargin),
 			},

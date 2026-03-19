@@ -81,7 +81,7 @@ func (c *ChatPane) SetMessages(messages []session.Message) {
 
 func (c *ChatPane) View() string {
 	content := lipgloss.NewStyle().
-		PaddingLeft(ChatPadding).
+		Padding(0, ChatPadding).
 		Render(c.viewport.View())
 
 	return c.styles.ChatPane.
@@ -95,14 +95,14 @@ func (c *ChatPane) ViewEmpty() string {
 	placeholder := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorComment)).
 		Italic(true).
-		Width(c.width - ChatPadding*2).
+		Width(c.viewport.Width()).
 		Align(lipgloss.Center).
 		AlignVertical(lipgloss.Center).
 		Height(c.height).
 		Render("No messages yet. Start a conversation below.")
 
 	content := lipgloss.NewStyle().
-		PaddingLeft(ChatPadding).
+		Padding(0, ChatPadding).
 		Render(placeholder)
 
 	return c.styles.ChatPane.
@@ -118,105 +118,90 @@ func (c *ChatPane) renderAll(messages []session.Message) string {
 		return ""
 	}
 
-	// content width with left/right padding (gutter)
-	contentW := c.width - ChatPadding*2 - 2
-	if contentW > 92 {
-		contentW = 92
-	}
+	contentW := c.viewport.Width()
 	if contentW < 30 {
 		contentW = 30
 	}
 
 	var blocks []string
 	for _, msg := range messages {
-		rendered := c.renderMessage(msg, contentW)
-		blocks = append(blocks, rendered)
+		blocks = append(blocks, c.renderMessageBlocks(msg, contentW)...)
 	}
 
 	return strings.Join(blocks, "\n\n")
 }
 
-func (c *ChatPane) renderMessage(msg session.Message, w int) string {
+func (c *ChatPane) renderMessageBlocks(msg session.Message, w int) []string {
 	switch msg.Role {
 	case session.RoleUser:
-		return c.renderUser(msg, w)
+		return []string{c.renderUser(msg, w)}
 	case session.RoleAssistant:
-		return c.renderAssistant(msg, w)
+		return c.renderAssistantBlocks(msg, w)
 	case session.RoleSystem:
-		return c.renderSystem(msg, w)
+		return []string{c.renderSystem(msg, w)}
 	default:
-		return msg.Content
+		return []string{msg.Content}
 	}
 }
 
 func (c *ChatPane) renderUser(msg session.Message, w int) string {
-	// thick purple left border on the body
-	bodyW := w - 3
-	if bodyW < 20 {
-		bodyW = 20
-	}
-
-	body := c.styles.UserBlock.
-		Width(bodyW).
-		Render(msg.Content)
-
-	return body
+	return c.styles.UserBlock.Width(w).Render(msg.Content)
 }
 
-func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
+func (c *ChatPane) renderAssistantBlocks(msg session.Message, w int) []string {
+	var blocks []string
+
+	if primary := c.renderAssistantPrimaryBlock(msg, w); primary != "" {
+		blocks = append(blocks, primary)
+	}
+
+	if len(msg.Todos) > 0 {
+		blocks = append(blocks, c.renderTodoBlock(msg.Todos, w))
+	}
+
+	if len(msg.Sources) > 0 {
+		blocks = append(blocks, c.renderSourcesBlock(msg.Sources, w))
+	}
+
+	for _, tc := range msg.ToolCalls {
+		blocks = append(blocks, c.renderToolCallBlock(tc, w))
+	}
+
+	return blocks
+}
+
+func (c *ChatPane) renderAssistantPrimaryBlock(msg session.Message, w int) string {
 	var parts []string
 	blockW := messageBlockWidth(c.styles.AssistantBlock, w)
 
-	// error takes priority
-	if msg.Error != "" {
-		parts = append(parts, c.styles.MessageErr.Width(blockW).Render("Error: "+msg.Error))
-		return c.styles.AssistantBlock.Width(w).Render(strings.Join(parts, "\n"))
-	}
-
-	// thinking indicator
 	if msg.ThinkingMs > 0 {
 		parts = append(parts, c.renderThinking(msg.ThinkingMs))
 	}
 
-	// tool calls (rendered before the main content body)
-	for _, tc := range msg.ToolCalls {
-		parts = append(parts, c.renderToolCall(tc, w))
+	if msg.Error != "" {
+		parts = append(parts, c.styles.MessageErr.Width(blockW).Render("Error: "+msg.Error))
 	}
 
-	// todo list (rendered before or after content depending on pipeline stage)
-	if len(msg.Todos) > 0 {
-		parts = append(parts, c.renderTodos(msg.Todos))
-	}
-
-	// main content body
 	if msg.Content != "" {
-		body := c.renderAssistantBody(msg, w)
-		parts = append(parts, body)
+		parts = append(parts, c.renderAssistantBody(msg, blockW))
 	}
 
-	// streaming indicator with spinner + blinking cursor
 	if msg.IsStreaming {
 		spinnerView := c.spinner.View()
 		if spinnerView == "" {
-			spinnerView = "⠋" // fallback
+			spinnerView = "⠋"
 		}
-		indicator := spinnerView + " " + c.styles.Streaming.Render("generating...")
-		parts = append(parts, indicator)
+		parts = append(parts, c.styles.Streaming.Width(blockW).Render(spinnerView+" generating..."))
 	}
 
-	// source citations at end
-	if len(msg.Sources) > 0 {
-		parts = append(parts, c.renderSources(msg.Sources))
+	if len(parts) == 0 {
+		return ""
 	}
 
-	return c.styles.AssistantBlock.Width(w).Render(strings.Join(parts, "\n"))
+	return c.styles.AssistantBlock.Width(w).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
-func (c *ChatPane) renderAssistantBody(msg session.Message, w int) string {
-	bodyW := w
-	if bodyW > 88 {
-		bodyW = 88
-	}
+func (c *ChatPane) renderAssistantBody(msg session.Message, bodyW int) string {
 	if bodyW < 20 {
 		bodyW = 20
 	}
@@ -250,7 +235,9 @@ func (c *ChatPane) renderSystem(msg session.Message, w int) string {
 //
 //   $ go build ./...
 
-func (c *ChatPane) renderToolCall(tc session.ToolCall, w int) string {
+func (c *ChatPane) renderToolCallBlock(tc session.ToolCall, w int) string {
+	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
+
 	// status icon
 	var icon string
 	switch tc.Status {
@@ -271,23 +258,18 @@ func (c *ChatPane) renderToolCall(tc session.ToolCall, w int) string {
 	if tc.Args != "" {
 		header += " " + c.styles.ToolCallArgs.Render(tc.Args)
 	}
+	parts := []string{lipgloss.NewStyle().Width(blockW).Render(header)}
 
-	if tc.Output == "" {
-		return header
+	if tc.Output != "" {
+		toolOutput := c.renderToolOutput(tc, blockW)
+		parts = append(parts, c.styles.ToolCallOutput.Width(blockW).Render(toolOutput))
 	}
 
-	// output with left border
-	outputW := w - 6
-	if outputW < 20 {
-		outputW = 20
+	if tc.Output == "" && tc.Status != "done" {
+		parts = append(parts, c.styles.ToolCallStatus.Width(blockW).Render(tc.Status))
 	}
 
-	toolOutput := c.renderToolOutput(tc, outputW)
-	output := c.styles.ToolCallOutput.
-		Width(outputW).
-		Render(toolOutput)
-
-	return header + "\n" + output
+	return c.styles.ToolCallBlock.Width(w).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
 func (c *ChatPane) renderToolOutput(tc session.ToolCall, w int) string {
@@ -424,6 +406,12 @@ func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 	return strings.Join(lines, "\n")
 }
 
+func (c *ChatPane) renderTodoBlock(todos []session.TodoItem, w int) string {
+	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
+	content := lipgloss.NewStyle().Width(blockW).Render(c.renderTodos(todos))
+	return c.styles.ToolCallBlock.Width(w).Render(content)
+}
+
 // ── Source citations ──────────────────────────────────────────────────
 
 func (c *ChatPane) renderSources(sources []session.Source) string {
@@ -437,11 +425,14 @@ func (c *ChatPane) renderSources(sources []session.Source) string {
 	return strings.Join(parts, " ")
 }
 
+func (c *ChatPane) renderSourcesBlock(sources []session.Source, w int) string {
+	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
+	content := lipgloss.NewStyle().Width(blockW).Render(c.renderSources(sources))
+	return c.styles.ToolCallBlock.Width(w).Render(content)
+}
+
 func messageBlockWidth(style lipgloss.Style, width int) int {
 	blockW := width
-	if blockW > 92 {
-		blockW = 92
-	}
 	if blockW < 20 {
 		blockW = 20
 	}

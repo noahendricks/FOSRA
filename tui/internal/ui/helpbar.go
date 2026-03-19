@@ -10,7 +10,7 @@ import (
 	"github.com/roccoluxe/fosra-tui/tui/internal/session"
 )
 
-// HelpBar renders a compact status bar with key hints.
+// HelpBar renders a continuous segmented status bar.
 type HelpBar struct {
 	styles Styles
 	width  int
@@ -27,46 +27,24 @@ func (h *HelpBar) View(sess *session.Session) string {
 		return ""
 	}
 
-	innerW := h.width - h.styles.HelpBar.GetHorizontalFrameSize()
-	if innerW < 0 {
-		innerW = 0
-	}
-
 	help := h.styles.HelpBarRight.Render("ctrl+p help")
-	model := h.styles.InputModel.Render(h.modelLabel(sess, 24))
 	info := h.renderStatusInfo(sess)
+	state := h.renderState(sess)
+	model := h.styles.InputModel.Render(h.modelLabel(sess, 18))
 
-	leftParts := []string{help}
-	if info != "" {
-		leftParts = append(leftParts, " ", info)
-	}
-	left := lipgloss.JoinHorizontal(lipgloss.Center, leftParts...)
-	leftW := lipgloss.Width(left)
-	rightW := lipgloss.Width(model)
-	available := innerW - leftW - rightW
-
-	if available < 6 && info != "" {
-		left = help
-		leftW = lipgloss.Width(left)
-		available = innerW - leftW - rightW
+	left := help + info
+	right := state + model
+	fillW := h.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if fillW < 0 {
+		fillW = 0
 	}
 
-	if available < 0 {
-		model = h.styles.InputModel.Render(h.modelLabel(sess, 14))
-		rightW = lipgloss.Width(model)
-		available = innerW - leftW - rightW
+	middle := h.renderShortcuts(fillW)
+	if middle == "" {
+		middle = h.styles.HelpBarFill.Width(fillW).Render("")
 	}
 
-	if available < 0 {
-		available = 0
-	}
-
-	middle := h.renderShortcuts(available)
-	row := left + middle + model
-
-	return h.styles.HelpBar.
-		Width(h.width).
-		Render(row)
+	return h.styles.HelpBar.Width(h.width).Render(left + middle + right)
 }
 
 func (h *HelpBar) renderStatusInfo(sess *session.Session) string {
@@ -75,11 +53,29 @@ func (h *HelpBar) renderStatusInfo(sess *session.Session) string {
 	}
 
 	pct := int(sess.ContextUsed * 100)
-	info := fmt.Sprintf("Ctx %s (%d%%)", formatCompactTokens(sess.ContextTotal), pct)
+	info := fmt.Sprintf("Context: %s", formatCompactTokens(sess.ContextTotal))
+	if pct > 0 {
+		info += fmt.Sprintf(", %d%%", pct)
+	}
 	if sess.Cost > 0 {
-		info += fmt.Sprintf("  $%.2f", sess.Cost)
+		info += fmt.Sprintf(", $%.2f", sess.Cost)
 	}
 	return h.styles.HelpBarInfo.Render(info)
+}
+
+func (h *HelpBar) renderState(sess *session.Session) string {
+	if sess == nil {
+		return h.styles.HelpBarState.Render("No session")
+	}
+
+	label := "RAG off"
+	if sess.RAG.Active {
+		label = "RAG on"
+		if sess.RAG.SourceCount > 0 {
+			label = fmt.Sprintf("%d sources", sess.RAG.SourceCount)
+		}
+	}
+	return h.styles.HelpBarState.Render(label)
 }
 
 func (h *HelpBar) renderShortcuts(width int) string {
@@ -103,7 +99,6 @@ func (h *HelpBar) renderShortcuts(width int) string {
 		if help.Key == "" || help.Desc == "" {
 			continue
 		}
-
 		entry := h.styles.HelpKey.Render(help.Key) + " " + h.styles.HelpDesc.Render(help.Desc)
 		entryW := lipgloss.Width(entry)
 		if len(parts) > 0 {
@@ -117,19 +112,14 @@ func (h *HelpBar) renderShortcuts(width int) string {
 	}
 
 	strip := strings.Join(parts, sep)
-	return lipgloss.NewStyle().
-		Width(width).
-		Foreground(lipgloss.Color(colorComment)).
-		Render(strip)
+	return h.styles.HelpBarFill.Width(width).Render(strip)
 }
 
 func (h *HelpBar) modelLabel(sess *session.Session, limit int) string {
 	if sess == nil {
 		return "No model"
 	}
-
-	label := sess.Provider + " / " + sess.ModelName
-	return truncateInputLabel(label, limit)
+	return truncateInputLabel(sess.Provider+" / "+sess.ModelName, limit)
 }
 
 func formatCompactTokens(tokens int) string {

@@ -261,21 +261,23 @@ func (a *App) handleAnimTick() (tea.Model, tea.Cmd) {
 }
 
 func (a *App) relayout() {
-	sidebarW := a.sidebarAnim.Width()
+	sidebarW := a.sidebarAnim.Width(a.windowWidth)
 
 	chatColW := a.windowWidth - sidebarW
 	if chatColW < 20 {
 		chatColW = 20
 	}
 
+	inputH := InputTotalHeight
 	// heights: chat + input (with top border) + helpbar
-	chatH := a.windowHeight - InputTotalHeight - HelpBarHeight
+	chatH := a.windowHeight - inputH - HelpBarHeight
 	if chatH < 4 {
 		chatH = 4
 	}
 
 	a.chat.SetSize(chatColW, chatH)
 	a.input.SetWidth(chatColW)
+	a.input.SetHeight(InputMinHeight)
 	a.sidebar.SetSize(sidebarW, a.windowHeight-HelpBarHeight)
 	a.helpBar.SetWidth(a.windowWidth)
 	a.palette.SetSize(a.windowWidth, a.windowHeight)
@@ -302,7 +304,7 @@ func (a App) View() tea.View {
 	)
 
 	// ── Right column: sidebar ──
-	sidebarW := a.sidebarAnim.Width()
+	sidebarW := a.sidebarAnim.Width(a.windowWidth)
 	var layout string
 	if sidebarW > 0 {
 		rightCol := a.sidebar.View(sess)

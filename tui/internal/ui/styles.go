@@ -6,14 +6,16 @@ import (
 
 // layout constants.
 const (
-	SidebarWidth       = 32
-	InputMinHeight     = 3
+	SidebarWidth       = 40
+	SidebarMinWidth    = 34
+	SidebarMaxWidth    = 46
+	InputMinHeight     = 1
 	InputBorderHeight  = 1 // top border on input pane
 	InputTotalHeight   = InputMinHeight + InputBorderHeight
 	InputMaxHeight     = 6
 	HelpBarHeight      = 1
-	MinWidthForSidebar = 80
-	ChatPadding        = 2 // left/right gutter inside chat area
+	MinWidthForSidebar = 96
+	ChatPadding        = 1 // left/right gutter inside chat area
 )
 
 // tokyo night color palette.
@@ -55,12 +57,14 @@ type Styles struct {
 	// user message block
 	UserBlock      lipgloss.Style
 	AssistantBlock lipgloss.Style
+	AssistantMeta  lipgloss.Style
 
 	// tool calls
 	ToolCallIcon   lipgloss.Style // ✱ or $ prefix
+	ToolCallBlock  lipgloss.Style // standalone tool block
 	ToolCallHeader lipgloss.Style // tool name (bold, colored)
 	ToolCallArgs   lipgloss.Style // arguments after tool name
-	ToolCallOutput lipgloss.Style // output block with left border
+	ToolCallOutput lipgloss.Style // output content inside tool block
 	ToolCallCheck  lipgloss.Style // ✓ checkmark
 	ToolCallStatus lipgloss.Style // status text (done, running)
 
@@ -117,6 +121,8 @@ type Styles struct {
 	HelpKey      lipgloss.Style
 	HelpDesc     lipgloss.Style
 	HelpSep      lipgloss.Style
+	HelpBarFill  lipgloss.Style
+	HelpBarState lipgloss.Style
 	HelpBarRight lipgloss.Style // inverted pill for right-side badges
 
 	// misc
@@ -141,6 +147,7 @@ func NewStyles() Styles {
 
 	// user message block: thick purple (Secondary) left border
 	s.UserBlock = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		BorderStyle(lipgloss.ThickBorder()).
 		BorderLeft(true).
 		BorderRight(false).
@@ -151,6 +158,7 @@ func NewStyles() Styles {
 		Foreground(lipgloss.Color(colorFg))
 
 	s.AssistantBlock = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		BorderStyle(lipgloss.ThickBorder()).
 		BorderLeft(true).
 		BorderRight(false).
@@ -160,24 +168,43 @@ func NewStyles() Styles {
 		PaddingLeft(1).
 		Foreground(lipgloss.Color(colorFg))
 
+	s.AssistantMeta = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
+		Foreground(lipgloss.Color(colorComment))
+
 	s.MessageAI = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorFg))
 
 	s.MessageMeta = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorComment)).
 		Italic(true)
 
 	s.MessageErr = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorRed)).
 		Bold(true)
 
 	s.Streaming = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorComment)).
 		Italic(true)
 
 	// ── tool calls ────────────────────────────────────────────
 	s.ToolCallIcon = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorYellow))
+
+	s.ToolCallBlock = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderLeft(true).
+		BorderRight(false).
+		BorderTop(false).
+		BorderBottom(false).
+		BorderForeground(lipgloss.Color(colorComment)).
+		PaddingLeft(1).
+		Foreground(lipgloss.Color(colorFgDim))
 
 	s.ToolCallHeader = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorGreen)).
@@ -187,17 +214,10 @@ func NewStyles() Styles {
 		Foreground(lipgloss.Color(colorFgDim)).
 		Italic(true)
 
-	// tool output: left border in TextMuted
 	s.ToolCallOutput = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorFgDim)).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderLeft(true).
-		BorderRight(false).
-		BorderTop(false).
-		BorderBottom(false).
-		BorderForeground(lipgloss.Color(colorComment)).
-		PaddingLeft(1).
-		MarginLeft(3)
+		PaddingLeft(0)
 
 	s.ToolCallCheck = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorGreen))
@@ -231,10 +251,9 @@ func NewStyles() Styles {
 
 	// ── code blocks ───────────────────────────────────────────
 	s.CodeBlock = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBgAlt)).
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorFg)).
-		Padding(0, 1).
-		MarginLeft(2)
+		Padding(0, 1)
 
 	s.CodeInline = lipgloss.NewStyle().
 		Background(lipgloss.Color(colorBgHighlight)).
@@ -253,28 +272,29 @@ func NewStyles() Styles {
 
 	// ── input ──────────────────────────────────────────────────
 	s.InputPane = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderTop(true).
 		BorderBottom(false).
 		BorderLeft(false).
 		BorderRight(false).
-		BorderForeground(lipgloss.Color(colorBorder)).
-		Padding(0, 1)
+		BorderForeground(lipgloss.Color(colorBorder))
 
 	// focused border = Primary (blue)
 	s.InputFocused = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderTop(true).
 		BorderBottom(false).
 		BorderLeft(false).
 		BorderRight(false).
-		BorderForeground(lipgloss.Color(colorBlue)).
-		Padding(0, 1)
+		BorderForeground(lipgloss.Color(colorBlue))
 
 	// prompt ">" in Primary (blue)
 	s.InputPrompt = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBlue)).
-		Bold(true)
+		Bold(true).
+		Padding(0, 0, 0, 1)
 
 	s.InputRAG = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBgAlt)).
@@ -290,25 +310,23 @@ func NewStyles() Styles {
 		Padding(0, 1).
 		Bold(true)
 
-	// ── sidebar (vertical border separator, no dark background) ──
+	// ── sidebar ────────────────────────────────────────────────
 	s.Sidebar = lipgloss.NewStyle().
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderLeft(true).
-		BorderRight(false).
-		BorderTop(false).
-		BorderBottom(false).
-		BorderForeground(lipgloss.Color(colorBorder)).
-		PaddingLeft(1).
-		PaddingRight(1)
+		Background(lipgloss.Color(colorBg)).
+		PaddingLeft(4).
+		PaddingRight(2)
 
 	s.SidebarSection = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorBlue)).
 		Bold(true)
 
 	s.SidebarValue = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorFg))
 
 	s.SidebarDim = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorComment))
 
 	s.SidebarDot = lipgloss.NewStyle().
@@ -361,13 +379,13 @@ func NewStyles() Styles {
 
 	// ── help bar ──────────────────────────────────────────────
 	s.HelpBar = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBgDarker)).
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorComment)).
-		Padding(0, 1)
+		Padding(0, 0)
 
 	s.HelpBarInfo = lipgloss.NewStyle().
 		Background(lipgloss.Color(colorFg)).
-		Foreground(lipgloss.Color(colorBgAlt)).
+		Foreground(lipgloss.Color(colorBg)).
 		Padding(0, 1)
 
 	s.HelpKey = lipgloss.NewStyle().
@@ -379,6 +397,15 @@ func NewStyles() Styles {
 
 	s.HelpSep = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorFgDark))
+
+	s.HelpBarFill = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
+		Foreground(lipgloss.Color(colorFgDim))
+
+	s.HelpBarState = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBgDarker)).
+		Foreground(lipgloss.Color(colorFgDim)).
+		Padding(0, 1)
 
 	// inverted pill for right-side badges (TextMuted bg, BgDarker fg)
 	s.HelpBarRight = lipgloss.NewStyle().
