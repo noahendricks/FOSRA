@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
@@ -9,6 +11,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/roccoluxe/fosra-tui/tui/internal/session"
 )
+
+const maxToolOutputLines = 10
 
 // ChatPane renders the scrollable message area using a viewport bubble.
 type ChatPane struct {
@@ -28,7 +32,7 @@ func NewChatPane(styles Styles) ChatPane {
 		viewport.WithHeight(20),
 	)
 	vp.MouseWheelEnabled = true
-	vp.SoftWrap = true
+	vp.SoftWrap = false
 
 	return ChatPane{
 		styles:   styles,
@@ -52,6 +56,8 @@ func (c *ChatPane) Update(msg tea.Msg) tea.Cmd {
 
 // SetMessages renders all messages into the viewport content.
 func (c *ChatPane) SetMessages(messages []session.Message) {
+	wasAtBottom := c.viewport.AtBottom() || c.viewport.TotalLineCount() <= c.viewport.VisibleLineCount()
+
 	// manage spinner state based on streaming
 	isStreaming := len(messages) > 0 && messages[len(messages)-1].IsStreaming
 	if isStreaming && !c.spinner.Running() {
@@ -65,7 +71,7 @@ func (c *ChatPane) SetMessages(messages []session.Message) {
 
 	// auto-scroll on new messages or while streaming
 	newMessage := len(messages) != c.lastMsgCount
-	if newMessage || isStreaming {
+	if (newMessage || isStreaming) && wasAtBottom {
 		c.viewport.GotoBottom()
 	}
 
@@ -74,10 +80,14 @@ func (c *ChatPane) SetMessages(messages []session.Message) {
 }
 
 func (c *ChatPane) View() string {
+	content := lipgloss.NewStyle().
+		PaddingLeft(ChatPadding).
+		Render(c.viewport.View())
+
 	return c.styles.ChatPane.
 		Width(c.width).
 		Height(c.height).
-		Render(c.viewport.View())
+		Render(content)
 }
 
 // ViewEmpty renders the empty state placeholder.
@@ -91,10 +101,14 @@ func (c *ChatPane) ViewEmpty() string {
 		Height(c.height).
 		Render("No messages yet. Start a conversation below.")
 
+	content := lipgloss.NewStyle().
+		PaddingLeft(ChatPadding).
+		Render(placeholder)
+
 	return c.styles.ChatPane.
 		Width(c.width).
 		Height(c.height).
-		Render(placeholder)
+		Render(content)
 }
 
 // ── Rendering pipeline ────────────────────────────────────────────────
@@ -106,6 +120,9 @@ func (c *ChatPane) renderAll(messages []session.Message) string {
 
 	// content width with left/right padding (gutter)
 	contentW := c.width - ChatPadding*2 - 2
+	if contentW > 92 {
+		contentW = 92
+	}
 	if contentW < 30 {
 		contentW = 30
 	}
@@ -148,11 +165,12 @@ func (c *ChatPane) renderUser(msg session.Message, w int) string {
 
 func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
 	var parts []string
+	blockW := messageBlockWidth(c.styles.AssistantBlock, w)
 
 	// error takes priority
 	if msg.Error != "" {
-		parts = append(parts, c.styles.MessageErr.Render("Error: "+msg.Error))
-		return strings.Join(parts, "\n")
+		parts = append(parts, c.styles.MessageErr.Width(blockW).Render("Error: "+msg.Error))
+		return c.styles.AssistantBlock.Width(w).Render(strings.Join(parts, "\n"))
 	}
 
 	// thinking indicator
@@ -172,7 +190,7 @@ func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
 
 	// main content body
 	if msg.Content != "" {
-		body := c.styles.MessageAI.Width(w).Render(msg.Content)
+		body := c.renderAssistantBody(msg, w)
 		parts = append(parts, body)
 	}
 
@@ -191,7 +209,28 @@ func (c *ChatPane) renderAssistant(msg session.Message, w int) string {
 		parts = append(parts, c.renderSources(msg.Sources))
 	}
 
-	return strings.Join(parts, "\n")
+	return c.styles.AssistantBlock.Width(w).Render(strings.Join(parts, "\n"))
+}
+
+func (c *ChatPane) renderAssistantBody(msg session.Message, w int) string {
+	bodyW := w
+	if bodyW > 88 {
+		bodyW = 88
+	}
+	if bodyW < 20 {
+		bodyW = 20
+	}
+
+	if msg.IsStreaming {
+		return c.styles.MessageAI.Width(bodyW).Render(msg.Content)
+	}
+
+	rendered := renderMarkdown(msg.Content, bodyW)
+	if rendered == "" {
+		return c.styles.MessageAI.Width(bodyW).Render(msg.Content)
+	}
+
+	return c.styles.MessageAI.Width(bodyW).Render(rendered)
 }
 
 // ── System message ────────────────────────────────────────────────────
@@ -243,11 +282,101 @@ func (c *ChatPane) renderToolCall(tc session.ToolCall, w int) string {
 		outputW = 20
 	}
 
+	toolOutput := c.renderToolOutput(tc, outputW)
 	output := c.styles.ToolCallOutput.
 		Width(outputW).
-		Render(tc.Output)
+		Render(toolOutput)
 
 	return header + "\n" + output
+}
+
+func (c *ChatPane) renderToolOutput(tc session.ToolCall, w int) string {
+	content := strings.TrimSpace(tc.Output)
+	if content == "" {
+		return ""
+	}
+
+	if tc.Status == "error" {
+		return c.styles.MessageErr.Render(truncateTextLines(content, maxToolOutputLines))
+	}
+
+	markdown := c.toolOutputMarkdown(tc, content)
+	rendered := renderMarkdownWithBackground(markdown, w, colorBg)
+	if rendered == "" {
+		rendered = content
+	}
+
+	return truncateRenderedOutput(rendered, maxToolOutputLines)
+}
+
+func (c *ChatPane) toolOutputMarkdown(tc session.ToolCall, content string) string {
+	name := strings.ToLower(strings.TrimSpace(tc.Name))
+	trimmedArgs := strings.TrimSpace(tc.Args)
+
+	switch name {
+	case "bash", "run", "shell", "$":
+		return fencedBlock("bash", content)
+	case "read", "view":
+		return fencedBlock(languageFromPath(trimmedArgs), content)
+	case "fetch":
+		return fencedBlock("markdown", content)
+	case "grep", "search", "sources":
+		return fencedBlock("text", content)
+	default:
+		if looksLikeCode(content) {
+			return fencedBlock(languageFromPath(trimmedArgs), content)
+		}
+		return content
+	}
+}
+
+func fencedBlock(language, content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	return "```" + language + "\n" + content + "\n```"
+}
+
+func languageFromPath(path string) string {
+	path = strings.Trim(path, `"'`)
+	if path == "" {
+		return "text"
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	switch ext {
+	case "go", "py", "js", "ts", "tsx", "jsx", "json", "yaml", "yml", "md", "html", "css", "sh", "bash", "sql", "xml", "java", "rb", "rs", "c", "cpp", "h":
+		return ext
+	case "":
+		return "text"
+	default:
+		return ext
+	}
+}
+
+func looksLikeCode(content string) bool {
+	codeSignals := []string{
+		"func ",
+		"package ",
+		"import ",
+		"class ",
+		"const ",
+		"let ",
+		"var ",
+		"return ",
+		"{",
+		"}",
+		"=>",
+	}
+
+	for _, signal := range codeSignals {
+		if strings.Contains(content, signal) {
+			return true
+		}
+	}
+
+	return strings.Contains(content, "\n\t")
 }
 
 // ── Thinking indicator ────────────────────────────────────────────────
@@ -298,13 +427,55 @@ func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 // ── Source citations ──────────────────────────────────────────────────
 
 func (c *ChatPane) renderSources(sources []session.Source) string {
-	var chips []string
+	parts := make([]string, 0, len(sources)+1)
+	parts = append(parts, c.styles.SidebarDim.Render("Sources:"))
 	for _, src := range sources {
 		score := fmt.Sprintf("%.0f%%", src.Score*100)
 		label := src.DocName + " " + c.styles.SourceScore.Render(score)
-		chips = append(chips, c.styles.SourceChip.Render(label))
+		parts = append(parts, c.styles.SourceChip.Render(label))
 	}
-	return strings.Join(chips, " ")
+	return strings.Join(parts, " ")
+}
+
+func messageBlockWidth(style lipgloss.Style, width int) int {
+	blockW := width
+	if blockW > 92 {
+		blockW = 92
+	}
+	if blockW < 20 {
+		blockW = 20
+	}
+
+	innerW := blockW - style.GetHorizontalFrameSize()
+	if innerW >= 20 {
+		return innerW
+	}
+
+	return blockW
+}
+
+func truncateRenderedOutput(rendered string, maxLines int) string {
+	lines := strings.Split(rendered, "\n")
+	if len(lines) <= maxLines {
+		return rendered
+	}
+
+	hidden := len(lines) - maxLines
+	visible := append([]string{}, lines[:maxLines]...)
+	visible = append(visible, lipgloss.NewStyle().Foreground(lipgloss.Color(colorComment)).Render("... +"+strconv.Itoa(hidden)+" more lines"))
+	return strings.Join(visible, "\n")
+}
+
+func truncateTextLines(content string, maxLines int) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) <= maxLines {
+		return strings.Join(lines, "\n")
+	}
+
+	hidden := len(lines) - maxLines
+	visible := append([]string{}, lines[:maxLines]...)
+	visible = append(visible, "... +"+strconv.Itoa(hidden)+" more lines")
+	return strings.Join(visible, "\n")
 }
 
 // TickSpinner advances the spinner frame. Call from App on AnimTickMsg.

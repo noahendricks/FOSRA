@@ -12,12 +12,11 @@ type App struct {
 	styles Styles
 
 	// components
-	modelBar ModelBar
-	chat     ChatPane
-	input    ChatInput
-	sidebar  Sidebar
-	helpBar  HelpBar
-	palette  CommandPalette
+	chat    ChatPane
+	input   ChatInput
+	sidebar Sidebar
+	helpBar HelpBar
+	palette CommandPalette
 
 	// state
 	sessions     *session.Manager
@@ -33,7 +32,6 @@ func NewApp() App {
 
 	return App{
 		styles:      styles,
-		modelBar:    NewModelBar(styles),
 		chat:        NewChatPane(styles),
 		input:       NewChatInput(styles),
 		sidebar:     NewSidebar(styles),
@@ -140,7 +138,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case key.Matches(msg, km.ToggleRAG):
 		if s := a.sessions.Active(); s != nil {
-			s.RAGEnabled = !s.RAGEnabled
+			s.RAG.Active = !s.RAG.Active
 		}
 		return nil
 	case key.Matches(msg, km.FocusInput):
@@ -168,6 +166,7 @@ func (a *App) openOverlay() {
 
 func (a *App) closeOverlay() {
 	a.overlayAnim.Close()
+	a.input.Focus()
 }
 
 func (a *App) paletteUp() {
@@ -206,7 +205,7 @@ func (a *App) paletteSelect() tea.Cmd {
 			a.relayout()
 		case "toggle_rag":
 			if s := a.sessions.Active(); s != nil {
-				s.RAGEnabled = !s.RAGEnabled
+				s.RAG.Active = !s.RAG.Active
 			}
 			a.closeOverlay()
 		case "quit":
@@ -229,6 +228,11 @@ func (a *App) sendMessage() tea.Cmd {
 	text := a.input.Value()
 	if text == "" {
 		return nil
+	}
+
+	if s := a.sessions.Active(); s != nil {
+		s.RAG.SourceCount = 0
+		s.RAG.Latency = 0
 	}
 
 	a.sessions.AppendMessage(session.Message{
@@ -264,13 +268,12 @@ func (a *App) relayout() {
 		chatColW = 20
 	}
 
-	// heights: modelbar + chat + input (with top border) + helpbar
-	chatH := a.windowHeight - ModelBarHeight - InputTotalHeight - HelpBarHeight
+	// heights: chat + input (with top border) + helpbar
+	chatH := a.windowHeight - InputTotalHeight - HelpBarHeight
 	if chatH < 4 {
 		chatH = 4
 	}
 
-	a.modelBar.SetWidth(chatColW)
 	a.chat.SetSize(chatColW, chatH)
 	a.input.SetWidth(chatColW)
 	a.sidebar.SetSize(sidebarW, a.windowHeight-HelpBarHeight)
@@ -281,9 +284,6 @@ func (a *App) relayout() {
 func (a App) View() tea.View {
 	sess := a.sessions.Active()
 
-	// ── Model bar ──
-	modelBarView := a.modelBar.View(sess)
-
 	// ── Chat area ──
 	var chatView string
 	if sess != nil && len(sess.Messages) > 0 {
@@ -293,13 +293,10 @@ func (a App) View() tea.View {
 	}
 
 	// ── Input area ──
-	ragEnabled := sess != nil && sess.RAGEnabled
-	isStreaming := sess != nil && len(sess.Messages) > 0 && sess.Messages[len(sess.Messages)-1].IsStreaming
-	inputView := a.input.View(ragEnabled, isStreaming)
+	inputView := a.input.View(sess)
 
-	// ── Left column: modelbar + chat + input ──
+	// ── Left column: chat + input ──
 	leftCol := lipgloss.JoinVertical(lipgloss.Left,
-		modelBarView,
 		chatView,
 		inputView,
 	)
@@ -308,14 +305,14 @@ func (a App) View() tea.View {
 	sidebarW := a.sidebarAnim.Width()
 	var layout string
 	if sidebarW > 0 {
-		rightCol := a.sidebar.View()
+		rightCol := a.sidebar.View(sess)
 		layout = lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightCol)
 	} else {
 		layout = leftCol
 	}
 
 	// ── Help bar (full width bottom) ──
-	helpView := a.helpBar.View()
+	helpView := a.helpBar.View(sess)
 	fullLayout := lipgloss.JoinVertical(lipgloss.Left, layout, helpView)
 
 	// ── App background ──
@@ -327,20 +324,10 @@ func (a App) View() tea.View {
 	// ── Overlay (compositor layer) ──
 	if a.overlayAnim.IsOpen() {
 		overlayContent := a.palette.View(a.sessions.Sessions, a.sessions.ActiveID)
-
-		overlayW := lipgloss.Width(overlayContent)
-		overlayH := lipgloss.Height(overlayContent)
-		ox := (a.windowWidth - overlayW) / 2
-		oy := (a.windowHeight - overlayH) / 2
-
-		baseLayer := lipgloss.NewLayer(fullScreen)
-		overlayLayer := lipgloss.NewLayer(overlayContent).
-			X(ox).
-			Y(oy).
-			Z(1)
-
-		comp := lipgloss.NewCompositor(baseLayer, overlayLayer)
-		v := tea.NewView(comp.Render())
+		ox := (a.windowWidth - lipgloss.Width(overlayContent)) / 2
+		oy := (a.windowHeight - lipgloss.Height(overlayContent)) / 2
+		withOverlay := placeOverlay(ox, oy, overlayContent, fullScreen, true)
+		v := tea.NewView(withOverlay)
 		v.AltScreen = true
 		v.MouseMode = tea.MouseModeCellMotion
 		return v

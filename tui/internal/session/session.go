@@ -66,12 +66,20 @@ type Message struct {
 	ThinkingMs int        // thinking duration in ms (0 = not shown)
 }
 
-// session is a named conversation.
+// RAGState tracks the current retrieval-augmented generation status.
+type RAGState struct {
+	IndexName   string        // name of the active index (e.g. "project-docs")
+	Active      bool          // whether RAG retrieval is enabled
+	SourceCount int           // number of sources retrieved for current query
+	Latency     time.Duration // last retrieval latency
+}
+
+// Session is a named conversation.
 type Session struct {
-	ID         string
-	Title      string
-	Messages   []Message
-	RAGEnabled bool
+	ID       string
+	Title    string
+	Messages []Message
+	RAG      RAGState
 
 	// model info
 	ModelName    string
@@ -105,13 +113,16 @@ var sessionCounter int
 func NewSession(title string) *Session {
 	sessionCounter++
 	return &Session{
-		ID:         fmt.Sprintf("%s-%d", time.Now().Format("20060102-150405"), sessionCounter),
-		Title:      title,
-		RAGEnabled: true,
-		ModelName:  "gpt-4o",
-		Provider:   "OpenAI",
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		ID:    fmt.Sprintf("%s-%d", time.Now().Format("20060102-150405"), sessionCounter),
+		Title: title,
+		RAG: RAGState{
+			IndexName: "project-docs",
+			Active:    true,
+		},
+		ModelName: "gpt-4o",
+		Provider:  "OpenAI",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 }
 

@@ -81,6 +81,9 @@ func (a *App) handleMockStep(step int) (tea.Model, tea.Cmd) {
 
 	switch step {
 	case 0: // create streaming assistant message with thinking indicator
+		s.RAG.IndexName = "middleware-index"
+		s.RAG.SourceCount = 0
+		s.RAG.Latency = 0
 		s.Messages = append(s.Messages, session.Message{
 			Role:        session.RoleAssistant,
 			IsStreaming: true,
@@ -115,6 +118,7 @@ func (a *App) handleMockStep(step int) (tea.Model, tea.Cmd) {
 		last := &s.Messages[len(s.Messages)-1]
 		last.ToolCalls[1].Status = "done"
 		last.ToolCalls[1].Output = "func SetupMiddleware(r *mux.Router) { ... }"
+		s.RAG.Latency = 184 * time.Millisecond
 		a.syncSession()
 		return a, mockDelay(300*time.Millisecond, mockPipelineStep{step: 4})
 
@@ -192,6 +196,7 @@ func (a *App) handleMockStream(msg mockStreamChunk) (tea.Model, tea.Cmd) {
 		{Text: "Summarize findings", Status: session.TodoStatusDone},
 	}
 	last.Sources = mockSources
+	s.RAG.SourceCount = len(mockSources)
 	a.syncSession()
 	return a, nil
 }

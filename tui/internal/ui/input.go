@@ -4,6 +4,7 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/roccoluxe/fosra-tui/tui/internal/session"
 )
 
 // ChatInput is the multi-line input area at the bottom of the chat.
@@ -17,18 +18,23 @@ type ChatInput struct {
 func NewChatInput(styles Styles) ChatInput {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything..."
+	ta.Prompt = " "
 	ta.ShowLineNumbers = false
 	ta.SetHeight(InputMinHeight)
-	ta.CharLimit = 0 // no limit
+	ta.CharLimit = -1
 	ta.Focus()
 
-	// Style the textarea to blend with the input pane
+	// Style the textarea to blend with the main background
 	s := ta.Styles()
 	s.Focused.Base = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBgAlt)).
+		Background(lipgloss.Color(colorBg)).
 		Foreground(lipgloss.Color(colorFg))
 	s.Blurred.Base = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBgAlt)).
+		Background(lipgloss.Color(colorBg)).
+		Foreground(lipgloss.Color(colorFgDim))
+	s.Focused.Text = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorFg))
+	s.Blurred.Text = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorFgDim))
 	s.Focused.Placeholder = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorComment))
@@ -49,10 +55,9 @@ func NewChatInput(styles Styles) ChatInput {
 
 func (i *ChatInput) SetWidth(w int) {
 	i.width = w
-	// textarea width minus padding and prompt
-	taW := w - 6
-	if taW < 20 {
-		taW = 20
+	taW := w - 2
+	if taW < 1 {
+		taW = 1
 	}
 	i.Area.SetWidth(taW)
 }
@@ -86,28 +91,14 @@ func (i *ChatInput) Focused() bool {
 	return i.Area.Focused()
 }
 
-func (i *ChatInput) View(ragEnabled bool, isStreaming bool) string {
-	// Prompt indicator
-	indicator := "›"
-	if isStreaming {
-		indicator = "…"
-	}
+func (i *ChatInput) View(sess *session.Session) string {
+	prompt := i.styles.InputPrompt.Render(">")
+	prefix := i.renderPrefix(sess, prompt)
 
-	prompt := i.styles.InputPrompt.Render(indicator)
+	taW := i.textareaWidth(prefix)
+	i.Area.SetWidth(taW)
 
-	// RAG badge
-	var ragBadge string
-	if ragEnabled {
-		ragBadge = i.styles.InputRAG.Render("RAG") + " "
-	}
-
-	// compose: RAG badge + prompt + textarea
-	inner := lipgloss.JoinHorizontal(lipgloss.Top,
-		ragBadge,
-		prompt,
-		" ",
-		i.Area.View(),
-	)
+	inner := lipgloss.JoinHorizontal(lipgloss.Top, prefix, " ", i.Area.View())
 
 	// pick style based on focus
 	paneStyle := i.styles.InputPane
@@ -118,4 +109,27 @@ func (i *ChatInput) View(ragEnabled bool, isStreaming bool) string {
 	return paneStyle.
 		Width(i.width).
 		Render(inner)
+}
+
+func (i *ChatInput) renderPrefix(_ *session.Session, prompt string) string {
+	// Clean input: just the ">" prompt. Model/context info lives in the status bar.
+	return prompt
+}
+
+func (i *ChatInput) textareaWidth(prefix string) int {
+	taW := i.width - lipgloss.Width(prefix) - 3
+	if taW < 1 {
+		return 1
+	}
+	return taW
+}
+
+func truncateInputLabel(s string, limit int) string {
+	if limit <= 1 {
+		return "…"
+	}
+	if len(s) <= limit {
+		return s
+	}
+	return s[:limit-1] + "…"
 }
