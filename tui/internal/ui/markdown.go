@@ -47,8 +47,8 @@ func renderMarkdownWithBackground(content string, width int, background string) 
 		return content
 	}
 
-	rendered = forceReplaceBackground(rendered, background)
-	return strings.Trim(rendered, "\n")
+	rendered = strings.Trim(rendered, "\n")
+	return forceReplaceBackground(rendered, background)
 }
 
 func markdownStyleConfig() ansi.StyleConfig {

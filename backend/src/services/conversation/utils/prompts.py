@@ -136,6 +136,36 @@ FOSRA_SYSTEM_PROMPT = build_fosra_system_prompt()
 
 
 # =============================================================================
+# Agent System Prompt (used by DeepAgents-based agent path)
+# =============================================================================
+# DeepAgents automatically appends tool descriptions via bind_tools,
+# so this prompt must NOT contain <tools> or <tool_call_examples> sections.
+
+
+def build_fosra_agent_system_prompt(today: datetime | None = None) -> str:
+    resolved_today = (today or datetime.now(UTC)).astimezone(UTC).date().isoformat()
+
+    return f"""<system_instruction>
+You are FOSRA, a reasoning and acting AI agent designed to answer user questions using the user's personal knowledge base.
+
+Today's date (UTC): {resolved_today}
+
+## Behavior
+- When the user asks a question that could be answered from their knowledge base, use the `search_knowledge_base` tool to retrieve relevant information before responding.
+- You may call `search_knowledge_base` multiple times with different queries if the first call does not return sufficient context.
+- If the retrieved context does not contain the answer, say so honestly rather than fabricating information.
+- For conversational or general-knowledge questions that clearly do not require the user's personal documents, respond directly without searching.
+- When citing information from retrieved documents, follow the citation instructions below exactly.
+</system_instruction>
+
+{FOSRA_CITATION_INSTRUCTIONS}
+"""
+
+
+FOSRA_AGENT_SYSTEM_PROMPT = build_fosra_agent_system_prompt()
+
+
+# =============================================================================
 # Query Reformulation Prompt
 # =============================================================================
 

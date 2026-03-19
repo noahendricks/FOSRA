@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import AIMessageChunk
 from loguru import logger
 from pydantic import BaseModel
 
@@ -24,12 +25,10 @@ from backend.src.api.schemas import (
 from backend.src.api.schemas.api_schemas import (
     ConvoDeleteRequest,
     ConvoListItemResponse,
-    FilePart,
     NewConvoResponse,
     NewWorkspaceRequest,
     NewWorkspaceResponse,
     TextPart,
-    UIMessage,
     UIMessagePart,
     WorkspaceDeleteRequest,
     WorkspaceUpdateRequest,
@@ -40,21 +39,13 @@ from backend.src.api.schemas.source_api_schemas import (
     SourceGroupResponse,
 )
 from backend.src.domain.enums import DocumentType, MessageRole
-from backend.src.domain.schemas.config import (
-    EmbedderConfig,
-    ScoredRetrieval,
-    VectorStoreConfig,
-)
+from backend.src.domain.schemas.config import ScoredRetrieval
+from backend.src.services.conversation.agent_service import create_fosra_agent
 from backend.src.services.conversation.conversation_service import ConversationService
-from backend.src.services.conversation.llm_service import LLMService
-from backend.src.services.conversation.query_service import QueryService
-from backend.src.services.retrieval.reranker_service import RerankerService
-from backend.src.services.retrieval.vector_service import RetrievedChunk, VectorService
+from backend.src.services.conversation.utils.llm_utils import ui_messages_to_lc_messages
+from backend.src.services.retrieval.vector_service import RetrievedChunk
 from backend.src.services.workspace.workspace_service import WorkspaceService
-from backend.src.storage.utils.converters import domain_to_response, ulid_factory
-
-if TYPE_CHECKING:
-    from langchain_core.messages import AIMessageChunk
+from backend.src.storage.utils.converters import ulid_factory
 
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
@@ -309,20 +300,12 @@ async def send_message_stream(
     db_session=Depends(get_db_session),
     session_factory=Depends(get_session_factory),
 ):
-    """SSE endpoint: save user message, run retrieval pipeline, stream
-    LLM response in Vercel AI SDK format.
+    """SSE endpoint: save user message, run FOSRA agent, stream response.
 
-    Pipeline (Phase A):
-        1. Save user message
-        2. Reform query  (QueryService)
-        3. Vector search  (VectorService)
-        4. Rerank  (RerankerService / FlashRank)
-        5. Stream LLM response  (LLMService)
-        6. Save assistant message
-
-    TODO (Phase D):  File ingestion (parse → chunk → embed → upsert) is
-    currently disabled.  It will be re-enabled when the retrieval pipeline
-    is extracted into a LangGraph subagent.
+    The agent (DeepAgents + LangGraph) handles retrieval internally via the
+    ``search_knowledge_base`` tool.  The route streams token-level LLM output
+    as ``text-delta`` SSE events, then emits ``rag-source`` events from the
+    retrieval result store after the agent finishes.
     """
 
     async def stream():
@@ -340,19 +323,10 @@ async def send_message_stream(
                 )
 
                 text_part_id: str = ulid_factory()
-                new_message = req.messages[-1]
-                user_query: str = extract_text_from_parts(new_message.parts)
-
-                def emit_chunk(chunk: dict[str, Any]) -> str:
-                    return f"data: {json.dumps(chunk)}\n\n"
-
-                # Use preferences from context (defaults until prefs are loaded from DB)
                 user_prefs = ctx.preferences
-                embedder_config = user_prefs.embedder or EmbedderConfig()
-                vector_config = user_prefs.vector_store or VectorStoreConfig()
-                reranker_config = user_prefs.reranker
 
                 # -- 1. Save user message ----------------------------------
+                new_message = req.messages[-1]
                 message: MessageResponse = await ConversationService().save_message(
                     message=new_message,
                     convo_id=ctx.convo_id or "",
@@ -361,103 +335,30 @@ async def send_message_stream(
                 )
                 message_id: str = message.message_id or ""
 
-                # -- 2. Query reformulation --------------------------------
-                yield emit_chunk(
-                    {
-                        "type": "data-rag-status",
-                        "data": {"stage": "reformulating", "progress": 0.1},
-                    }
-                )
+                # -- 2. Create agent ---------------------------------------
+                agent, result_store = create_fosra_agent(user_prefs)
 
-                llm_config = LLMService._resolve_llm_config(user_prefs)
+                # -- 3. Build LangChain messages from UI messages ----------
+                lc_messages = ui_messages_to_lc_messages(req.messages or [])
 
-                reformed_query = await QueryService.reform_query(
-                    user_query=user_query,
-                    chat_history=None,  # TODO: pass prior turn history
-                    existing_topics=None,
-                    llm_config=llm_config,
-                )
-                logger.debug("Reformed query: {}", reformed_query)
-
-                # -- 3. Vector search --------------------------------------
-                yield emit_chunk(
-                    {
-                        "type": "data-rag-status",
-                        "data": {"stage": "searching", "progress": 0.4},
-                    }
-                )
-
-                retrieved_chunks: list[RetrievedChunk] = []
-                try:
-                    raw_results = await VectorService.search(
-                        config=vector_config,
-                        embed_config=embedder_config,
-                        query=reformed_query,
-                    )
-                    if raw_results:
-                        retrieved_chunks = raw_results
-                except Exception as search_err:
-                    logger.warning(
-                        "Vector search failed (collection may not exist yet): {}",
-                        search_err,
-                    )
-
-                # -- 4. Rerank ---------------------------------------------
-                yield emit_chunk(
-                    {
-                        "type": "data-rag-status",
-                        "data": {"stage": "reranking", "progress": 0.6},
-                    }
-                )
-
-                if retrieved_chunks:
-                    reranker = RerankerService(config=reranker_config)
-                    retrieved_chunks = reranker.rerank(
-                        query=reformed_query,
-                        chunks=retrieved_chunks,
-                    )
-                    logger.debug("Reranked to {} chunks", len(retrieved_chunks))
-
-                # -- 5. Build source payloads for frontend -----------------
-                source_groups = _chunks_to_source_groups(retrieved_chunks)
-                sources_as_dicts: list[dict[str, Any]] = [
-                    group.model_dump(mode="json") for group in source_groups
-                ]
-
-                yield emit_chunk(
-                    {
-                        "type": "data-rag-status",
-                        "data": {"stage": "complete", "progress": 1},
-                    }
-                )
-
-                # Send source groups to frontend
-                for src in sources_as_dicts:
-                    yield emit_chunk({"type": "rag-source", "source": src})
+                # -- 4. Stream agent output --------------------------------
+                def emit_chunk(chunk: dict[str, Any]) -> str:
+                    return f"data: {json.dumps(chunk)}\n\n"
 
                 yield emit_chunk({"type": "start", "messageId": message_id})
                 yield emit_chunk({"type": "text-start", "id": text_part_id})
 
-                # -- 6. Stream LLM response --------------------------------
-                scored_sources: list[ScoredRetrieval] = [
-                    _retrieved_chunk_to_scored(c, i)
-                    for i, c in enumerate(retrieved_chunks)
-                ]
-
-                llm_stream = await LLMService.generate_llm_response(
-                    chat_history=req.messages or [],
-                    sources=scored_sources,
-                    convo_id=req.convo_id,
-                    user_prefs=user_prefs,
-                )
-
                 full_text = ""
 
-                async for chunk in llm_stream:
-                    content = chunk.content
-                    if content:
+                async for msg, _metadata in agent.astream(
+                    {"messages": lc_messages},
+                    stream_mode="messages",
+                ):
+                    if isinstance(msg, AIMessageChunk) and msg.content:
                         text_chunk = (
-                            content if isinstance(content, str) else str(content)
+                            msg.content
+                            if isinstance(msg.content, str)
+                            else str(msg.content)
                         )
                         full_text += text_chunk
                         yield emit_chunk(
@@ -470,7 +371,16 @@ async def send_message_stream(
 
                 yield emit_chunk({"type": "text-end", "id": text_part_id})
 
-                # -- 7. Save assistant message -----------------------------
+                # -- 5. Emit source groups from retrieval result store ------
+                source_groups = _chunks_to_source_groups(result_store.chunks)
+                sources_as_dicts: list[dict[str, Any]] = [
+                    group.model_dump(mode="json") for group in source_groups
+                ]
+
+                for src in sources_as_dicts:
+                    yield emit_chunk({"type": "rag-source", "source": src})
+
+                # -- 6. Save assistant message ------------------------------
                 _ = await ConversationService().save_message(
                     message=MessageResponse(
                         role=MessageRole.ASSISTANT,

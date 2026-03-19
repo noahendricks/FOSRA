@@ -26,6 +26,8 @@ type ChatPane struct {
 	wasStreaming bool
 }
 
+var bg = lipgloss.NewStyle().Background(lipgloss.Color(colorBg))
+
 func NewChatPane(styles Styles) ChatPane {
 	vp := viewport.New(
 		viewport.WithWidth(80),
@@ -60,6 +62,7 @@ func (c *ChatPane) SetMessages(messages []session.Message) {
 
 	// manage spinner state based on streaming
 	isStreaming := len(messages) > 0 && messages[len(messages)-1].IsStreaming
+
 	if isStreaming && !c.spinner.Running() {
 		c.spinner.Start()
 	} else if !isStreaming && c.spinner.Running() {
@@ -67,7 +70,14 @@ func (c *ChatPane) SetMessages(messages []session.Message) {
 	}
 
 	content := c.renderAll(messages)
-	c.viewport.SetContent(content)
+
+	sealed := lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
+		Width(c.viewport.Width()).
+		Render(content)
+
+	sealed = forceReplaceBackground(sealed, colorBg)
+	c.viewport.SetContent(sealed)
 
 	// auto-scroll on new messages or while streaming
 	newMessage := len(messages) != c.lastMsgCount
@@ -80,14 +90,10 @@ func (c *ChatPane) SetMessages(messages []session.Message) {
 }
 
 func (c *ChatPane) View() string {
-	content := lipgloss.NewStyle().
-		Padding(0, ChatPadding).
-		Render(c.viewport.View())
-
 	return c.styles.ChatPane.
 		Width(c.width).
 		Height(c.height).
-		Render(content)
+		Render(c.viewport.View())
 }
 
 // ViewEmpty renders the empty state placeholder.
@@ -99,6 +105,7 @@ func (c *ChatPane) ViewEmpty() string {
 		Align(lipgloss.Center).
 		AlignVertical(lipgloss.Center).
 		Height(c.height).
+		Background(lipgloss.Color(colorBg)).
 		Render("No messages yet. Start a conversation below.")
 
 	content := lipgloss.NewStyle().
@@ -107,7 +114,6 @@ func (c *ChatPane) ViewEmpty() string {
 
 	return c.styles.ChatPane.
 		Width(c.width).
-		Height(c.height).
 		Render(content)
 }
 
@@ -123,12 +129,17 @@ func (c *ChatPane) renderAll(messages []session.Message) string {
 		contentW = 30
 	}
 
+	spacer := lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBg)).
+		Width(contentW).
+		Render("")
+
 	var blocks []string
 	for _, msg := range messages {
 		blocks = append(blocks, c.renderMessageBlocks(msg, contentW)...)
 	}
 
-	return strings.Join(blocks, "\n\n")
+	return strings.Join(blocks, "\n"+spacer+"\n")
 }
 
 func (c *ChatPane) renderMessageBlocks(msg session.Message, w int) []string {
@@ -191,7 +202,7 @@ func (c *ChatPane) renderAssistantPrimaryBlock(msg session.Message, w int) strin
 		if spinnerView == "" {
 			spinnerView = "⠋"
 		}
-		parts = append(parts, c.styles.Streaming.Width(blockW).Render(spinnerView+" generating..."))
+		parts = append(parts, c.styles.Streaming.Background(lipgloss.Color(colorBg)).Width(blockW).Render(spinnerView+" generating..."))
 	}
 
 	if len(parts) == 0 {
@@ -258,15 +269,15 @@ func (c *ChatPane) renderToolCallBlock(tc session.ToolCall, w int) string {
 	if tc.Args != "" {
 		header += " " + c.styles.ToolCallArgs.Render(tc.Args)
 	}
-	parts := []string{lipgloss.NewStyle().Width(blockW).Render(header)}
+	parts := []string{bg.Width(blockW).Render(header)}
 
 	if tc.Output != "" {
 		toolOutput := c.renderToolOutput(tc, blockW)
-		parts = append(parts, c.styles.ToolCallOutput.Width(blockW).Render(toolOutput))
+		parts = append(parts, c.styles.ToolCallOutput.Background(lipgloss.Color(colorBg)).Width(blockW).Render(toolOutput))
 	}
 
 	if tc.Output == "" && tc.Status != "done" {
-		parts = append(parts, c.styles.ToolCallStatus.Width(blockW).Render(tc.Status))
+		parts = append(parts, c.styles.ToolCallStatus.Background(lipgloss.Color(colorBg)).Width(blockW).Render(tc.Status))
 	}
 
 	return c.styles.ToolCallBlock.Width(w).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
@@ -408,7 +419,7 @@ func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 
 func (c *ChatPane) renderTodoBlock(todos []session.TodoItem, w int) string {
 	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
-	content := lipgloss.NewStyle().Width(blockW).Render(c.renderTodos(todos))
+	content := bg.Width(blockW).Render(c.renderTodos(todos))
 	return c.styles.ToolCallBlock.Width(w).Render(content)
 }
 
@@ -427,7 +438,7 @@ func (c *ChatPane) renderSources(sources []session.Source) string {
 
 func (c *ChatPane) renderSourcesBlock(sources []session.Source, w int) string {
 	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
-	content := lipgloss.NewStyle().Width(blockW).Render(c.renderSources(sources))
+	content := bg.Width(blockW).Render(c.renderSources(sources))
 	return c.styles.ToolCallBlock.Width(w).Render(content)
 }
 
