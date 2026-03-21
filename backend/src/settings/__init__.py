@@ -228,6 +228,18 @@ class Settings(BaseSettings):
             return v
         return Environment(v.lower())
 
+    @field_validator("agent", mode="before")
+    @classmethod
+    def validate_agent(
+        cls, v: int | dict | AgentSettings | None
+    ) -> AgentSettings | dict:
+        """Handle AGENT env var conflict (e.g., AGENT=1 from system)."""
+        if isinstance(v, AgentSettings):
+            return v
+        if isinstance(v, int):
+            return {}
+        return v if v else {}
+
     def is_production(self) -> bool:
         """Check if running in production."""
         return self.environment == Environment.PRODUCTION
