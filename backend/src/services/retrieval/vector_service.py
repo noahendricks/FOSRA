@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 
 from qdrant_client import QdrantClient, models
 
+PARENTS_COLLECTION = "parents"
+CHUNKS_COLLECTION = "chunks"
+
 
 class _BaseModelFlex(BaseModel):
     _FLEXIBLE_CONFIG = ConfigDict(
@@ -44,6 +47,221 @@ class RetrievedChunk(_BaseModelFlex):
 
 
 class VectorService:
+
+    @staticmethod
+    def ensure_dual_collections(
+        client: QdrantClient, embedder_config: EmbedderConfig
+    ) -> None:
+        for collection_name in [PARENTS_COLLECTION, CHUNKS_COLLECTION]:
+            if not client.collection_exists(collection_name):
+                client.create_collection(
+                    collection_name=collection_name,
+                    vectors_config={
+                        "dense": models.VectorParams(
+                            size=embedder_config.dense_dimensions,
+                            distance=models.Distance.COSINE,
+                        ),
+                        "late-interaction": models.VectorParams(
+                            size=embedder_config.late_dimensions,
+                            distance=models.Distance.COSINE,
+                            multivector_config=models.MultiVectorConfig(
+                                comparator=models.MultiVectorComparator.MAX_SIM
+                            ),
+                            hnsw_config=models.HnswConfigDiff(m=0),
+                        ),
+                    },
+                    sparse_vectors_config={"sparse": models.SparseVectorParams()},
+                )
+
+    @staticmethod
+    async def upsert_parents(
+        client: QdrantClient,
+        chunks: list[Chunk],
+        embed_config: EmbedderConfig,
+    ) -> list[models.PointStruct]:
+        points = await VectorService.build_parent_points(chunks, embed_config)
+
+        client.upsert(collection_name=PARENTS_COLLECTION, points=points)
+
+        logger.info(f"Upserted {len(points)} parent chunks to {PARENTS_COLLECTION}")
+        return points
+
+    @staticmethod
+    async def upsert_chunks(
+        client: QdrantClient,
+        chunks: list[Chunk],
+        embed_config: EmbedderConfig,
+    ) -> list[models.PointStruct]:
+        points = await VectorService.build_points(chunks, embed_config)
+
+        client.upsert(collection_name=CHUNKS_COLLECTION, points=points)
+
+        logger.info(f"Upserted {len(points)} leaf chunks to {CHUNKS_COLLECTION}")
+        return points
+
+    @staticmethod
+    async def build_parent_points(
+        chunks: list[Chunk], embed_config: EmbedderConfig
+    ) -> list[models.PointStruct]:
+        points = []
+        for chunk in chunks:
+            points.append(
+                models.PointStruct(
+                    id=str(uuid4()),
+                    vector={
+                        "dense": chunk.metadata.dense_embedding,
+                        "sparse": chunk.metadata.sparse_embedding,
+                        "late-interaction": chunk.metadata.late_embedding,
+                    },
+                    payload={
+                        "text": chunk.text,
+                        "doc_id": chunk.metadata.doc_id,
+                        "doc_title": chunk.metadata.doc_title,
+                        "chunk_id": chunk.metadata.chunk_id,
+                        "token_count": chunk.metadata.token_count,
+                        "start_char": chunk.metadata.start_char,
+                        "end_char": chunk.metadata.end_char,
+                        "level": "parent",
+                    },
+                )
+            )
+        return points
+
+    @staticmethod
+    async def search_collection(
+        client: QdrantClient,
+        collection_name: str,
+        embed_config: EmbedderConfig,
+        query: str,
+        filters: dict[str, Any] | None = None,
+        limit: int = 10,
+    ) -> list[RetrievedChunk]:
+        embedded_queries = await EmbedderService().embed_query(
+            query, config=embed_config
+        )
+        if not embedded_queries:
+            raise RuntimeError("Query embedding failed")
+
+        if embed_config.sparse_enabled and embed_config.late_enabled:
+            retrieval_mode = RetrievalMode.LATE
+        elif embed_config.sparse_enabled:
+            retrieval_mode = RetrievalMode.HYBRID
+        else:
+            retrieval_mode = RetrievalMode.STANDARD
+
+        query_filter = None
+        if filters:
+            conditions = []
+            if "doc_ids" in filters:
+                conditions.append(
+                    models.FieldCondition(
+                        key="doc_id", match=models.MatchAny(any=filters["doc_ids"])
+                    )
+                )
+            if conditions:
+                query_filter = models.Filter(must=conditions)
+
+        try:
+            match retrieval_mode:
+                case RetrievalMode.STANDARD:
+                    results = client.query_points(
+                        collection_name=collection_name,
+                        query=embedded_queries.dense,
+                        query_filter=query_filter,
+                        with_payload=True,
+                        limit=limit,
+                    )
+                    return VectorService._to_retrieved_chunks(results.points)
+
+                case RetrievalMode.HYBRID:
+                    if not isinstance(embedded_queries.sparse, models.SparseVector):
+                        raise RuntimeError("Sparse vector required for hybrid mode")
+                    prefetch = [
+                        models.Prefetch(
+                            query=embedded_queries.dense, using="dense", limit=limit
+                        ),
+                        models.Prefetch(
+                            query=embedded_queries.sparse, using="sparse", limit=limit
+                        ),
+                    ]
+                    results = client.query_points(
+                        collection_name=collection_name,
+                        prefetch=prefetch,
+                        query=models.FusionQuery(fusion=models.Fusion.RRF),
+                        query_filter=query_filter,
+                        with_payload=True,
+                        limit=limit,
+                    )
+                    return VectorService._to_retrieved_chunks(results.points)
+
+                case RetrievalMode.LATE:
+                    if not isinstance(embedded_queries.sparse, models.SparseVector):
+                        raise RuntimeError("Sparse vector required for late mode")
+                    prefetch = [
+                        models.Prefetch(
+                            query=embedded_queries.dense, using="dense", limit=limit
+                        ),
+                        models.Prefetch(
+                            query=embedded_queries.sparse, using="sparse", limit=limit
+                        ),
+                    ]
+                    results = client.query_points(
+                        collection_name=collection_name,
+                        prefetch=prefetch,
+                        query=embedded_queries.late,
+                        using="late-interaction",
+                        query_filter=query_filter,
+                        with_payload=True,
+                        limit=limit,
+                    )
+                    return VectorService._to_retrieved_chunks(results.points)
+
+        except Exception as e:
+            raise RuntimeError(f"Search failed on {collection_name}: {e}")
+
+    @staticmethod
+    async def dual_retrieve(
+        client: QdrantClient,
+        embed_config: EmbedderConfig,
+        query: str,
+        filters: dict[str, Any] | None = None,
+        parents_top_k: int = 20,
+        chunks_top_k: int = 10,
+    ) -> tuple[list[RetrievedChunk], list[RetrievedChunk], set[str]]:
+        parent_results = await VectorService.search_collection(
+            client, PARENTS_COLLECTION, embed_config, query, filters, parents_top_k
+        )
+
+        chunk_results = await VectorService.search_collection(
+            client, CHUNKS_COLLECTION, embed_config, query, filters, chunks_top_k
+        )
+
+        file_ids = set()
+
+        for r in parent_results:
+            doc_id = r.payload.get("doc_id")
+            if doc_id:
+                file_ids.add(doc_id)
+
+        for r in chunk_results:
+            doc_id = r.payload.get("doc_id")
+            if doc_id:
+                file_ids.add(doc_id)
+
+        return parent_results, chunk_results, file_ids
+
+    @staticmethod
+    def count_points(client: QdrantClient, collection_name: str) -> int:
+        result = client.count(collection_name=collection_name)
+        return result.count
+
+    @staticmethod
+    def delete_collection(client: QdrantClient, collection_name: str) -> bool:
+        if client.collection_exists(collection_name):
+            client.delete_collection(collection_name)
+            logger.info(f"Deleted collection: {collection_name}")
+            return True
+        return False
 
     @staticmethod
     def _get_store(
@@ -297,7 +515,7 @@ class VectorService:
         chunks: list[Chunk], embed_config: EmbedderConfig
     ) -> list[models.PointStruct]:
         points = []
-        # NOTE: Called with embedded chunks
+        # NOTE: Called with embedded chunks
         from backend.src.services.processing.embedder_service import EmbedderService
 
         try:
