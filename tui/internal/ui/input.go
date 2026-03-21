@@ -1,19 +1,24 @@
 package ui
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
 // ChatInput is the multi-line input area at the bottom of the chat.
-// It renders just the prompt + textarea content; the surrounding border
+// It renders the textarea + footer; the surrounding border
 // is drawn by the inputContainer in app.go.
 type ChatInput struct {
-	Area   textarea.Model
-	styles Styles
-	width  int
-	height int
+	Area     textarea.Model
+	styles   Styles
+	width    int
+	height   int
+	agent    string
+	model    string
+	provider string
 }
 
 func NewChatInput(styles Styles) ChatInput {
@@ -29,21 +34,21 @@ func NewChatInput(styles Styles) ChatInput {
 func createTextArea(existing *textarea.Model) textarea.Model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything..."
-	ta.Prompt = " "
+	ta.Prompt = ""
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
 	ta.SetHeight(InputMinHeight)
 
 	s := ta.Styles()
-	s.Focused.Base = lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Foreground(lipgloss.Color(colorFg))
-	s.Blurred.Base = lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Foreground(lipgloss.Color(colorFg))
-	s.Focused.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color(colorBg))
-	s.Blurred.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color(colorBg))
-	s.Focused.Placeholder = lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Foreground(lipgloss.Color(colorComment))
-	s.Blurred.Placeholder = lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Foreground(lipgloss.Color(colorComment))
-	s.Focused.Text = lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Foreground(lipgloss.Color(colorFg))
-	s.Blurred.Text = lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Foreground(lipgloss.Color(colorFg))
-	s.Cursor.Color = lipgloss.Color(colorCyan)
+	s.Focused.Base = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight)).Foreground(lipgloss.Color(colorFg))
+	s.Blurred.Base = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight)).Foreground(lipgloss.Color(colorFg))
+	s.Focused.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight))
+	s.Blurred.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight))
+	s.Focused.Placeholder = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight)).Foreground(lipgloss.Color(colorComment))
+	s.Blurred.Placeholder = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight)).Foreground(lipgloss.Color(colorComment))
+	s.Focused.Text = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight)).Foreground(lipgloss.Color(colorFg))
+	s.Blurred.Text = lipgloss.NewStyle().Background(lipgloss.Color(colorBgHighlight)).Foreground(lipgloss.Color(colorFg))
+	s.Cursor.Color = lipgloss.Color(colorInfo)
 	s.Cursor.Blink = true
 	ta.SetStyles(s)
 
@@ -57,13 +62,18 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 	return ta
 }
 
+// SetModelInfo sets the agent, model, and provider for the footer display.
+func (i *ChatInput) SetModelInfo(agent, model, provider string) {
+	i.agent = agent
+	i.model = model
+	i.provider = provider
+}
+
 // SetSize sets both the outer width and height for the input.
-// The textarea width is reduced by 3 to account for the ">" prompt
-// (1 char left-pad + 1 char ">" + 1 char space).
 func (i *ChatInput) SetSize(w, h int) {
 	i.width = w
 	i.height = max(InputMinHeight, h)
-	i.Area.SetWidth(max(1, w-3))
+	i.Area.SetWidth(max(1, w-4))
 	i.Area.SetHeight(i.height)
 }
 
@@ -80,7 +90,6 @@ func (i *ChatInput) Value() string {
 
 func (i *ChatInput) Reset() {
 	i.Area.Reset()
-	i.Area.SetHeight(i.height)
 }
 
 func (i *ChatInput) Focus() tea.Cmd {
@@ -95,11 +104,34 @@ func (i *ChatInput) Focused() bool {
 	return i.Area.Focused()
 }
 
-// View renders the prompt + textarea content. No border — the container
+// View renders the textarea + footer. No border — the container
 // in app.go handles that.
 func (i *ChatInput) View() string {
-	prompt := i.styles.InputPrompt.Render(">")
-	return lipgloss.JoinHorizontal(lipgloss.Top, prompt, i.Area.View())
+	textareaView := i.Area.View()
+
+	footer := i.renderFooter()
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		textareaView,
+		footer,
+	)
+}
+
+func (i *ChatInput) renderFooter() string {
+	agentPart := i.styles.InputFooterAgent.Render(i.agent)
+	modelPart := i.styles.InputFooterModel.Render(i.model)
+	providerPart := i.styles.InputFooterProvider.Render(i.provider)
+
+	sep := i.styles.InputFooterProvider.Render("·")
+
+	parts := []string{agentPart, modelPart}
+	if i.provider != "" {
+		parts = append(parts, providerPart)
+	}
+
+	footerContent := strings.Join(parts, " "+sep+" ")
+
+	return i.styles.InputFooter.Render(footerContent)
 }
 
 func truncateInputLabel(s string, limit int) string {

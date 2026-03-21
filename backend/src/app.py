@@ -61,7 +61,9 @@ async def lifespan(app: FastAPI):
 
         async def print_routes():
             for route in app.routes:
-                print(f"Path: {route.url_path_for} | Name: {route} | Methods:")
+                logger.debug(
+                    "Route: {} | Name: {} | Methods:", route.url_path_for, route
+                )
 
     except CancelledError:
         pass

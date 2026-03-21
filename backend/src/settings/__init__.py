@@ -66,6 +66,10 @@ class QdrantSettings(BaseSettings):
     api_key: SecretStr | None = Field(default=None)
     url: str | None = Field(default=None, description="Full URL (overrides host/port)")
     collection_name: str = Field(default="default_collection")
+    data_path: str | None = Field(
+        default=None,
+        description="Local path for embedded Qdrant persistence",
+    )
 
 
 class EmbeddingSettings(BaseSettings):
@@ -88,6 +92,70 @@ class RerankerSettings(BaseSettings):
     model_name: str | None = Field(default=None)
     model_type: str | None = Field(default=None)
     top_k: int = Field(default=10, ge=1, le=100)
+
+
+class FlashRankSettings(BaseSettings):
+    """FlashRank reranker configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="FLASHRANK_")
+
+    model_name: str = Field(default="ms-marco-MiniLM-L-12-v2")
+    cache_dir: str = Field(default="./flashrank_cache")
+    top_k: int = Field(default=10, ge=1, le=100)
+
+
+class FalkorDBSettings(BaseSettings):
+    """FalkorDB graph database configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="FALKORDB_")
+
+    host: str = Field(default="localhost")
+    port: int = Field(default=6379, ge=1, le=65535)
+    graph_name: str = Field(default="fosra")
+
+
+class ModelOpsSettings(BaseSettings):
+    """Per-operation model selection: 'local' | 'api'."""
+
+    model_config = SettingsConfigDict(env_prefix="MODELS_OPS_")
+
+    query_expansion: str = Field(default="local")
+    subagent: str = Field(default="local")
+    generation: str = Field(default="api")
+    classifier: str = Field(default="local")
+    summarization: str = Field(default="local")
+    code_embedding: str = Field(default="local")
+
+
+class IngestionSettings(BaseSettings):
+    """Ingestion pipeline configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="INGESTION_")
+
+    chunk_size_parent: int = Field(default=768, ge=64, le=4096)
+    chunk_size_child: int = Field(default=192, ge=32, le=1024)
+    code_embedding_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
+
+
+class RetrievalSettings(BaseSettings):
+    """Retrieval pipeline configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="RETRIEVAL_")
+
+    initial_summary_top_k: int = Field(default=20, ge=1, le=100)
+    initial_direct_top_k: int = Field(default=10, ge=1, le=50)
+    rerank_top_n: int = Field(default=15, ge=1, le=50)
+    max_iterations: int = Field(default=5, ge=1, le=10)
+    checklist_size: int = Field(default=5, ge=1, le=10)
+
+
+class AgentSettings(BaseSettings):
+    """DeepAgent configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="AGENT_")
+
+    max_retrieval_iterations: int = Field(default=3, ge=1, le=10)
+    token_budget: int = Field(default=4096, ge=512, le=16384)
 
 
 class APIKeySettings(BaseSettings):
@@ -141,10 +209,16 @@ class Settings(BaseSettings):
     # Nested settings
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
+    falkordb: FalkorDBSettings = Field(default_factory=FalkorDBSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     reranker: RerankerSettings = Field(default_factory=RerankerSettings)
+    flashrank: FlashRankSettings = Field(default_factory=FlashRankSettings)
+    agent: AgentSettings = Field(default_factory=AgentSettings)
     api_keys: APIKeySettings = Field(default_factory=APIKeySettings)
     vectors: VectorSettings = Field(default_factory=VectorSettings)
+    model_ops: ModelOpsSettings = Field(default_factory=ModelOpsSettings)
+    ingestion: IngestionSettings = Field(default_factory=IngestionSettings)
+    retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
 
     @field_validator("environment", mode="before")
     @classmethod

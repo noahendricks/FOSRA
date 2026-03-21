@@ -25,6 +25,9 @@ def ulid_factory() -> str:
     return str(ULID())
 
 
+from loguru import logger
+
+
 # NOTE: issues that remain: hash not implemented, other pdf parser options not available, pdf metadata type is limited to PyMuPDFParser
 class LoaderService:
 
@@ -43,7 +46,6 @@ class LoaderService:
         docs = []
 
         for file in files:
-
             if isinstance(file, Path):
                 file = file.as_posix()
 
@@ -51,7 +53,7 @@ class LoaderService:
                 # determine route to parse based on file type
                 mime_type = get_mime(file)
 
-                print(mime_type)
+                logger.debug("Detected mime type: {}", mime_type)
             elif isinstance(file, MDNFile):
                 # NOTE: This is for browser received files as bytes, Will have to switch to magic library (magic.from_buffer) when i switch to browser ingest
                 raise NotImplementedError("MDNFiles cant be ingested yet")
@@ -76,7 +78,6 @@ class LoaderService:
                     text_docs: list[Document] = TextParser().parse(blob)
 
                     for lc_doc in text_docs:
-
                         d: Doc = Doc(
                             id=ulid_factory(),
                             page_content=lc_doc.page_content,
@@ -88,8 +89,11 @@ class LoaderService:
                             ),
                         )
 
-                        print(
-                            f"created {d.metadata.mime_type}: {d.metadata.source}: {d.id}"
+                        logger.debug(
+                            "created {}: {}: {}",
+                            d.metadata.mime_type,
+                            d.metadata.source,
+                            d.id,
                         )
 
                         docs.append(d)
@@ -119,8 +123,11 @@ class LoaderService:
                                 doc_title=Path(file).name,
                             ),
                         )
-                        print(
-                            f"created {d.metadata.mime_type}: {d.metadata.source}: {d.id}"
+                        logger.debug(
+                            "created {}: {}: {}",
+                            d.metadata.mime_type,
+                            d.metadata.source,
+                            d.id,
                         )
 
                         docs.append(d)
@@ -167,13 +174,13 @@ class LoaderService:
 
         else:
             for file_path in dir.rglob("*"):
-                print(f"found {file_path.as_posix()} in dir")
+                logger.debug("Found file: {}", file_path.as_posix())
 
                 if file_path.is_file():
                     files_list.append(file_path)
 
             if files_list:
-                print(f"running parse files on {len(files_list)} files ")
+                logger.info("Running parse on {} files", len(files_list))
 
                 all_files = LoaderService()._parse_files(files_list)
 
@@ -187,7 +194,7 @@ class LoaderService:
         for path in user_paths:
             p = Path(path)
             if p.is_dir():
-                print(f"{p.as_posix()} is dir, processing")
+                logger.info("Processing directory: {}", p.as_posix())
 
                 dir_files_list = LoaderService()._parse_directory(dir_path=p)
 
@@ -198,7 +205,7 @@ class LoaderService:
         if loose_files:
             files_as_docs.append(LoaderService()._parse_files(loose_files))
 
-        print(f" returning {files_as_docs}")
+        logger.debug("Returning {} docs", len(files_as_docs))
         return files_as_docs
 
     @staticmethod
@@ -209,4 +216,4 @@ class LoaderService:
         source = ""
         converter = DocumentConverter()
         result = converter.convert(source)
-        print(result.document.export_to_markdown())
+        logger.debug("PDF parse result: {}", result.document.export_to_markdown())

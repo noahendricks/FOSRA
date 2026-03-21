@@ -115,6 +115,23 @@ class SourceType(StrEnum):
     SERPER_RESULT = "SERPER_RESULT"
 
 
+class FileSourceType(StrEnum):
+    """Classification of indexed files: codebase vs documentation."""
+
+    CODEBASE = "codebase"
+    DOC = "doc"
+
+
+class GraphNodeType(StrEnum):
+    """Node types in FalkorDB code graph."""
+
+    FILE = "File"
+    MODULE = "Module"
+    FUNCTION = "Function"
+    CLASS = "Class"
+    METHOD = "Method"
+
+
 class SerpType(StrEnum):
     """Types of connectors that retrieve information from external sources."""
 

@@ -261,7 +261,7 @@ class ConversationService:
                 points = retrievals.points
 
                 for p in points:
-                    print(p.payload.keys())
+                    logger.debug("Payload keys: {}", p.payload.keys())
                     sources.append(
                         ScoredRetrieval(
                             score=p.score,

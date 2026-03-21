@@ -23,7 +23,7 @@ dependencies = [
   "github3-py==4.0.1",
   "google-api-python-client>=2.156.0",
   "httpx>=0.28.1",
-  "langchain[exa,huggingface,litellm,ollama,pinecone,unstructured]>=1.0.5",
+  "langchain[exa,huggingface,litellm,ollama,unstructured]>=1.0.5",
   "langchain-community>=0.4.1",
   "langgraph>=0.3.29",
   "linkup-sdk>=0.2.4",
@@ -102,7 +102,6 @@ dependencies = [
   "alembic>=1.18.3",
   "pymupdf>=1.27.1",
   "langchain-exa>=1.0.0",
-  "langchain-pinecone>=0.2.13",
   "langchain-milvus>=0.3.3",
   "black>=25.12.0",
   "langchain-qdrant>=1.1.0",
@@ -119,6 +118,13 @@ dependencies = [
   "lab>=8.9",
   "ptpython>=3.0.32",
   "neo4j>=6.1.0",
+  "falkordb>=1.6.0",
+  "tree-sitter>=0.24.0",
+  "tree-sitter-python>=0.23.6",
+  "tree-sitter-javascript>=0.23.1",
+  "tree-sitter-typescript>=0.23.2",
+  "tree-sitter-go>=0.23.4",
+  "tree-sitter-rust>=0.23.2",
 ]
 
 [project.scripts]

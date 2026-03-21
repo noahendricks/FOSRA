@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
-from langchain_pinecone import PineconeVectorStore
 from langchain_qdrant import QdrantVectorStore
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, StrictStr
@@ -55,14 +54,25 @@ class VectorService:
 
         match store_type:
             case VectorStoreType.QDRANT:
+                qdrant_config = config.qdrant_config
 
-                client: QdrantClient = QdrantClient(url=config.qdrant_config.api_base)
+                if qdrant_config.data_path:
+                    client: QdrantClient = QdrantClient(path=qdrant_config.data_path)
+                elif qdrant_config.url:
+                    client = QdrantClient(url=qdrant_config.url)
+                elif qdrant_config.api_base:
+                    client = QdrantClient(url=qdrant_config.api_base)
+                else:
+                    client = QdrantClient(
+                        host=qdrant_config.host,
+                        port=qdrant_config.port,
+                    )
 
                 if not client.collection_exists(
-                    collection_name=config.qdrant_config.collection_name
+                    collection_name=qdrant_config.collection_name
                 ):
                     _ = client.create_collection(
-                        collection_name=config.qdrant_config.collection_name,
+                        collection_name=qdrant_config.collection_name,
                         vectors_config={
                             "dense": models.VectorParams(
                                 size=embedder_config.dense_dimensions,
@@ -84,38 +94,6 @@ class VectorService:
 
                 return client
 
-            case VectorStoreType.PINECONE:
-                from pinecone import Pinecone, ServerlessSpec
-
-                if not config.pinecone_config.api_key:
-                    raise ValueError("No Pinecone API Key Provided")
-
-                index_name = "langchain-test-index"
-
-                pc: Pinecone = Pinecone(api_key=config.pinecone_config.api_key)
-
-                # index check (create if doesn't exist)
-                if not pc.has_index(index_name):
-                    _ = pc.create_index(
-                        name=index_name,
-                        dimension=1536,
-                        metric="cosine",
-                        spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-                    )
-
-                index = pc.Index(index_name)
-
-                from langchain_openai import OpenAIEmbeddings
-
-                embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-                from langchain_pinecone import PineconeVectorStore
-
-                pinecone_store: VectorStore = PineconeVectorStore(
-                    index=index, embedding=embeddings
-                )
-
-                return pinecone_store
             case _:
                 pass
                 # choose action (store, search, delete)
@@ -301,15 +279,6 @@ class VectorService:
                         f"Fatal Error While Searching using {retrieval_mode}: {e}"
                     )
 
-            case PineconeVectorStore():
-                pass
-            # case Milvus():
-            #     pass
-            #
-            # case elasticsearch
-
-            # case opensearch
-
             case VectorStore():
                 # all others - try except generic function - throw exception if error
                 pass
@@ -391,9 +360,7 @@ class VectorService:
         token_budget: int,
         merge_threshold: float = 0.5,  # fraction of parent's children needed
     ) -> str:
-        # NOTE: Called after search with retrieved chunks to merge any possible ancestors
-
-        print("auto")
+        logger.debug("Auto-merge called with {} chunks", len(results))
         if not results:
             return ""
 
@@ -403,7 +370,6 @@ class VectorService:
         no_parent: list[RetrievedChunk] = []
 
         for chunk in results:
-            print(type(chunk))
             pid = chunk.payload.get("parent_id")
             # append chunks on parent id
             if pid:

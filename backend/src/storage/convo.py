@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.src.api.schemas import MessageUpdateRequest, NewConvoRequest
-from backend.src.api.schemas.api_schemas import (ConvoDeleteRequest, ConvoUpdateRequest)
+from backend.src.api.schemas.api_schemas import ConvoDeleteRequest, ConvoUpdateRequest
 from backend.src.domain.exceptions.exceptions import (
     ConvoRetrievalError,
     ConvoStorageError,
@@ -192,8 +192,8 @@ class ConvoRepo:
                 .offset(skip)
                 .limit(limit)
             )
-            print(result)
-            print(vars(result))
+            logger.debug("Convo list result: {}", result)
+            logger.debug("Result vars: {}", vars(result))
 
             conversations = result.scalars().all()
 

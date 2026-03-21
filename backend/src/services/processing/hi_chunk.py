@@ -229,25 +229,25 @@ class HiChunk:
     ) -> list[Chunk]:
         """build the hierarchical structure and embed all flat chunks."""
 
-        print("[HiChunk] Step 1/3 — Hierarchical structuring …")
+        logger.info("[HiChunk] Step 1/3 — Hierarchical structuring …")
 
         # HI Chunks
         _hi_chunks = structurer.structure(document)
 
-        print(f"[HiChunk]   → {len(_hi_chunks)} L1 sections found.")
+        logger.info("[HiChunk]   → {} L1 sections found.", len(_hi_chunks))
 
         # L2 Count
         total_l2 = sum(len(h.children) for h in _hi_chunks)
 
-        print(f"[HiChunk]   → {total_l2} L2 sub-sections found.")
-        print("[HiChunk] Step 2/3 — Fixed-size sub-chunking (HC200) …")
+        logger.info("[HiChunk]   → {} L2 sub-sections found.", total_l2)
+        logger.info("[HiChunk] Step 2/3 — Fixed-size sub-chunking (HC200) …")
 
         # Flat Chunks
         _flat_chunks = structurer.flat_producer.produce(_hi_chunks)
 
-        print(f"[HiChunk]   → {len(_flat_chunks)} flat chunks produced.")
+        logger.info("[HiChunk]   → {} flat chunks produced.", len(_flat_chunks))
 
-        print("[HiChunk] Step 3/3 — Embedding flat chunks …")
+        logger.info("[HiChunk] Step 3/3 — Embedding flat chunks …")
 
         return _flat_chunks
 
@@ -257,18 +257,24 @@ class HiChunk:
         count = 0
         for h in hi_chunks:
             if count >= max_nodes:
-                print("  … (truncated)")
+                logger.debug("  … (truncated)")
                 break
             snippet = h.text[:80].replace("\n", " ")
-            print(
-                f"[L1] {snippet}…  ({h.token_count} tokens, {len(h.children)} children)"
+            logger.debug(
+                "[L1] {}…  ({} tokens, {} children)",
+                snippet,
+                h.token_count,
+                len(h.children),
             )
             count += 1
             for c in h.children[:3]:
                 if count >= max_nodes:
                     break
                 sub = c.text[:60].replace("\n", " ")
-                print(
-                    f"  [L2] {sub}…  ({c.token_count} tokens, {len(c.children)} sub-chunks)"
+                logger.debug(
+                    "  [L2] {}…  ({} tokens, {} sub-chunks)",
+                    sub,
+                    c.token_count,
+                    len(c.children),
                 )
                 count += 1

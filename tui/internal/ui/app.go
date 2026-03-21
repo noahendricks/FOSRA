@@ -19,9 +19,9 @@ type App struct {
 	palette CommandPalette
 
 	// layout
-	splitLayout    SplitPaneLayout
-	chatContainer  Container
-	inputContainer Container
+	splitLayout   SplitPaneLayout
+	chatContainer Container
+	textInputCont Container
 
 	// state
 	sessions     *session.Manager
@@ -51,9 +51,10 @@ func NewApp() App {
 			WithPadding(1, 1, 0, 1),
 		),
 
-		// input container: top border only (drawn by Container.Render)
-		inputContainer: NewContainer(
-			WithBorder(true, false, false, false),
+		// input container: left border with heavy ┃ char (opencode style)
+		textInputCont: NewContainer(
+			WithBorder(false, false, false, true),
+			WithBorderStyle(heavyBorder),
 		),
 
 		sessions:    mgr,
@@ -99,7 +100,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// forward to input
 	if !a.overlayAnim.IsOpen() {
-		cmds = append(cmds, a.input.Update(msg))
+		if _, ok := msg.(tea.MouseMotionMsg); !ok {
+			cmds = append(cmds, a.input.Update(msg))
+		}
 	}
 
 	// forward to chat viewport (scroll/mouse)
@@ -298,8 +301,8 @@ func (a *App) relayout() {
 
 	// ── Input (bottom panel) ──
 	bottomH := a.splitLayout.BottomHeight()
-	a.inputContainer.SetSize(chatColW, bottomH)
-	a.input.SetSize(a.inputContainer.ContentWidth(), a.inputContainer.ContentHeight())
+	a.textInputCont.SetSize(chatColW, bottomH)
+	a.input.SetSize(a.textInputCont.ContentWidth(), a.textInputCont.ContentHeight())
 
 	// ── Sidebar & overlays ──
 	a.sidebar.SetSize(sidebarW, a.windowHeight-HelpBarHeight)
@@ -320,13 +323,20 @@ func (a App) View() tea.View {
 	chatView := a.chatContainer.Render(chatContent)
 
 	// ── Input area (wrapped in inputContainer with focus-dependent border) ──
+	// set model info for footer
+	if sess != nil {
+		a.input.SetModelInfo("FOSRA", sess.ModelName, sess.Provider)
+	} else {
+		a.input.SetModelInfo("FOSRA", "", "")
+	}
+
 	inputContent := a.input.View()
 
 	var inputView string
 	if a.input.Focused() {
-		inputView = a.inputContainer.Render(inputContent, lipgloss.Color(colorBlue))
+		inputView = a.textInputCont.Render(inputContent, lipgloss.Color(colorPrimary))
 	} else {
-		inputView = a.inputContainer.Render(inputContent, lipgloss.Color(colorBorder))
+		inputView = a.textInputCont.Render(inputContent, lipgloss.Color(colorBorder))
 	}
 
 	// ── Left column: chat + input ──

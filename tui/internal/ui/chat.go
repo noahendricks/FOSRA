@@ -235,33 +235,38 @@ func (c *ChatPane) renderSystem(msg session.Message, w int) string {
 	return c.styles.MessageMeta.Width(w).Render("system: " + msg.Content)
 }
 
-// ── Tool call block ──────────────────────────────────
+// ── Tool call block ──────────────────────────────────────────────────────
 //
-// Renders:
+// Renders with per-tool icons (opencode style):
+//   $ go build ./...
+//   │ output...
+//
+//   → Read internal/ui/chat.go
+//   │ file content...
+//
 //   ✱ Grep "pattern" in . (9 matches)
 //   │ matched output lines...
 //
 //   ✓ Read internal/ui/chat.go
 //   │ file content...
-//
-//   $ go build ./...
 
 func (c *ChatPane) renderToolCallBlock(tc session.ToolCall, w int) string {
 	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
 
-	// status icon
+	// status icon and per-tool icon
 	var icon string
-	switch tc.Status {
-	case "done":
+	if tc.Status == "done" {
 		icon = c.styles.ToolCallCheck.Render("✓")
-	case "error":
+	} else if tc.Status == "error" {
 		icon = c.styles.MessageErr.Render("✗")
-	default: // running
+	} else {
+		// running - use per-tool icon or spinner
 		sv := c.spinner.View()
 		if sv == "" {
-			sv = c.styles.ToolCallIcon.Render("✱")
+			icon = c.styles.ToolCallIcon.Render(toolIcon(tc.Name))
+		} else {
+			icon = sv
 		}
-		icon = sv
 	}
 
 	// header: icon + tool name + args
@@ -281,6 +286,35 @@ func (c *ChatPane) renderToolCallBlock(tc session.ToolCall, w int) string {
 	}
 
 	return c.styles.ToolCallBlock.Width(w).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
+}
+
+// toolIcon returns the appropriate icon for a tool name (opencode style).
+func toolIcon(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case strings.Contains(name, "bash") || strings.Contains(name, "run") || strings.Contains(name, "shell") || name == "$":
+		return "$"
+	case strings.Contains(name, "read") || strings.Contains(name, "view") || strings.Contains(name, "list"):
+		return "→"
+	case strings.Contains(name, "write") || strings.Contains(name, "edit"):
+		return "←"
+	case strings.Contains(name, "grep") || strings.Contains(name, "glob") || strings.Contains(name, "search"):
+		return "✱"
+	case strings.Contains(name, "fetch") || strings.Contains(name, "patch"):
+		return "%"
+	case strings.Contains(name, "task"):
+		return "│"
+	case strings.Contains(name, "todo"):
+		return "⚙"
+	case strings.Contains(name, "codesearch"):
+		return "◇"
+	case strings.Contains(name, "websearch"):
+		return "◈"
+	case strings.Contains(name, "skill") || strings.Contains(name, "question"):
+		return "→"
+	default:
+		return "⚙"
+	}
 }
 
 func (c *ChatPane) renderToolOutput(tc session.ToolCall, w int) string {
@@ -376,17 +410,17 @@ func looksLikeCode(content string) bool {
 
 func (c *ChatPane) renderThinking(ms int) string {
 	seconds := float64(ms) / 1000.0
-	label := fmt.Sprintf("thinking · %.1fs", seconds)
-	return c.styles.ThinkingLabel.Render(label)
+	label := fmt.Sprintf("_Thinking:_ %.1fs", seconds)
+	return c.styles.ThinkingBlock.Render(label)
 }
 
 // ── Todo / task list  ────────────────────
 //
-// Renders:
+// Renders (opencode style):
 //   # Todos
-//   [✓] Search codebase
-//   [●] Analyze middleware chain
-//   [ ] Summarize findings
+//   ✓ Search codebase
+//   • Analyze middleware chain
+//     Summarize findings
 
 func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 	var lines []string
@@ -399,15 +433,15 @@ func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 		var line string
 		switch t.Status {
 		case session.TodoStatusDone:
-			marker := c.styles.TodoDone.Render("[✓]")
+			marker := c.styles.TodoDone.Render("✓")
 			text := c.styles.TodoDone.Render(t.Text)
 			line = marker + " " + text
 		case session.TodoStatusInProgress:
-			marker := c.styles.TodoActive.Render("[●]")
+			marker := c.styles.TodoActive.Render("•")
 			text := c.styles.TodoActive.Render(t.Text)
 			line = marker + " " + text
 		default:
-			marker := c.styles.TodoPending.Render("[ ]")
+			marker := c.styles.TodoPending.Render(" ")
 			text := c.styles.TodoPending.Render(t.Text)
 			line = marker + " " + text
 		}

@@ -24,7 +24,12 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from ulid import ULID
 
-from backend.src.domain.enums import ConfigRole, SourceType, ToolCategory
+from backend.src.domain.enums import (
+    ConfigRole,
+    FileSourceType,
+    SourceType,
+    ToolCategory,
+)
 from backend.src.domain.schemas.config import UserPreferences
 
 if TYPE_CHECKING:
@@ -118,6 +123,17 @@ class DocORM(Base):
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
+
+    # File registry fields (canonical file metadata)
+    path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    repo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(
+        Text, nullable=False, default=FileSourceType.DOC
+    )
+    checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (UniqueConstraint("path", "repo", name="uq_docs_path_repo"),)
 
     # CHUNK VECTOR ID'S
 

@@ -142,6 +142,11 @@ class DocMetadata(_BaseModelFlex):
     mime_type: str
     doc_id: str
     doc_title: str
+    path: str | None = None
+    language: str | None = None
+    repo: str | None = None
+    source_type: str = "doc"
+    checksum: str | None = None
 
 
 class Doc(BaseModel):

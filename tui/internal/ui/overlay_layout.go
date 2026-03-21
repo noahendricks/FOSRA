@@ -66,8 +66,8 @@ func withOverlayShadow(content string) string {
 	lines := strings.Split(content, "\n")
 	width := lipgloss.Width(content)
 	shadowChar := lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBgDarker)).
-		Foreground(lipgloss.Color(colorBgHighlight)).
+		Background(lipgloss.Color(colorBg)).
+		Foreground(lipgloss.Color(colorBorderSubtle)).
 		Render("░")
 
 	shadowStyle := lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Render(" ")

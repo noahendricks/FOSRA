@@ -5,8 +5,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from chonkie.genie import BaseGenie, OpenAIGenie
-from langchain_community.vectorstores import DistanceStrategy
-from langchain_core.embeddings import Embeddings
 from langchain_litellm import ChatLiteLLM
 from langchain_qdrant import RetrievalMode
 from msgspec import field
@@ -198,6 +196,9 @@ class QdrantConfig(_BaseModelFlex):
     host: str = Field(default="localhost")
     port: int = Field(default=6333, ge=1, le=65535)
     url: str | None = None
+    data_path: str | None = Field(
+        default=None, description="Local path for embedded Qdrant persistence"
+    )
     vector_size: int = 384
     top_k: int = 10
     min_score: float = 0.0
@@ -206,32 +207,19 @@ class QdrantConfig(_BaseModelFlex):
 
 
 class PineconeConfig(_BaseModelFlex):
-    api_key: str | None = None
-    index: Any | None = None
-    embedding: Embeddings | None = None
-    text_key: str | None = "text"
-    namespace: str | None = None
-    distance_strategy: DistanceStrategy | None = DistanceStrategy.COSINE
-    index_name: str | None = None
+    api_key: SecretStr | None = None
     host: str | None = None
-    dimension: int = 1536
-    vector_size: int = 384
-    top_k: int = 10
-    min_score: float = 0.0
-    include_vectors: bool = False
-    include_values: bool = False
-    include_meta: bool = False
-    filter: dict[str, Any] = Field(default_factory=dict)
+    environment: str | None = None
+    project_id: str | None = None
+    cloud: str = "aws"
+    region: str | None = None
 
 
 class VectorStoreConfig(_BaseModelFlex):
     config_id: int | None = None
     preferred_store: VectorStoreType = VectorStoreType.QDRANT
     qdrant_config: QdrantConfig = QdrantConfig()
-    pinecone_config: PineconeConfig = PineconeConfig()
-    # milvus_config: QdrantConfig = QdrantConfig
-    # elasticsearch_config: QdrantConfig = QdrantConfig
-    # opensearch_config: QdrantConfig = QdrantConfig
+    pinecone_config: PineconeConfig | None = None
 
 
 def set_model_cache_dir():
@@ -389,3 +377,44 @@ class DynamicPrefs(_BaseModelFlex):
     search_enabled: bool = False
     rag_enabled: bool = True
     llm_override: LLMConfig | None = None
+
+
+class FalkorDBConfig(_BaseModelFlex):
+    """FalkorDB graph database connection config."""
+
+    host: str = "localhost"
+    port: int = 6379
+    graph_name: str = "fosra"
+
+
+class ModelOpsConfig(_BaseModelFlex):
+    """Per-operation model selection: 'local' | 'api'."""
+
+    query_expansion: str = "local"
+    subagent: str = "local"
+    generation: str = "api"
+    classifier: str = "local"
+    summarization: str = "local"
+    code_embedding: str = "local"
+
+    def get_provider(self, operation: str) -> str:
+        """Get provider for a given operation."""
+        return getattr(self, operation, "local")
+
+
+class IngestionConfig(_BaseModelFlex):
+    """Ingestion pipeline configuration."""
+
+    chunk_size_parent: int = 768
+    chunk_size_child: int = 192
+    code_embedding_threshold: float = 0.4
+
+
+class RetrievalConfig(_BaseModelFlex):
+    """Retrieval pipeline configuration."""
+
+    initial_summary_top_k: int = 20
+    initial_direct_top_k: int = 10
+    rerank_top_n: int = 15
+    max_iterations: int = 5
+    checklist_size: int = 5

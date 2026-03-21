@@ -64,15 +64,15 @@ func (s *Sidebar) render(sections []string) string {
 	return s.styles.Sidebar.
 		Width(s.width).
 		Height(s.height).
-		Background(lipgloss.Color(colorBg)).
+		Background(lipgloss.Color(colorBgAlt)).
 		Render(content)
 }
 
 func (s *Sidebar) renderHeader(w int) string {
-	icon := lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue)).Bold(true).Render("⌬")
+	icon := lipgloss.NewStyle().Foreground(lipgloss.Color(colorSecondary)).Bold(true).Render("⌬")
 	name := lipgloss.NewStyle().Foreground(lipgloss.Color(colorFg)).Bold(true).Render(" FOSRA")
 	ver := s.styles.SidebarDim.Render(" v" + appVersion)
-	return lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Width(w).Render(icon + name + ver)
+	return lipgloss.NewStyle().Background(lipgloss.Color(colorBgAlt)).Width(w).Render(icon + name + ver)
 }
 
 func (s *Sidebar) renderHeadline(sess *session.Session, w int) string {
@@ -112,7 +112,7 @@ func (s *Sidebar) renderProgressBar(used float64, w int) string {
 
 	bar := s.styles.SidebarProgressFull.Render(strings.Repeat("█", filled)) +
 		s.styles.SidebarProgressEmpty.Render(strings.Repeat("░", empty))
-	return lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Width(w).Render(bar)
+	return lipgloss.NewStyle().Background(lipgloss.Color(colorBgAlt)).Width(w).Render(bar)
 }
 
 func (s *Sidebar) renderRAGSection(sess *session.Session, w int, availableH int) string {
@@ -124,7 +124,7 @@ func (s *Sidebar) renderRAGSection(sess *session.Session, w int, availableH int)
 	}
 
 	header := s.styles.SidebarSection.Render("RAG") + " " + dot
-	rows = append(rows, lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Width(w).Render(header))
+	rows = append(rows, lipgloss.NewStyle().Background(lipgloss.Color(colorBgAlt)).Width(w).Render(header))
 
 	indexLine := "disabled"
 	if sess.RAG.Active {
@@ -165,7 +165,7 @@ func (s *Sidebar) renderRAGSection(sess *session.Session, w int, availableH int)
 			nameW = 8
 		}
 		namePart := s.styles.SidebarValue.Render(truncSidebar(src.DocName, nameW))
-		rows = append(rows, lipgloss.NewStyle().Background(lipgloss.Color(colorBg)).Width(w).Render(scorePart+" "+namePart))
+		rows = append(rows, lipgloss.NewStyle().Background(lipgloss.Color(colorBgAlt)).Width(w).Render(scorePart+" "+namePart))
 	}
 
 	if maxItems < len(sources) {
