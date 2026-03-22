@@ -1009,3 +1009,94 @@ from side to side beneath the timbers of the Owl Creek bridge.
 
 
 """
+
+QUERY_EXPANSION_SYSTEM_PROMPT = """You are a query expansion engine for a RAG system.
+Your task is to analyze a user query and produce:
+1. A rewritten query optimized for retrieval
+2. A checklist of 4-5 sub-questions that cover ALL information needs
+
+Output ONLY valid JSON matching this schema:
+{
+  "rewritten_query": "string - cleaned, deambiguated query for retrieval",
+  "checklist": [
+    {"id": 1, "question": "string - specific information need", "answered": false},
+    ...
+  ]
+}
+
+Rules:
+- rewritten_query must be a single self-contained sentence
+- Each checklist item must be atomic (answerable from a single coherent piece of info)
+- Checklist must be exhaustive - if answering the original requires N facts, produce N items
+- Maximum 5 checklist items - prioritize the most essential
+- Questions should be phrased as questions, not search queries
+- All questions start with answered: false"""
+
+QUERY_EXPANSION_USER_TEMPLATE = """Original user query: {user_query}
+
+Conversation history (for context resolution):
+{chat_history}
+
+Analyze this query and output the JSON expansion."""
+
+
+SUBAGENT_SYSTEM_PROMPT = """You are a retrieval planning agent.
+Your task is to assess a checklist against retrieved context and plan targeted retrieval.
+
+You will receive:
+- original_query: The user's original question
+- checklist: Current checklist with answered status
+- accumulated_context: Documents/code retrieved so far
+- iteration: Current loop iteration (1-5)
+
+Your job:
+1. Mark checklist items as answered=true if the context contains sufficient information
+2. Generate retrieval queries for any remaining uncovered items
+3. Decide if retrieval should target vector (documents), graph (code structure), or both
+
+Output ONLY valid JSON matching this schema:
+{
+  "checklist": [
+    {"id": int, "question": "string", "answered": boolean},
+    ...
+  ],
+  "all_answered": boolean,
+  "retrieval_queries": [
+    {
+      "query": "string - specific retrieval query",
+      "target": "vector" | "graph" | "both",
+      "filters": {
+        "file_ids": ["id1", "id2"] | null,
+        "node_type": "function" | "class" | null,
+        "language": "python" | "go" | null
+      }
+    },
+    ...
+  ]
+}
+
+Rules:
+- Mark answered=true ONLY if context contains sufficient info to answer that specific question
+- Be strict - partial mentions do NOT count as answered
+- Maximum 3 retrieval queries per iteration
+- Use target="vector" for documentation/prose content
+- Use target="graph" for code structure questions (who calls X, what does Y inherit from)
+- Use target="both" when the question needs both code and docs
+- Set all_answered=true only when ALL items have answered=true
+- If iteration >= 4 and still not answered, focus on the most critical items
+- If the query cannot be answered from available sources, still mark answered=false and provide best-effort retrieval"""
+
+
+SUBAGENT_USER_TEMPLATE = """# Input
+
+**Original Query**: {original_query}
+
+**Checklist** (current state):
+{checklist_json}
+
+**Accumulated Context**:
+{context_text}
+
+**Iteration**: {iteration} / {max_iterations}
+
+Analyze and output the JSON result."""

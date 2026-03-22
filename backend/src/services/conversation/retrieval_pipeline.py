@@ -1,12 +1,8 @@
-"""LangGraph retrieval pipeline with coverage-driven iteration.
+"""LangGraph retrieval pipeline with agentic retrieval loop.
 
-Implements the inner retrieval loop:
+Implements the evolved pipeline:
 
-    reform_query → split_subqueries → retrieve → check_coverage
-                                        ↑              │
-                                        └──── retry ───┘ (if uncovered & iteration < max)
-                                                       │
-                                                    assemble → END
+    expand_query → initial_retrieve → agentic_loop → rerank → END
 
 Each pipeline instance is built via ``build_retrieval_pipeline()`` with
 configs captured by closures so the LangGraph state stays clean.
@@ -16,15 +12,29 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypedDict
 
+from falkordb import FalkorDB
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
+from qdrant_client import QdrantClient
 
-from backend.src.services.conversation.query_service import QueryService
-from backend.src.services.conversation.utils.llm_utils import (
-    format_source_for_citation,
+from backend.src.domain.schemas.retrieval import (
+    AccumulatedContext,
+    AccumulatedItem,
+    ChecklistItem,
+    QueryExpansion,
+    RetrievalTarget,
 )
+from backend.src.services.conversation.query_expander import QueryExpander
+from backend.src.services.conversation.subagent import Subagent
+from backend.src.services.conversation.utils.llm_utils import format_source_for_citation
+from backend.src.services.processing.embedder_service import EmbedderService
+from backend.src.services.retrieval.graph_service import GraphService
 from backend.src.services.retrieval.reranker_service import RerankerService
-from backend.src.services.retrieval.vector_service import RetrievedChunk, VectorService
+from backend.src.services.retrieval.vector_service import (
+    CHUNKS_COLLECTION,
+    RetrievedChunk,
+    VectorService,
+)
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -38,11 +48,6 @@ if TYPE_CHECKING:
     )
 
 
-# ------------------------------------------------------------------
-# State
-# ------------------------------------------------------------------
-
-
 class RetrievalState(TypedDict, total=False):
     """Data flowing through the retrieval pipeline.
 
@@ -50,27 +55,19 @@ class RetrievalState(TypedDict, total=False):
     ``build_retrieval_pipeline()``.
     """
 
-    # Input
     user_query: str
-
-    # Pipeline data
-    reformed_query: str
-    sub_queries: list[str]
-    pending_queries: list[str]  # sub-queries not yet covered
-    all_chunks: list[Any]  # list[RetrievedChunk] kept in-memory
-    context: str  # plain text for coverage check
-    formatted_context: str  # XML with chunk IDs for agent citations
+    chat_history: str | None
+    query_expansion: QueryExpansion
+    checklist: list[ChecklistItem]
+    file_ids: set[str]
+    accumulated_context: AccumulatedContext
     iteration: int
-
-
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
+    formatted_context: str
+    context: str
 
 
 def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
-    """Convert a ``RetrievedChunk`` into ``ScoredRetrieval`` for citation
-    formatting."""
+    """Convert a ``RetrievedChunk`` into ``ScoredRetrieval`` for citation."""
     from backend.src.domain.schemas.config import ScoredRetrieval as _SR
 
     return _SR(
@@ -79,7 +76,7 @@ def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
         text=chunk.text,
         doc_title=chunk.payload.get("doc_title", ""),
         chunk_id=chunk.payload.get("chunk_id", str(rank)),
-        doc_id=chunk.payload.get("source_id", ""),
+        doc_id=chunk.payload.get("doc_id", chunk.payload.get("source_id", "")),
         page_number=chunk.payload.get("page_number", 0),
         start_index=chunk.start_char,
         end_index=chunk.payload.get("end_char", chunk.start_char + len(chunk.text)),
@@ -87,7 +84,7 @@ def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
 
 
 def _format_chunks_as_context(chunks: list[RetrievedChunk]) -> str:
-    """Format chunks as XML with citation IDs for the agent."""
+    """Format chunks as XML with citation IDs."""
     if not chunks:
         return ""
     scored = [_chunk_to_scored(c, i) for i, c in enumerate(chunks)]
@@ -95,14 +92,17 @@ def _format_chunks_as_context(chunks: list[RetrievedChunk]) -> str:
     return "Source material:\n<documents>\n" + "\n".join(parts) + "\n</documents>"
 
 
-def _plain_text_context(chunks: list[RetrievedChunk]) -> str:
-    """Concatenate chunk texts for coverage check (no XML)."""
-    return "\n\n".join(c.text for c in chunks)
-
-
-# ------------------------------------------------------------------
-# Pipeline builder
-# ------------------------------------------------------------------
+def _retrieved_chunk_to_item(chunk: RetrievedChunk) -> AccumulatedItem:
+    """Convert RetrievedChunk to AccumulatedItem."""
+    return AccumulatedItem(
+        file_id=chunk.payload.get("doc_id", chunk.payload.get("source_id", "")),
+        path=chunk.payload.get("doc_title", "unknown"),
+        line_start=chunk.start_char,
+        line_end=chunk.payload.get("end_char", chunk.start_char + len(chunk.text)),
+        content=chunk.text,
+        source="vector",
+        score=chunk.score,
+    )
 
 
 def build_retrieval_pipeline(
@@ -110,127 +110,284 @@ def build_retrieval_pipeline(
     embedder_config: EmbedderConfig,
     vector_config: VectorStoreConfig,
     reranker_config: RerankerConfig | None = None,
+    falkordb_client: FalkorDB | None = None,
     token_budget: int = 4096,
-    max_iterations: int = 3,
+    max_iterations: int = 5,
+    parents_top_k: int = 20,
+    chunks_top_k: int = 10,
 ) -> CompiledStateGraph:
     """Compile a retrieval pipeline with configs baked into closures.
 
-    A new compiled graph per request is fine — LangGraph compilation is
-    microsecond-cheap.
+    Args:
+        llm_config: LLM configuration for query expansion and subagent
+        embedder_config: Embedder configuration for vector search
+        vector_config: Vector store configuration
+        reranker_config: Optional reranker configuration
+        falkordb_client: Optional FalkorDB client for graph retrieval
+        token_budget: Maximum tokens in final context
+        max_iterations: Maximum agentic loop iterations
+        parents_top_k: Top-K for parent chunk retrieval
+        chunks_top_k: Top-K for child chunk retrieval
+
+    Returns:
+        Compiled LangGraph pipeline
     """
 
-    # ---- Nodes (close over configs) ----
+    store = VectorService._get_store(vector_config, embedder_config)
 
-    async def reform_query_node(state: RetrievalState) -> dict:
-        reformed = await QueryService.reform_query(
+    if not isinstance(store, QdrantClient):
+        raise RuntimeError("Vector store must be QdrantClient for evolved pipeline")
+
+    qdrant_client: QdrantClient = store
+
+    graph_service: GraphService | None = None
+    if falkordb_client:
+        graph_service = GraphService(falkordb_client)
+
+    async def expand_query_node(state: RetrievalState) -> dict:
+        """Expand user query into rewritten query + checklist."""
+        expansion = await QueryExpander.expand(
             user_query=state["user_query"],
             llm_config=llm_config,
+            chat_history=state.get("chat_history"),
         )
-        logger.debug("Pipeline: reformed query → {}", reformed)
-        return {"reformed_query": reformed, "iteration": 0}
-
-    async def split_subqueries_node(state: RetrievalState) -> dict:
-        subs = await QueryService.split_to_subqueries(
-            user_query=state["reformed_query"],
-            llm_config=llm_config,
-        )
-        logger.debug("Pipeline: split into {} sub-queries", len(subs))
-        return {"sub_queries": subs, "pending_queries": subs}
-
-    async def retrieve_node(state: RetrievalState) -> dict:
-        """Search for pending queries, deduplicate, rerank."""
-        queries = state.get("pending_queries") or [state["reformed_query"]]
-        prev_chunks: list[RetrievedChunk] = list(state.get("all_chunks") or [])
-        new_chunks: list[RetrievedChunk] = []
-
-        for q in queries:
-            try:
-                raw = await VectorService.search(
-                    config=vector_config,
-                    embed_config=embedder_config,
-                    query=q,
-                )
-                if raw:
-                    new_chunks.extend(raw)
-            except Exception:
-                logger.warning("Vector search failed for sub-query: {}", q)
-
-        # Merge with previously retrieved chunks and deduplicate by text
-        combined = prev_chunks + new_chunks
-        seen: set[str] = set()
-        unique: list[RetrievedChunk] = []
-        for c in combined:
-            if c.text not in seen:
-                seen.add(c.text)
-                unique.append(c)
-
-        # Rerank the full set against the reformed query
-        if unique:
-            reranker = RerankerService(config=reranker_config)
-            unique = reranker.rerank(
-                query=state["reformed_query"],
-                chunks=unique,
-            )
-
-        iteration = state.get("iteration", 0) + 1
-        plain = _plain_text_context(unique)
-
         logger.debug(
-            "Pipeline: retrieve iteration {} — {} unique chunks", iteration, len(unique)
+            "Pipeline: expanded query → {} items in checklist",
+            len(expansion.checklist),
         )
         return {
-            "all_chunks": unique,
-            "context": plain,
-            "iteration": iteration,
+            "query_expansion": expansion,
+            "checklist": expansion.checklist,
+            "iteration": 0,
+            "accumulated_context": AccumulatedContext(),
+            "file_ids": set(),
         }
 
-    async def check_coverage_node(state: RetrievalState) -> dict:
-        result = await QueryService.check_coverage(
-            sub_queries=state["sub_queries"],
-            context=state["context"],
-            llm_config=llm_config,
+    async def initial_retrieve_node(state: RetrievalState) -> dict:
+        """Initial retrieval on rewritten query (dual: parents + chunks)."""
+        query = state["query_expansion"].rewritten_query
+
+        parent_results, chunk_results, file_ids = await VectorService.dual_retrieve(
+            client=qdrant_client,
+            embed_config=embedder_config,
+            query=query,
+            parents_top_k=parents_top_k,
+            chunks_top_k=chunks_top_k,
         )
-        pending = result.uncovered_queries
+
+        items: list[AccumulatedItem] = []
+        for c in parent_results:
+            items.append(_retrieved_chunk_to_item(c))
+        for c in chunk_results:
+            items.append(_retrieved_chunk_to_item(c))
+
+        context = AccumulatedContext(items=items)
+
         logger.debug(
-            "Pipeline: coverage {}/{} — {} uncovered",
-            result.covered_count,
-            result.total_count,
-            len(pending),
+            "Pipeline: initial retrieve → {} parents, {} chunks, {} unique files",
+            len(parent_results),
+            len(chunk_results),
+            len(file_ids),
         )
-        return {"pending_queries": pending}
 
-    def should_retry(state: RetrievalState) -> str:
-        pending = state.get("pending_queries") or []
+        return {
+            "accumulated_context": context,
+            "file_ids": file_ids,
+            "iteration": 1,
+        }
+
+    async def agentic_loop_node(state: RetrievalState) -> dict:
+        """Run subagent iteration: assess coverage + plan retrieval."""
+        result = await Subagent.assess_and_plan(
+            original_query=state["user_query"],
+            checklist=state["checklist"],
+            context=state["accumulated_context"],
+            iteration=state["iteration"],
+            llm_config=llm_config,
+            max_iterations=max_iterations,
+        )
+
+        new_items: list[AccumulatedItem] = []
+
+        for rq in result.retrieval_queries:
+            if rq.target in (RetrievalTarget.VECTOR, RetrievalTarget.BOTH):
+                vector_items = await _execute_vector_retrieval(
+                    rq.query, rq.filters, qdrant_client, embedder_config
+                )
+                new_items.extend(vector_items)
+
+            if rq.target in (RetrievalTarget.GRAPH, RetrievalTarget.BOTH):
+                if graph_service:
+                    graph_items = await _execute_graph_retrieval(
+                        rq.query, rq.filters, graph_service, embedder_config
+                    )
+                    new_items.extend(graph_items)
+
+        updated_context = state["accumulated_context"].add_items(new_items)
+
+        new_file_ids = {i.file_id for i in new_items}
+        updated_file_ids = state["file_ids"] | new_file_ids
+
+        logger.debug(
+            "Pipeline: agentic iteration {} → {} new items, {} total files",
+            state["iteration"],
+            len(new_items),
+            len(updated_file_ids),
+        )
+
+        return {
+            "checklist": result.checklist,
+            "accumulated_context": updated_context,
+            "file_ids": updated_file_ids,
+            "iteration": state["iteration"] + 1,
+            "_all_answered": result.all_answered,
+        }
+
+    async def _execute_vector_retrieval(
+        query: str,
+        filters: Any | None,
+        client: QdrantClient,
+        embed_config: EmbedderConfig,
+    ) -> list[AccumulatedItem]:
+        """Execute vector retrieval and return AccumulatedItems."""
+        filter_dict = None
+        if filters and filters.file_ids:
+            filter_dict = {"doc_ids": filters.file_ids}
+
+        chunks = await VectorService.search_collection(
+            client=client,
+            collection_name=CHUNKS_COLLECTION,
+            embed_config=embed_config,
+            query=query,
+            filters=filter_dict,
+            limit=10,
+        )
+
+        return [_retrieved_chunk_to_item(c) for c in chunks]
+
+    async def _execute_graph_retrieval(
+        query: str,
+        filters: Any | None,
+        graph_svc: GraphService,
+        embed_config: EmbedderConfig,
+    ) -> list[AccumulatedItem]:
+        """Execute graph retrieval and return AccumulatedItems."""
+        items: list[AccumulatedItem] = []
+
+        embedder = EmbedderService()
+        embedded = await embedder.embed_query(query, embed_config)
+        if not embedded or not embedded.dense:
+            return items
+
+        node_types: list[GraphNodeType] | None = None
+        if filters and filters.node_type:
+            from backend.src.domain.enums import GraphNodeType
+
+            type_map = {
+                "function": GraphNodeType.FUNCTION,
+                "class": GraphNodeType.CLASS,
+                "method": GraphNodeType.METHOD,
+            }
+            mapped = type_map.get(filters.node_type.lower())
+            if mapped:
+                node_types = [mapped]
+
+        file_ids = None
+        if filters and filters.file_ids:
+            file_ids = [int(fid) for fid in filters.file_ids if fid.isdigit()]
+
+        try:
+            result = await graph_svc.semantic_search(
+                query_embedding=embedded.dense,
+                node_types=node_types,
+                file_ids=file_ids,
+                limit=10,
+            )
+
+            for node in result.nodes:
+                items.append(node.to_accumulated_item())
+
+        except Exception as e:
+            logger.warning("Graph retrieval failed: {}", e)
+
+        return items
+
+    def should_continue_loop(state: RetrievalState) -> str:
+        """Decide if agentic loop should continue."""
+        all_answered = state.get("_all_answered", False)
         iteration = state.get("iteration", 0)
-        if pending and iteration < max_iterations:
-            return "retrieve"
-        return "assemble"
 
-    async def assemble_node(state: RetrievalState) -> dict:
-        chunks: list[RetrievedChunk] = state.get("all_chunks") or []
-        formatted = _format_chunks_as_context(chunks)
-        plain = _plain_text_context(chunks)
-        logger.debug("Pipeline: assembled {} chunks into context", len(chunks))
+        if all_answered:
+            return "rerank"
+
+        if iteration >= max_iterations:
+            return "rerank"
+
+        return "agentic_loop"
+
+    async def rerank_node(state: RetrievalState) -> dict:
+        """Rerank accumulated context against original query."""
+        context = state["accumulated_context"]
+
+        if not context.items:
+            return {"formatted_context": "", "context": ""}
+
+        if reranker_config:
+            chunks = [
+                RetrievedChunk(
+                    text=item.content,
+                    token_count=len(item.content.split()),
+                    start_char=item.line_start,
+                    score=item.score,
+                    payload={
+                        "doc_id": item.file_id,
+                        "doc_title": item.path,
+                    },
+                )
+                for item in context.items
+            ]
+
+            reranker = RerankerService(config=reranker_config)
+
+            reranked = reranker.rerank(
+                query=state["user_query"],
+                chunks=chunks,
+            )
+
+            reranked_items = []
+            for chunk in reranked:
+                for item in context.items:
+                    if item.content == chunk.text:
+                        reranked_items.append(item)
+                        break
+
+            context = AccumulatedContext(items=reranked_items)
+
+        formatted = context.to_formatted_context()
+        plain = context.to_plain_text()
+
+        logger.debug(
+            "Pipeline: reranked {} items into context",
+            len(context.items),
+        )
+
         return {
             "formatted_context": formatted,
             "context": plain,
+            "accumulated_context": context,
         }
-
-    # ---- Graph ----
 
     graph = StateGraph(RetrievalState)
 
-    graph.add_node("reform_query", reform_query_node)
-    graph.add_node("split_subqueries", split_subqueries_node)
-    graph.add_node("retrieve", retrieve_node)
-    graph.add_node("check_coverage", check_coverage_node)
-    graph.add_node("assemble", assemble_node)
+    graph.add_node("expand_query", expand_query_node)
+    graph.add_node("initial_retrieve", initial_retrieve_node)
+    graph.add_node("agentic_loop", agentic_loop_node)
+    graph.add_node("rerank", rerank_node)
 
-    graph.add_edge(START, "reform_query")
-    graph.add_edge("reform_query", "split_subqueries")
-    graph.add_edge("split_subqueries", "retrieve")
-    graph.add_edge("retrieve", "check_coverage")
-    graph.add_conditional_edges("check_coverage", should_retry)
-    graph.add_edge("assemble", END)
+    graph.add_edge(START, "expand_query")
+    graph.add_edge("expand_query", "initial_retrieve")
+    graph.add_edge("initial_retrieve", "agentic_loop")
+    graph.add_conditional_edges("agentic_loop", should_continue_loop)
+    graph.add_edge("rerank", END)
 
     return graph.compile()

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 from pydantic.v1.utils import to_camel
 
 from backend.src.domain.enums import GraphNodeType
 from backend.src.storage.utils.converters import DomainStruct
+
+if TYPE_CHECKING:
+    from backend.src.domain.schemas.retrieval import AccumulatedItem
 
 
 class _BaseModelFlex(BaseModel):
@@ -96,6 +99,68 @@ class CodeNode(_BaseModelFlex):
     embedding: list[float] | None = None
     source_code: str | None = None
     metadata: dict[str, Any] = {}
+
+    def to_accumulated_item(self) -> "AccumulatedItem":
+        """Convert to AccumulatedItem for retrieval context accumulation."""
+        from backend.src.domain.schemas.retrieval import AccumulatedItem
+
+        content_parts = []
+        if self.signature:
+            content_parts.append(self._signature_to_string())
+        if self.docstring:
+            content_parts.append(self.docstring)
+        if self.source_code:
+            lines = self.source_code.split("\n")
+            content_parts.append("\n".join(lines[:20]))
+
+        content = "\n\n".join(content_parts) if content_parts else self.name
+
+        return AccumulatedItem(
+            file_id=self.file_id,
+            path=self.file_path,
+            line_start=self.line_start,
+            line_end=self.line_end,
+            content=content,
+            source="graph",
+            node_type=self.node_type.value,
+        )
+
+    def _signature_to_string(self) -> str:
+        """Convert signature to string representation."""
+        if not self.signature:
+            return self.name
+
+        sig = self.signature
+        decorators = ""
+        if sig.decorators:
+            decorators = "".join(f"{d}\n" for d in sig.decorators)
+
+        async_kw = "async " if sig.is_async else ""
+
+        params = []
+        for p in sig.parameters:
+            param_str = p.name
+            if p.type_annotation:
+                param_str += f": {p.type_annotation}"
+            if p.default_value:
+                param_str += f" = {p.default_value}"
+            if p.is_variadic:
+                param_str = f"*{param_str}"
+            elif p.is_keyword:
+                param_str = f"**{param_str}"
+            params.append(param_str)
+
+        params_str = ", ".join(params)
+
+        receiver = ""
+        if sig.receiver:
+            receiver = f"({sig.receiver}) "
+
+        return_str = ""
+        if sig.return_type:
+            return_str = f" -> {sig.return_type}"
+
+        return f"{decorators}{async_kw}def {receiver}{self.name}({params_str}){return_str}:"
 
 
 class GraphResult(_BaseModelFlex):
