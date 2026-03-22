@@ -14,6 +14,7 @@ class Infrastructure:
         self.session_factory: async_sessionmaker[AsyncSession] | None = None
         self.engine = create_async_engine(settings.database.url, echo=True)
         self.falkordb_graph = None
+        self.model_registry = None
         self._tables_created = False
 
     def init(self):
@@ -21,6 +22,11 @@ class Infrastructure:
             self.engine,
             expire_on_commit=False,
         )
+
+        from backend.src.services.model_registry import ModelRegistry
+
+        self.model_registry = ModelRegistry.get_instance()
+        logger.info("ModelRegistry initialized")
 
         qdrant_settings = settings.qdrant
 

@@ -63,7 +63,7 @@ func markdownStyleConfig() ansi.StyleConfig {
 		},
 		BlockQuote: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color:  stringPtr(colorFgDim),
+				Color:  stringPtr(colorWarmYellow),
 				Italic: boolPtr(true),
 				Prefix: "┃ ",
 			},
@@ -80,39 +80,39 @@ func markdownStyleConfig() ansi.StyleConfig {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockSuffix: "\n",
-				Color:       stringPtr(colorSecondary),
+				Color:       stringPtr(colorAccent),
 				Bold:        boolPtr(true),
 			},
 		},
-		H1: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "# ", Color: stringPtr(colorSecondary), Bold: boolPtr(true)}},
-		H2: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "## ", Color: stringPtr(colorSecondary), Bold: boolPtr(true)}},
-		H3: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "### ", Color: stringPtr(colorSecondary), Bold: boolPtr(true)}},
-		H4: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "#### ", Color: stringPtr(colorSecondary), Bold: boolPtr(true)}},
-		H5: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "##### ", Color: stringPtr(colorSecondary), Bold: boolPtr(true)}},
-		H6: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "###### ", Color: stringPtr(colorSecondary), Bold: boolPtr(true)}},
+		H1: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "# ", Color: stringPtr(colorAccent), Bold: boolPtr(true)}},
+		H2: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "## ", Color: stringPtr(colorAccent), Bold: boolPtr(true)}},
+		H3: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "### ", Color: stringPtr(colorAccent), Bold: boolPtr(true)}},
+		H4: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "#### ", Color: stringPtr(colorAccent), Bold: boolPtr(true)}},
+		H5: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "##### ", Color: stringPtr(colorAccent), Bold: boolPtr(true)}},
+		H6: ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Prefix: "###### ", Color: stringPtr(colorAccent), Bold: boolPtr(true)}},
 		Strikethrough: ansi.StylePrimitive{
 			CrossedOut: boolPtr(true),
 			Color:      stringPtr(colorComment),
 		},
 		Emph: ansi.StylePrimitive{
-			Color:  stringPtr(colorInfo),
+			Color:  stringPtr(colorWarmYellow),
 			Italic: boolPtr(true),
 		},
 		Strong: ansi.StylePrimitive{
 			Bold:  boolPtr(true),
-			Color: stringPtr(colorFg),
+			Color: stringPtr(colorWarning),
 		},
 		HorizontalRule: ansi.StylePrimitive{
-			Color:  stringPtr(colorBorder),
+			Color:  stringPtr(colorComment),
 			Format: "\n─────────────────────────────────────────\n",
 		},
 		Item: ansi.StylePrimitive{
 			BlockPrefix: "• ",
-			Color:       stringPtr(colorFg),
+			Color:       stringPtr(colorPrimary),
 		},
 		Enumeration: ansi.StylePrimitive{
 			BlockPrefix: ". ",
-			Color:       stringPtr(colorWarning),
+			Color:       stringPtr(colorInfo),
 		},
 		Task: ansi.StyleTask{
 			StylePrimitive: ansi.StylePrimitive{},
@@ -120,16 +120,16 @@ func markdownStyleConfig() ansi.StyleConfig {
 			Unticked:       "[ ] ",
 		},
 		Link: ansi.StylePrimitive{
-			Color:     stringPtr(colorInfo),
+			Color:     stringPtr(colorPrimary),
 			Underline: boolPtr(true),
 		},
 		LinkText: ansi.StylePrimitive{
-			Color: stringPtr(colorSecondary),
+			Color: stringPtr(colorInfo),
 			Bold:  boolPtr(true),
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr(colorInfo),
+				Color: stringPtr(colorSuccess),
 			},
 		},
 		CodeBlock: ansi.StyleCodeBlock{
@@ -148,15 +148,15 @@ func markdownStyleConfig() ansi.StyleConfig {
 				Keyword:             ansi.StylePrimitive{Color: stringPtr(colorAccent)},
 				KeywordReserved:     ansi.StylePrimitive{Color: stringPtr(colorAccent)},
 				KeywordNamespace:    ansi.StylePrimitive{Color: stringPtr(colorAccent)},
-				KeywordType:         ansi.StylePrimitive{Color: stringPtr(colorSecondary)},
-				Operator:            ansi.StylePrimitive{Color: stringPtr(colorSecondary)},
-				Punctuation:         ansi.StylePrimitive{Color: stringPtr(colorFgDim)},
+				KeywordType:         ansi.StylePrimitive{Color: stringPtr(colorWarmYellow)},
+				Operator:            ansi.StylePrimitive{Color: stringPtr(colorInfo)},
+				Punctuation:         ansi.StylePrimitive{Color: stringPtr(colorFg)},
 				Name:                ansi.StylePrimitive{Color: stringPtr(colorFg)},
 				NameBuiltin:         ansi.StylePrimitive{Color: stringPtr(colorInfo)},
 				NameTag:             ansi.StylePrimitive{Color: stringPtr(colorAccent)},
 				NameAttribute:       ansi.StylePrimitive{Color: stringPtr(colorInfo)},
 				NameClass:           ansi.StylePrimitive{Color: stringPtr(colorSecondary)},
-				NameConstant:        ansi.StylePrimitive{Color: stringPtr(colorPrimary)},
+				NameConstant:        ansi.StylePrimitive{Color: stringPtr(colorWarning)},
 				NameDecorator:       ansi.StylePrimitive{Color: stringPtr(colorAccent)},
 				NameFunction:        ansi.StylePrimitive{Color: stringPtr(colorSecondary)},
 				LiteralNumber:       ansi.StylePrimitive{Color: stringPtr(colorPrimary)},

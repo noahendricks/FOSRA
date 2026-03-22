@@ -59,6 +59,13 @@ type Message struct {
 	IsStreaming bool
 	Error       string
 
+	// Completion metadata
+	Duration    time.Duration // time from user send to assistant complete
+	CompletedAt time.Time
+	Mode        string // agent mode name (e.g. "Build", "Chat")
+	ModelID     string // full model identifier
+	Interrupted bool
+
 	// Rich content blocks (populated by agent/LLM)
 	Sources    []Source   // RAG source citations
 	ToolCalls  []ToolCall // tool invocations with output

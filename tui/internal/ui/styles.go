@@ -67,6 +67,7 @@ const (
 	colorWarning      = "#f5a742" // warning/yellow
 	colorError        = "#e06c75" // error/red
 	colorAccent       = "#9d7cd8" // Accent (purple)
+	colorWarmYellow   = "#e5c07b" // warm yellow for blockquote, emph, KeywordType
 	// legacy aliases for compatibility
 	colorBlue    = "#5c9cf5" // alias for Secondary
 	colorCyan    = "#56b6c2" // alias for Info
@@ -104,6 +105,7 @@ type Styles struct {
 	ToolCallOutput lipgloss.Style // output content inside tool block
 	ToolCallCheck  lipgloss.Style // ✓ checkmark
 	ToolCallStatus lipgloss.Style // status text (done, running)
+	InlineTool     lipgloss.Style // inline tool (no border, muted)
 
 	// thinking / reasoning
 	ThinkingLabel lipgloss.Style
@@ -113,8 +115,9 @@ type Styles struct {
 	// todo / task list
 	TodoHeader  lipgloss.Style // "# Todos" header
 	TodoDone    lipgloss.Style // [✓] done items
-	TodoActive  lipgloss.Style // [●] in-progress items
+	TodoActive  lipgloss.Style // [•] in-progress items
 	TodoPending lipgloss.Style // [ ] pending items
+	TodoBlock   lipgloss.Style // container for todo list with bg
 
 	// code blocks
 	CodeBlock  lipgloss.Style
@@ -168,6 +171,15 @@ type Styles struct {
 
 	// misc
 	Spinner lipgloss.Style
+
+	// completion footer
+	CompletionFooter lipgloss.Style // container: MarginTop(1), PaddingLeft(3)
+	CompletionSymbol lipgloss.Style // ▣ in agent color (colorPrimary), or colorComment if interrupted
+	CompletionMode   lipgloss.Style // mode name in colorFg, bold
+	CompletionMeta   lipgloss.Style // model + duration in colorComment
+
+	// interrupt hint
+	InterruptHint lipgloss.Style // "esc interrupt" text
 }
 
 func NewStyles() Styles {
@@ -188,10 +200,12 @@ func NewStyles() Styles {
 
 	// user message block: heavy left border in Primary color (agent color)
 	s.UserBlock = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBg)).
+		Background(lipgloss.Color(colorBgAlt)).
 		BorderStyle(heavyBorder).
 		BorderLeft(true).
 		BorderForeground(lipgloss.Color(colorPrimary)).
+		PaddingTop(1).
+		PaddingBottom(1).
 		PaddingLeft(2).
 		Foreground(lipgloss.Color(colorFg))
 
@@ -229,10 +243,10 @@ func NewStyles() Styles {
 		Foreground(lipgloss.Color(colorWarning))
 
 	s.ToolCallBlock = lipgloss.NewStyle().
-		Background(lipgloss.Color(colorBg)).
+		Background(lipgloss.Color(colorBgAlt)).
 		BorderStyle(heavyBorder).
 		BorderLeft(true).
-		BorderForeground(lipgloss.Color(colorBorder)).
+		BorderForeground(lipgloss.Color(colorBg)).
 		PaddingLeft(2).
 		Foreground(lipgloss.Color(colorFgDim))
 
@@ -255,6 +269,10 @@ func NewStyles() Styles {
 	s.ToolCallStatus = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorComment)).
 		Italic(true)
+
+	s.InlineTool = lipgloss.NewStyle().
+		PaddingLeft(3).
+		Foreground(lipgloss.Color(colorComment))
 
 	// ── thinking ──────────────────────────────────────────────
 	s.ThinkingLabel = lipgloss.NewStyle().
@@ -287,6 +305,14 @@ func NewStyles() Styles {
 
 	s.TodoPending = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorComment))
+
+	s.TodoBlock = lipgloss.NewStyle().
+		Background(lipgloss.Color(colorBgAlt)).
+		BorderStyle(heavyBorder).
+		BorderLeft(true).
+		BorderForeground(lipgloss.Color(colorBgHighlight)).
+		PaddingLeft(2).
+		Foreground(lipgloss.Color(colorFgDim))
 
 	// ── code blocks ───────────────────────────────────────────
 	s.CodeBlock = lipgloss.NewStyle().

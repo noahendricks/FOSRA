@@ -251,6 +251,26 @@ func (c *ChatPane) renderSystem(msg session.Message, w int) string {
 //   │ file content...
 
 func (c *ChatPane) renderToolCallBlock(tc session.ToolCall, w int) string {
+	// inline tools: done with no/short output (≤2 lines)
+	outputLines := len(strings.Split(strings.TrimSpace(tc.Output), "\n"))
+	isInline := tc.Status == "done" && (tc.Output == "" || outputLines <= 2)
+
+	if isInline {
+		return c.renderInlineTool(tc)
+	}
+	return c.renderBlockTool(tc, w)
+}
+
+func (c *ChatPane) renderInlineTool(tc session.ToolCall) string {
+	icon := c.styles.ToolCallCheck.Render("✓")
+	header := icon + " " + c.styles.ToolCallHeader.Render(tc.Name)
+	if tc.Args != "" {
+		header += " " + c.styles.ToolCallArgs.Render(tc.Args)
+	}
+	return c.styles.InlineTool.Render(header)
+}
+
+func (c *ChatPane) renderBlockTool(tc session.ToolCall, w int) string {
 	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
 
 	// status icon and per-tool icon
@@ -278,11 +298,11 @@ func (c *ChatPane) renderToolCallBlock(tc session.ToolCall, w int) string {
 
 	if tc.Output != "" {
 		toolOutput := c.renderToolOutput(tc, blockW)
-		parts = append(parts, c.styles.ToolCallOutput.Background(lipgloss.Color(colorBg)).Width(blockW).Render(toolOutput))
+		parts = append(parts, c.styles.ToolCallOutput.Background(lipgloss.Color(colorBgAlt)).Width(blockW).Render(toolOutput))
 	}
 
 	if tc.Output == "" && tc.Status != "done" {
-		parts = append(parts, c.styles.ToolCallStatus.Background(lipgloss.Color(colorBg)).Width(blockW).Render(tc.Status))
+		parts = append(parts, c.styles.ToolCallStatus.Background(lipgloss.Color(colorBgAlt)).Width(blockW).Render(tc.Status))
 	}
 
 	return c.styles.ToolCallBlock.Width(w).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
@@ -433,15 +453,15 @@ func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 		var line string
 		switch t.Status {
 		case session.TodoStatusDone:
-			marker := c.styles.TodoDone.Render("✓")
+			marker := c.styles.TodoDone.Render("[✓]")
 			text := c.styles.TodoDone.Render(t.Text)
 			line = marker + " " + text
 		case session.TodoStatusInProgress:
-			marker := c.styles.TodoActive.Render("•")
+			marker := c.styles.TodoActive.Render("[•]")
 			text := c.styles.TodoActive.Render(t.Text)
 			line = marker + " " + text
 		default:
-			marker := c.styles.TodoPending.Render(" ")
+			marker := c.styles.TodoPending.Render("[ ]")
 			text := c.styles.TodoPending.Render(t.Text)
 			line = marker + " " + text
 		}
@@ -452,9 +472,9 @@ func (c *ChatPane) renderTodos(todos []session.TodoItem) string {
 }
 
 func (c *ChatPane) renderTodoBlock(todos []session.TodoItem, w int) string {
-	blockW := messageBlockWidth(c.styles.ToolCallBlock, w)
+	blockW := messageBlockWidth(c.styles.TodoBlock, w)
 	content := bg.Width(blockW).Render(c.renderTodos(todos))
-	return c.styles.ToolCallBlock.Width(w).Render(content)
+	return c.styles.TodoBlock.Width(w).Render(content)
 }
 
 // ── Source citations ──────────────────────────────────────────────────
