@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 from langchain_core.documents.base import Blob
 from ulid import ULID
 
-from backend.src.domain.schemas.config import ChunkerConfig
+from backend.src.settings import ChunkerConfig
 from backend.src.domain.schemas.doc import Doc, DocMetadata, MDNFile
 from backend.src.services.processing.chunker_service import ChunkerService
 

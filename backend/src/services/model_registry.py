@@ -23,7 +23,7 @@ from backend.src.domain.enums import EmbedderType
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
-    from backend.src.domain.schemas.config import EmbedderConfig, LLMConfig
+    from backend.src.settings import EmbedderConfig, LLMConfig
 
 
 class AllEmbedders:

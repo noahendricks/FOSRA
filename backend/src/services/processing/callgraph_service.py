@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 if TYPE_CHECKING:
-    from backend.src.domain.schemas.config import EmbedderConfig
+    from backend.src.settings import EmbedderConfig
 
 import tree_sitter_go as tsgo
 import tree_sitter_javascript as tsjs
@@ -230,7 +230,10 @@ class CallGraphService:
             lang_module = LANGUAGE_MODULES.get(language)
             if not lang_module:
                 raise ValueError(f"Unsupported language: {language}")
-            lang = Language(lang_module.language())
+            if language == "typescript":
+                lang = Language(lang_module.language_typescript())
+            else:
+                lang = Language(lang_module.language())
             cls._languages[language] = lang
             cls._parsers[language] = Parser(lang)
         return cls._parsers[language]

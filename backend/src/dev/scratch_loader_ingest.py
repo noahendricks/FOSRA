@@ -13,7 +13,7 @@ from loguru import logger
 from ulid import ULID
 
 from backend.src.domain.enums import VectorStoreType
-from backend.src.domain.schemas.config import (
+from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
     VectorStoreConfig,

@@ -1,4 +1,4 @@
-from backend.src.domain.schemas.config import (
+from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
     LLMConfig,

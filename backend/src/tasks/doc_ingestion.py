@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from qdrant_client import QdrantClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from taskiq import AsyncTaskiqTask
 
 from backend.src.domain.enums import FileSourceType, SourceType
-from backend.src.domain.schemas.config import (
+from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
     VectorStoreConfig,
@@ -148,7 +150,7 @@ async def ingest_single_doc(
     chunker_config: ChunkerConfig,
     embedder_config: EmbedderConfig,
     vector_config: VectorStoreConfig,
-) -> dict:
+) -> AsyncTaskiqTask[dict[str, Any]]:
     """Ingest a single document into Qdrant."""
     return await ingest_docs.kiq(
         [doc],
@@ -165,7 +167,7 @@ async def reindex_docs(
     embedder_config: EmbedderConfig,
     vector_config: VectorStoreConfig,
     session_factory: async_sessionmaker[AsyncSession],
-) -> dict:
+) -> dict[str, Any]:
     """Re-index all docs: drop collections + rebuild from PostgreSQL.
 
     Reads all docs from PostgreSQL where source_type='doc',
@@ -199,8 +201,8 @@ async def reindex_docs(
 
         docs = [_doc_orm_to_domain(d) for d in doc_orms]
 
-    # ingest
-    return await ingest_docs.kiq(
+    # ingest directly (await the result)
+    return await ingest_docs(
         docs,
         chunker_config,
         embedder_config,

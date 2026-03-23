@@ -39,7 +39,7 @@ from backend.src.services.retrieval.vector_service import (
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
-    from backend.src.domain.schemas.config import (
+    from backend.src.settings import (
         EmbedderConfig,
         LLMConfig,
         RerankerConfig,
@@ -68,7 +68,7 @@ class RetrievalState(TypedDict, total=False):
 
 def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
     """Convert a ``RetrievedChunk`` into ``ScoredRetrieval`` for citation."""
-    from backend.src.domain.schemas.config import ScoredRetrieval as _SR
+    from backend.src.settings import ScoredRetrieval as _SR
 
     return _SR(
         rank=rank,
@@ -377,7 +377,7 @@ def build_retrieval_pipeline(
             "accumulated_context": context,
         }
 
-    graph = StateGraph(RetrievalState)
+    graph = StateGraph(RetrievalState)  # type: ignore[arg-type]
 
     graph.add_node("expand_query", expand_query_node)
     graph.add_node("initial_retrieve", initial_retrieve_node)

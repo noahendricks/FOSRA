@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from loguru import logger
 
 from backend.src.domain.enums import ChunkerType
-from backend.src.domain.schemas.config import CodeChunkerConfig
+from backend.src.settings import CodeChunkerConfig
 from backend.src.domain.schemas.doc import (
     Chunk,
     ChunkMetadata,
@@ -21,7 +21,7 @@ from backend.src.services.processing.hi_chunk import HiChunk, HiChunkStructurer
 from backend.src.storage.models import ulid_factory
 
 if TYPE_CHECKING:
-    from backend.src.domain.schemas.config import ChunkerConfig
+    from backend.src.settings import ChunkerConfig
 
 from uuid import uuid4
 
@@ -29,7 +29,7 @@ from chonkie import Visualizer, chunker
 
 viz = Visualizer()
 
-from backend.src.domain.schemas.config import ChunkerConfig
+from backend.src.settings import ChunkerConfig
 
 # !hack : to be implemented:  user config retrieval (env , database or in-memory)
 

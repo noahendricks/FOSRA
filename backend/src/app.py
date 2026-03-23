@@ -14,7 +14,6 @@ from backend.src.api.exception_handlers import register_exception_handlers
 from backend.src.api.lifecycle import global_infra
 from backend.src.api.routes.config import router as config_router
 from backend.src.api.routes.ingestion import router as ingestion_router
-from backend.src.api.routes.user import router as user_router
 from backend.src.api.routes.workspace import router as workspace_router
 from backend.src.settings.observe import setup_telemetry
 from backend.src.tasks.broker import broker
@@ -89,7 +88,6 @@ app = FastAPI(lifespan=lifespan)
 
 register_exception_handlers(app=app)
 
-app.include_router(user_router)
 app.include_router(workspace_router)
 app.include_router(config_router)
 app.include_router(ingestion_router)

@@ -23,7 +23,7 @@ from backend.src.domain.schemas.retrieval import AccumulatedItem
 if TYPE_CHECKING:
     from falkordb import FalkorDB
 
-    from backend.src.domain.schemas.config import (
+    from backend.src.settings import (
         EmbedderConfig,
         LLMConfig,
         RerankerConfig,

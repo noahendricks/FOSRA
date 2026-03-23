@@ -7,16 +7,7 @@ from backend.src.api.schemas.api_schemas import (
     MessageResponse,
     MessageUpdateRequest,
     NewConvoRequest,
-    NewUserRequest,
-    NewWorkspaceRequest,
     StreamChunkResponse,
-    UserRequest,
-    UserRequestBase,
-    UserResponse,
-    WorkspaceDeleteRequest,
-    WorkspaceFullResponse,
-    WorkspaceRequest,
-    WorkspaceUpdateRequest,
 )
 from backend.src.api.schemas.config_api_schemas import (
     EmbedderConfigRequest,
@@ -32,21 +23,11 @@ from backend.src.api.schemas.source_api_schemas import (
 )
 
 __all__ = [
-    "UserRequestBase",
-    "UserResponse",
-    "WorkspaceRequest",
-    "NewWorkspaceRequest",
-    "WorkspaceUpdateRequest",
-    "WorkspaceFullResponse",
-    "MessageRequest",
-    "NewUserRequest",
     "MessageRequest",
     "MessageUpdateRequest",
     "MessageResponse",
     "ConvoRequest",
     "NewConvoRequest",
-    "UserRequest",
-    "WorkspaceDeleteRequest",
     "ConvoUpdateRequest",
     "ConvoFullResponse",
     "CompletionResponse",
@@ -59,5 +40,4 @@ __all__ = [
     "FileRequest",
     "SourceResponseDeep",
     "SourceResponseShallow",
-    "FileRequest",
 ]

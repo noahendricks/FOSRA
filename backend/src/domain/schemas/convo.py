@@ -9,9 +9,6 @@ from backend.src.storage.models import utc_now
 from backend.src.storage.utils.converters import DomainStruct
 
 
-# vercel / browser returned file
-
-
 class Message(DomainStruct):
     role: MessageRole
     convo_id: str
@@ -28,14 +25,12 @@ class Message(DomainStruct):
     message_metadata: dict[str, Any] | None = None
 
     def to_litellm_format(self) -> dict[str, str]:
-        """Convert to LiteLLM format."""
         return {"role": self.role.value, "content": self.text}
 
 
 class Convo(DomainStruct):
     user_id: str
     convo_id: str
-    workspace_id: str
     title: str | None = "New Convo"
 
 
@@ -69,15 +64,8 @@ class Completion(DomainStruct):
 
 
 class StreamChunk(DomainStruct):
-    """Individual chunk in a streaming response."""
-
     type: Literal["content", "rag_sources", "done"]
-
-    # Source delta
     delta: str | None = None
-
     docs: list[Doc] | None = None
-
-    # Final metadata
     usage: str | None = None
     retrieval_time_ms: int | None = None

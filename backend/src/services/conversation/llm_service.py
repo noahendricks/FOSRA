@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from loguru import logger
 
-from backend.src.domain.schemas.config import (
+from backend.src.settings import (
     LLMConfig,
     ScoredRetrieval,
     UserPreferences,

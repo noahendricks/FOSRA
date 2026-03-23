@@ -20,8 +20,7 @@ from backend.src.api.schemas.api_schemas import (
     UIMessage,
     UIMessagePart,
 )
-from backend.src.domain.exceptions import (LLMConfigurationError, LLMValidationError)
-from backend.src.domain.schemas.config import LLMConfig, ScoredRetrieval
+from backend.src.settings import LLMConfig, ScoredRetrieval
 from backend.src.domain.schemas.doc import Chunk, Doc, PDFMetadata
 
 if TYPE_CHECKING:
@@ -60,10 +59,7 @@ def build_model_string(
     custom_provider: str | None = None,
 ) -> str:
     if not provider or not model_name:
-        raise LLMConfigurationError(
-            reason="Provider and model name are required",
-            remediation="Provide valid provider and model name",
-        )
+        raise ValueError("No Provider or Model Name Provided")
 
     if custom_provider:
         model_string = f"{custom_provider}/{model_name}"
@@ -99,16 +95,10 @@ async def validate_config(
 
     try:
         if not llm_config.provider or not llm_config.model:
-            raise LLMConfigurationError(
-                reason="Provider and model are required",
-                remediation="Provide complete LLM configuration",
-            )
+            raise ValueError("")
 
         if not llm_config.api_key:
-            raise LLMConfigurationError(
-                reason="API key is required",
-                remediation="Provide valid API key in configuration",
-            )
+            raise ValueError("No LLM Config API Key provided")
 
         model_string = build_model_string(
             provider=llm_config.provider,
@@ -148,17 +138,11 @@ async def validate_config(
         await logger.complete()
 
         return result
-    except LLMConfigurationError:
-        raise
     except Exception as e:
         logger.error(
             f"LLM validation failed for {llm_config.provider}/{llm_config.model}: {e}"
         )
-        raise LLMValidationError(
-            provider=llm_config.provider,
-            model=llm_config.model,
-            reason=str(e),
-        ) from e
+        raise ValueError(e) from e
 
 
 def build_llm(config: LLMConfig) -> ChatLiteLLM:
@@ -191,11 +175,7 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
 
     except Exception as e:
         logger.error(f"Failed to create LLM from config: {e}")
-        raise LLMConfigurationError(
-            reason=str(e),
-            llm_role="unknown",
-            remediation="Check LLM configuration parameters",
-        ) from e
+        raise ValueError(e)
 
 
 def get_available_providers() -> list[str]:

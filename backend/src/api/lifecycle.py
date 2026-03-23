@@ -13,6 +13,7 @@ class Infrastructure:
         self.qdrant_client: AsyncQdrantClient | None = None
         self.session_factory: async_sessionmaker[AsyncSession] | None = None
         self.engine = create_async_engine(settings.database.url, echo=True)
+        self.falkordb_client: FalkorDB | None = None
         self.falkordb_graph = None
         self.model_registry = None
         self._tables_created = False
@@ -65,6 +66,7 @@ class Infrastructure:
                 host=falkordb_settings.host,
                 port=falkordb_settings.port,
             )
+            self.falkordb_client = db
             self.falkordb_graph = db.select_graph(falkordb_settings.graph_name)
             logger.info(
                 "FalkorDB initialized at {}:{}/{}",
@@ -74,6 +76,7 @@ class Infrastructure:
             )
         except Exception as e:
             logger.warning("FalkorDB not available: {}. Graph features disabled.", e)
+            self.falkordb_client = None
             self.falkordb_graph = None
 
         logger.info("Infrastructure initialized.")

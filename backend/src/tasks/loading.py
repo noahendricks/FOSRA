@@ -1,4 +1,0 @@
-#LOADING
-
-
-#loading service

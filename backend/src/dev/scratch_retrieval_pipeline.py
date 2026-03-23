@@ -9,7 +9,7 @@ from langchain_core.documents import Document
 from langchain_core.documents.base import Blob
 
 from backend.src.domain.enums import VectorStoreType
-from backend.src.domain.schemas.config import (
+from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
     UserPreferences,

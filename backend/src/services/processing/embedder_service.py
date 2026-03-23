@@ -13,11 +13,11 @@ from backend.src.domain.enums import EmbedderType
 from backend.src.domain.schemas.doc import Chunk
 
 if TYPE_CHECKING:
-    from backend.src.domain.schemas.config import EmbedderConfig
+    from backend.src.settings import EmbedderConfig
 
 from fastembed import (LateInteractionTextEmbedding, SparseTextEmbedding, TextEmbedding)
 
-from backend.src.domain.schemas.config import EmbedderConfig
+from backend.src.settings import EmbedderConfig
 
 
 class _BaseModelFlex(BaseModel):

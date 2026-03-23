@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.src.domain.enums import FileSourceType
-from backend.src.domain.schemas.config import EmbedderConfig
+from backend.src.settings import EmbedderConfig
 from backend.src.domain.schemas.graph import GraphResult
 from backend.src.services.processing.callgraph_service import CallGraphService
 from backend.src.services.retrieval.graph_service import GraphService

@@ -22,7 +22,7 @@ from pydantic.v1.utils import to_camel
 from qdrant_client.models import PointStruct
 
 from backend.src.domain.enums import ChunkerType
-from backend.src.domain.schemas.config import ChunkerConfig, EmbedderConfig
+from backend.src.settings import ChunkerConfig, EmbedderConfig
 from backend.src.domain.schemas.doc import (
     Chunk,
     ChunkMetadata,
@@ -130,7 +130,7 @@ class HiChunkStructurer:
                 )
                 self.l1_chunker = LateChunker(
                     embedding_model=late_embedding_model,
-                    **config.late_config.model_dump(exclude=("embedding_model")),
+                    **config.late_config.model_dump(exclude={"embedding_model"}),
                 )
 
                 # l2: smaller semantic chunks inside each l1 section
@@ -140,7 +140,7 @@ class HiChunkStructurer:
 
                 self.l2_chunker = SemanticChunker(
                     embedding_model=semantic_embedding_model,
-                    **config.semantic_config.model_dump(exclude=("embedding_model")),
+                    **config.semantic_config.model_dump(exclude={"embedding_model"}),
                 )
 
     # public

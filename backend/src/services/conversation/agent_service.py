@@ -23,18 +23,18 @@ from typing import TYPE_CHECKING
 from deepagents import create_deep_agent
 from loguru import logger
 
-from backend.src.domain.schemas.config import EmbedderConfig, VectorStoreConfig
 from backend.src.services.conversation.llm_service import LLMService
 from backend.src.services.conversation.tools import (
     RetrievalResultStore,
     create_retrieval_tool,
 )
 from backend.src.services.conversation.utils.llm_utils import build_llm
+from backend.src.settings.config import EmbedderConfig, VectorStoreConfig
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
-    from backend.src.domain.schemas.config import UserPreferences
+    from backend.src.settings.config import UserPreferences
 
 
 def create_fosra_agent(
@@ -62,9 +62,7 @@ def create_fosra_agent(
     """
     # -- Resolve prompt ------------------------------------------------
     if system_prompt is None:
-        from backend.src.services.conversation.utils.prompts import (
-            FOSRA_AGENT_SYSTEM_PROMPT,
-        )
+        from backend.src.services.conversation.utils.prompts import FOSRA_AGENT_SYSTEM_PROMPT
 
         system_prompt = FOSRA_AGENT_SYSTEM_PROMPT
 

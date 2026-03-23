@@ -269,3 +269,67 @@ def get_settings() -> Settings:
 
 # Default settings instance for convenience
 settings = get_settings()
+
+
+# =============================================================================
+# Re-export config classes from config.py
+# =============================================================================
+from backend.src.settings.config import (
+    ChunkerConfig,
+    CodeChunkerConfig,
+    EmbedderConfig,
+    LateChunkerConfig,
+    LLMConfig,
+    ModelPrefs,
+    NeuralChunkerConfig,
+    ParserConfig,
+    PineconeConfig,
+    QdrantConfig,
+    RecursiveChunkerConfig,
+    RerankerConfig,
+    ScoredRetrieval,
+    SemanticChunkerConfig,
+    SentenceChunkerConfig,
+    SlumberChunkerConfig,
+    TokenChunkerConfig,
+    UserPreferences,
+    VectorStoreConfig,
+)
+
+__all__ = [
+    "settings",
+    "get_settings",
+    "Settings",
+    "APIKeySettings",
+    "AgentSettings",
+    "ConnectorSettings",
+    "DatabaseSettings",
+    "EmbeddingSettings",
+    "FlashRankSettings",
+    "FalkorDBSettings",
+    "IngestionSettings",
+    "ModelOpsSettings",
+    "QdrantSettings",
+    "RerankerSettings",
+    "RetrievalSettings",
+    "VectorSettings",
+    "ChunkerConfig",
+    "CodeChunkerConfig",
+    "EmbedderConfig",
+    "LateChunkerConfig",
+    "LLMConfig",
+    "ModelPrefs",
+    "NeuralChunkerConfig",
+    "ParserConfig",
+    "PineconeConfig",
+    "QdrantConfig",
+    "RecursiveChunkerConfig",
+    "RerankerConfig",
+    "ScoredRetrieval",
+    "SemanticChunkerConfig",
+    "SentenceChunkerConfig",
+    "SlumberChunkerConfig",
+    "TokenChunkerConfig",
+    "UserPreferences",
+    "VectorStoreConfig",
+]

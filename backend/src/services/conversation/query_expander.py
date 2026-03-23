@@ -25,7 +25,7 @@ from backend.src.services.conversation.utils.prompts import (
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
-    from backend.src.domain.schemas.config import LLMConfig
+    from backend.src.settings import LLMConfig
 
 
 class QueryExpander:

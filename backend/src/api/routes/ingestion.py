@@ -11,20 +11,20 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Annotated, Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from loguru import logger
 
 from backend.src.api.dependencies import get_db_session
 from backend.src.api.lifecycle import global_infra
-from backend.src.domain.enums import FileSourceType
-from backend.src.domain.schemas.config import (
+from backend.src.domain.enums import FileSourceType, VectorStoreType
+from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
     VectorStoreConfig,
 )
 from backend.src.domain.schemas.doc import Doc, DocMetadata
-from backend.src.services.processing.utils.loader import code_mimes
 from backend.src.settings import settings
 
 router = APIRouter(prefix="/ingest", tags=["Ingestion"])
@@ -85,14 +85,22 @@ async def ingest_codebase(
 
     repo = repo_name or path.name
 
+    if global_infra.falkordb_client is None:
+        raise HTTPException(status_code=503, detail="FalkorDB not available")
+    if global_infra.session_factory is None:
+        raise HTTPException(
+            status_code=503, detail="Database session factory not available"
+        )
+
     try:
+        embedder_config = _default_embedder_config()
         result = await _ingest(
             directory_path=str(path.absolute()),
             repo_name=repo,
+            embedder_config=embedder_config,
+            falkordb_client=global_infra.falkordb_client,
             session_factory=global_infra.session_factory,
-            falkordb_graph=global_infra.falkordb_graph,
-            language_filter=language_filter,
-            force=force,
+            recursive=True,
         )
 
         logger.info(
@@ -135,13 +143,21 @@ async def ingest_single_file(
     if not path.is_file():
         raise HTTPException(status_code=400, detail=f"Not a file: {file_path}")
 
+    if global_infra.falkordb_client is None:
+        raise HTTPException(status_code=503, detail="FalkorDB not available")
+    if global_infra.session_factory is None:
+        raise HTTPException(
+            status_code=503, detail="Database session factory not available"
+        )
+
     try:
+        embedder_config = _default_embedder_config()
         result = await _ingest(
             file_path=str(path.absolute()),
             repo_name=repo_name,
+            embedder_config=embedder_config,
+            falkordb_client=global_infra.falkordb_client,
             session_factory=global_infra.session_factory,
-            falkordb_graph=global_infra.falkordb_graph,
-            force=force,
         )
 
         return result
@@ -179,13 +195,16 @@ async def ingest_documents(
     for p in paths:
         content = p.read_text(encoding="utf-8", errors="replace")
         mime = _guess_mime(p)
+        doc_id = str(uuid4())
 
         doc = Doc(
+            id=doc_id,
             page_content=content,
             metadata=DocMetadata(
                 source=str(p.absolute()),
-                file_name=p.name,
                 mime_type=mime,
+                doc_id=doc_id,
+                doc_title=p.name,
                 source_type=FileSourceType.DOC
                 if source_type == "doc"
                 else FileSourceType.CODEBASE,
@@ -283,12 +302,14 @@ async def get_ingestion_status(
 
 @router.delete("/codebase")
 async def reindex_codebase(
+    directory_path: Annotated[str, Query()],
     repo_name: Annotated[str, Query()],
     session=Depends(get_db_session),
 ) -> dict[str, Any]:
     """Re-index a codebase (drop existing + rebuild).
 
     Args:
+        directory_path: Absolute path to the codebase directory
         repo_name: Repository name to re-index
 
     Returns:
@@ -296,11 +317,21 @@ async def reindex_codebase(
     """
     from backend.src.tasks.codebase_ingestion import reindex_codebase as _reindex
 
+    if global_infra.falkordb_client is None:
+        raise HTTPException(status_code=503, detail="FalkorDB not available")
+    if global_infra.session_factory is None:
+        raise HTTPException(
+            status_code=503, detail="Database session factory not available"
+        )
+
+    embedder_config = _default_embedder_config()
     try:
         result = await _reindex(
+            directory_path=directory_path,
             repo_name=repo_name,
+            embedder_config=embedder_config,
+            falkordb_client=global_infra.falkordb_client,
             session_factory=global_infra.session_factory,
-            falkordb_graph=global_infra.falkordb_graph,
         )
 
         return result
@@ -325,13 +356,21 @@ async def reindex_docs(
     """
     from backend.src.tasks.doc_ingestion import reindex_docs as _reindex
 
-    try:
-        result = await _reindex(
-            session_factory=global_infra.session_factory,
-            qdrant_client=global_infra.qdrant_client,
-            collection=collection,
+    if global_infra.session_factory is None:
+        raise HTTPException(
+            status_code=503, detail="Database session factory not available"
         )
 
+    embedder_config = _default_embedder_config()
+    chunker_config = ChunkerConfig()
+    vector_config = _default_vector_config()
+    try:
+        result = await _reindex(
+            chunker_config,
+            embedder_config,
+            vector_config,
+            global_infra.session_factory,
+        )
         return result
 
     except Exception as e:
@@ -371,20 +410,23 @@ def _guess_mime(path: Path) -> str:
 def _default_embedder_config() -> EmbedderConfig:
     """Get default embedder config from settings."""
     return EmbedderConfig(
-        embedder_type=settings.embedder.embedder_type,
-        dense_model=settings.embedder.dense_model,
-        sparse_model=settings.embedder.sparse_model,
-        late_model=settings.embedder.late_model,
-        sparse_enabled=settings.embedder.sparse_enabled,
-        late_enabled=settings.embedder.late_enabled,
-        cache_dir=settings.embedder.cache_dir,
-        cuda_enabled=settings.embedder.cuda_enabled,
+        embedder_type=settings.embedding.model_type,
+        dense_model=settings.embedding.model_name,
+        batch_size=settings.embedding.batch_size,
+        normalize=settings.embedding.normalize,
     )
 
 
 def _default_vector_config() -> VectorStoreConfig:
     """Get default vector store config from settings."""
+    from backend.src.settings import QdrantConfig
+
+    store_type = VectorStoreType(settings.vectors.vector_store_type)
     return VectorStoreConfig(
-        store_type=settings.vector_store.store_type,
-        collection_name=settings.vector_store.collection_name,
+        preferred_store=store_type,
+        qdrant_config=QdrantConfig(
+            collection_name=settings.vectors.collection_name,
+            host=settings.qdrant.host,
+            port=settings.qdrant.port,
+        ),
     )

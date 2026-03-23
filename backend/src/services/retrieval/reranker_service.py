@@ -6,7 +6,7 @@ from flashrank import Ranker, RerankRequest
 from loguru import logger
 
 if TYPE_CHECKING:
-    from backend.src.domain.schemas.config import RerankerConfig
+    from backend.src.settings import RerankerConfig
     from backend.src.services.retrieval.vector_service import RetrievedChunk
 
 
@@ -35,7 +35,7 @@ class RerankerService:
     DEFAULT_MODEL = "ms-marco-MiniLM-L-12-v2"
 
     def __init__(self, config: RerankerConfig | None = None):
-        from backend.src.domain.schemas.config import RerankerConfig as _RC
+        from backend.src.settings import RerankerConfig as _RC
 
         self._config = config or _RC()
         self._model_name: str = self._config.model or self.DEFAULT_MODEL

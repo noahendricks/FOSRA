@@ -13,7 +13,7 @@ from qdrant_client.conversions.common_types import QueryResponse
 from qdrant_client.models import ScoredPoint
 
 from backend.src.domain.enums import RetrievalMode, VectorStoreType
-from backend.src.domain.schemas.config import EmbedderConfig, VectorStoreConfig
+from backend.src.settings import EmbedderConfig, VectorStoreConfig
 from backend.src.domain.schemas.doc import Chunk
 from backend.src.services.processing.embedder_service import EmbedderService
 
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 from qdrant_client import QdrantClient, models
+from qdrant_client.async_qdrant_client import AsyncQdrantClient
 
 PARENTS_COLLECTION = "parents"
 CHUNKS_COLLECTION = "chunks"
@@ -47,7 +48,6 @@ class RetrievedChunk(_BaseModelFlex):
 
 
 class VectorService:
-
     @staticmethod
     def ensure_dual_collections(
         client: QdrantClient, embedder_config: EmbedderConfig
@@ -251,8 +251,8 @@ class VectorService:
         return parent_results, chunk_results, file_ids
 
     @staticmethod
-    def count_points(client: QdrantClient, collection_name: str) -> int:
-        result = client.count(collection_name=collection_name)
+    async def count_points(client: AsyncQdrantClient, collection_name: str) -> int:
+        result = await client.count(collection_name=collection_name)
         return result.count
 
     @staticmethod

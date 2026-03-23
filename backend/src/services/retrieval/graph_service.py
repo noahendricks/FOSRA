@@ -7,7 +7,7 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from falkordb import Graph
-    from backend.src.domain.schemas.config import EmbedderConfig
+    from backend.src.settings import EmbedderConfig
 
 from backend.src.domain.enums import GraphNodeType
 from backend.src.domain.schemas.doc import Chunk, ChunkMetadata
@@ -180,7 +180,7 @@ class GraphService:
         """create or update a node in the graph."""
         label = node.node_type.value
 
-        props = {
+        props: dict[str, Any] = {
             "file_id": node.file_id,
             "name": node.name,
             "qualified_name": node.qualified_name,

@@ -23,9 +23,6 @@ def pydantic_to_domain(
 
 
 def domain_to_orm(domain_obj: T_Msgspec, orm_class: Type[T_ORM]) -> T_ORM:
-    """
-    STORAGE: Domain Model (msgspec) -> SQLAlchemy ORM
-    """
     data = msgspec.to_builtins(domain_obj)
     return orm_class(**data)
 
@@ -96,40 +93,12 @@ def _handle_convo_relationships(
 
             data["messages"].append(msg_data)
 
-    if "user" not in inspector.unloaded and hasattr(convo_orm, "user"):
-        user_inspector = inspect(convo_orm.user)
-        user_data = user_inspector.dict.copy()
-
-        safe_user_data = {
-            "user_id": user_data.get("user_id"),
-            "username": user_data.get("username"),
-            "enabled": user_data.get("enabled"),
-            "created_at": user_data.get("created_at"),
-            "last_login": user_data.get("last_login"),
-        }
-        data["user"] = safe_user_data
-
-    if "workspace" not in inspector.unloaded and hasattr(convo_orm, "workspace"):
-        ws_inspector = inspect(convo_orm.workspace)
-        ws_data = ws_inspector.dict.copy()
-
-        safe_ws_data = {
-            "workspace_id": ws_data.get("workspace_id"),
-            "name": ws_data.get("name"),
-            "description": ws_data.get("description"),
-            "user_id": ws_data.get("user_id"),
-            "archived_convos": ws_data.get("archived_convos"),
-        }
-        data["workspace"] = safe_ws_data
-
     return data
 
 
 def domain_to_response(
     domain_obj: T_Msgspec, response_cls: Type[T_Pydantic]
 ) -> T_Pydantic:
-    """EGRESS: Domain Model (msgspec) -> API Response (Pydantic)"""
-
     logger.debug(f"Converting {type(domain_obj).__name__}")
     logger.debug(f"Struct fields: {domain_obj.__struct_fields__}")
 
@@ -169,11 +138,6 @@ class DomainStruct(msgspec.Struct):
 
     def to_dict(self) -> dict[str, Any]:
         return msgspec.to_builtins(self)
-
-
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
 
 
 def ulid_factory() -> str:
