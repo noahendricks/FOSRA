@@ -14,6 +14,7 @@ from backend.src.api.exception_handlers import register_exception_handlers
 from backend.src.api.lifecycle import global_infra
 from backend.src.api.routes.config import router as config_router
 from backend.src.api.routes.ingestion import router as ingestion_router
+from backend.src.api.routes.tui import router as tui_router
 from backend.src.api.routes.workspace import router as workspace_router
 from backend.src.settings.observe import setup_telemetry
 from backend.src.tasks.broker import broker
@@ -91,6 +92,7 @@ register_exception_handlers(app=app)
 app.include_router(workspace_router)
 app.include_router(config_router)
 app.include_router(ingestion_router)
+app.include_router(tui_router)
 
 
 app.add_middleware(

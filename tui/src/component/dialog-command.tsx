@@ -11,6 +11,27 @@ import {
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { type KeybindKey, useKeybind } from "@tui/context/keybind"
+import * as fs from "fs"
+import * as path from "path"
+
+const LOG_FILE = process.env.FOSRA_LOG_FILE ?? path.join(process.env.HOME ?? "/tmp", ".fosra-tui.log")
+
+function logAction(action: string, details?: Record<string, unknown>) {
+  const timestamp = new Date().toISOString()
+  const entry = { timestamp, action, ...details }
+  fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + "\n")
+}
+
+function logError(action: string, error: unknown, details?: Record<string, unknown>) {
+  const timestamp = new Date().toISOString()
+  const entry = {
+    timestamp,
+    action,
+    error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+    ...details,
+  }
+  fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + "\n")
+}
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
@@ -63,8 +84,15 @@ function init() {
     for (const option of entries()) {
       if (!isEnabled(option)) continue
       if (option.keybind && keybind.match(option.keybind, evt)) {
+        logAction("KEYBIND_TRIGGERED", { keybind: option.keybind, option: option.value, evtName: evt.name })
         evt.preventDefault()
-        option.onSelect?.(dialog)
+        try {
+          option.onSelect?.(dialog)
+          logAction("KEYBIND_HANDLED", { keybind: option.keybind, option: option.value })
+        } catch (err) {
+          logError("KEYBIND_ERROR", err, { keybind: option.keybind, option: option.value })
+          throw err
+        }
         return
       }
     }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -54,8 +55,13 @@ class LLMService:
             ):
                 if cfg is not None:
                     return cfg
-        # Last-resort fallback (will need a valid API key at runtime)
-        return LLMConfig()
+        # last-resort fallback — local openai-compatible server
+        return LLMConfig(
+            provider="openai",
+            model="Qwen3.5-35B-A3B-Q4_K_M.gguf",
+            api_key="not-needed",
+            api_base="http://localhost:8045/v1",
+        )
 
     # ------------------------------------------------------------------
     # 1. Chat Response Generation (streaming)

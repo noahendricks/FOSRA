@@ -1,30 +1,41 @@
-// Stub for @opencode-ai/util/binary
-type CompareFn<T> = (a: T, b: T) => number
+export namespace Binary {
+  export function search<T>(array: T[], id: string, compare: (item: T) => string): { found: boolean; index: number } {
+    let left = 0
+    let right = array.length - 1
 
-export const Binary = {
-  search: <T>(arr: T[], item: T, compare: CompareFn<T>): number => {
-    let low = 0
-    let high = arr.length - 1
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2)
-      const cmp = compare(arr[mid], item)
-      if (cmp < 0) low = mid + 1
-      else if (cmp > 0) high = mid - 1
-      else return mid
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2)
+      const midId = compare(array[mid])
+
+      if (midId === id) {
+        return { found: true, index: mid }
+      } else if (midId < id) {
+        left = mid + 1
+      } else {
+        right = mid - 1
+      }
     }
-    return -1
-  },
-  
-  insert: <T>(arr: T[], item: T, compare: CompareFn<T>): number => {
-    let low = 0
-    let high = arr.length
-    while (low < high) {
-      const mid = Math.floor((low + high) / 2)
-      const cmp = compare(arr[mid], item)
-      if (cmp < 0) low = mid + 1
-      else high = mid
+
+    return { found: false, index: left }
+  }
+
+  export function insert<T>(array: T[], item: T, compare: (item: T) => string): T[] {
+    const id = compare(item)
+    let left = 0
+    let right = array.length
+
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2)
+      const midId = compare(array[mid])
+
+      if (midId < id) {
+        left = mid + 1
+      } else {
+        right = mid
+      }
     }
-    arr.splice(low, 0, item)
-    return low
-  },
+
+    array.splice(left, 0, item)
+    return array
+  }
 }

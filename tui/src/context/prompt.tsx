@@ -5,6 +5,7 @@ export const { use: usePromptRef, provider: PromptRefProvider } = createSimpleCo
   name: "PromptRef",
   init: () => {
     let current: PromptRef | undefined
+     
 
     return {
       get current() {

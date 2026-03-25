@@ -2,6 +2,12 @@ import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg }
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
+import * as fs from "fs"
+
+const KB_LOG = process.env.FOSRA_LOG_FILE ?? path.join(process.env.HOME ?? "/tmp", ".fosra-tui.log")
+function kbLog(action: string, data?: Record<string, unknown>) {
+  fs.appendFileSync(KB_LOG, JSON.stringify({ t: new Date().toISOString(), action, ...data }) + "\n")
+}
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
@@ -98,9 +104,9 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+  sdk.event.on(TuiEvent.PromptAppend.type as any, (evt) => {
     if (!input || input.isDestroyed) return
-    input.insertText(evt.properties.text)
+    input.insertText((evt as any).properties.text)
     setTimeout(() => {
       // setTimeout is a workaround and needs to be addressed properly
       if (!input || input.isDestroyed) return
@@ -183,18 +189,19 @@ export function Prompt(props: PromptProps) {
           dialog.clear()
         },
       },
-      {
-        title: "Submit prompt",
-        value: "prompt.submit",
-        keybind: "input_submit",
-        category: "Prompt",
-        hidden: true,
-        onSelect: (dialog) => {
-          if (!input.focused) return
-          submit()
-          dialog.clear()
-        },
+{
+      title: "Submit prompt",
+      value: "prompt.submit",
+      keybind: "input_submit",
+      category: "Prompt",
+      hidden: true,
+      onSelect: (dialog) => {
+        kbLog("PROMPT_SUBMIT_CMD", { inputFocused: input?.focused, inputDestroyed: input?.isDestroyed })
+        if (!input.focused) return
+        submit()
+        dialog.clear()
       },
+    },
       {
         title: "Paste",
         value: "prompt.paste",
@@ -528,19 +535,22 @@ export function Prompt(props: PromptProps) {
   ])
 
   async function submit() {
-    if (props.disabled) return
-    if (autocomplete?.visible) return
-    if (!store.prompt.input) return
-    const trimmed = store.prompt.input.trim()
-    if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
-      exit()
-      return
-    }
-    const selectedModel = local.model.current()
-    if (!selectedModel) {
-      promptModelWarning()
-      return
-    }
+    try {
+      kbLog("SUBMIT_CALLED", { disabled: props.disabled, autocomplete: autocomplete?.visible, input: store.prompt.input?.slice(0, 50) })
+      if (props.disabled) return
+      if (autocomplete?.visible) return
+      if (!store.prompt.input) return
+      const trimmed = store.prompt.input.trim()
+      if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
+        exit()
+        return
+      }
+      const selectedModel = local.model.current()
+      if (!selectedModel) {
+        promptModelWarning()
+        return
+      }
+      kbLog("MODEL_OK", { providerID: selectedModel.providerID, modelID: selectedModel.modelID })
 
     let sessionID = props.sessionID
     if (sessionID == null) {
@@ -550,7 +560,7 @@ export function Prompt(props: PromptProps) {
 
       if (res.error) {
         console.log("Creating a session failed:", res.error)
-
+        kbLog("SESSION_CREATE_ERROR", { error: JSON.stringify(res.error) })
         toast.show({
           message: "Creating a session failed. Open console for more details.",
           variant: "error",
@@ -559,10 +569,11 @@ export function Prompt(props: PromptProps) {
         return
       }
 
-      sessionID = res.data.id
+      sessionID = (res.data as { id: string }).id
+      kbLog("SESSION_CREATED", { sessionID })
     }
 
-    const messageID = MessageID.ascending()
+    const messageID = MessageID.generate()
     let inputText = store.prompt.input
 
     // Expand pasted text inline before submitting
@@ -625,11 +636,12 @@ export function Prompt(props: PromptProps) {
         parts: nonTextParts
           .filter((x) => x.type === "file")
           .map((x) => ({
-            id: PartID.ascending(),
+            id: PartID.generate(),
             ...x,
           })),
       })
     } else {
+      kbLog("SENDING_PROMPT", { sessionID, agent: local.agent.current().name, modelID: selectedModel.modelID, inputLen: inputText.length })
       sdk.client.session
         .prompt({
           sessionID,
@@ -640,14 +652,14 @@ export function Prompt(props: PromptProps) {
           variant,
           parts: [
             {
-              id: PartID.ascending(),
+              id: PartID.generate(),
               type: "text",
               text: inputText,
             },
             ...nonTextParts.map(assign),
           ],
         })
-        .catch(() => {})
+        .catch((err) => { kbLog("PROMPT_ERROR", { error: String(err) }) })
     }
     history.append({
       ...store.prompt,
@@ -670,6 +682,10 @@ export function Prompt(props: PromptProps) {
         })
       }, 50)
     input.clear()
+    kbLog("SUBMIT_DONE", { sessionID })
+    } catch (e) {
+      kbLog("SUBMIT_ERROR", { error: String(e), stack: (e as Error)?.stack?.split("\n").slice(0, 3).join("\n") })
+    }
   }
   const exit = useExit()
 
@@ -846,9 +862,18 @@ export function Prompt(props: PromptProps) {
               }}
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
+                kbLog("KEYDOWN", { name: e.name, ctrl: e.ctrl, input: store.prompt.input?.slice(0, 20) })
                 if (props.disabled) {
                   e.preventDefault()
                   return
+                }
+                if (e.name === "return" && !e.ctrl && !e.meta && !e.shift) {
+                  kbLog("ENTER_PRESSED", { autocomplete: autocomplete?.visible, input: store.prompt.input?.slice(0, 20) })
+                  if (!autocomplete?.visible && store.prompt.input) {
+                    e.preventDefault()
+                    submit()
+                    return
+                  }
                 }
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
@@ -1081,20 +1106,20 @@ export function Prompt(props: PromptProps) {
                     const message = createMemo(() => {
                       const r = retry()
                       if (!r) return
-                      if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                      if ((r as any).message.includes("exceeded your current quota") && (r as any).message.includes("gemini"))
                         return "gemini is way too hot right now"
-                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
-                      return r.message
+                      if ((r as any).message.length > 80) return (r as any).message.slice(0, 80) + "..."
+                      return (r as any).message
                     })
                     const isTruncated = createMemo(() => {
                       const r = retry()
                       if (!r) return false
-                      return r.message.length > 120
+                      return (r as any).message.length > 120
                     })
                     const [seconds, setSeconds] = createSignal(0)
                     onMount(() => {
                       const timer = setInterval(() => {
-                        const next = retry()?.next
+                        const next = (retry() as any)?.next
                         if (next) setSeconds(Math.round((next - Date.now()) / 1000))
                       }, 1000)
 
@@ -1106,7 +1131,7 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (isTruncated()) {
-                        DialogAlert.show(dialog, "Retry Error", r.message)
+                        DialogAlert.show(dialog, "Retry Error", (r as any).message)
                       }
                     }
 
@@ -1116,7 +1141,7 @@ export function Prompt(props: PromptProps) {
                       const baseMessage = message()
                       const truncatedHint = isTruncated() ? " (click to expand)" : ""
                       const duration = formatDuration(seconds())
-                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
+                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${(r as any).attempt}]`
                       return baseMessage + truncatedHint + retryInfo
                     }
 
@@ -1167,3 +1192,5 @@ export function Prompt(props: PromptProps) {
     </>
   )
 }
+
+

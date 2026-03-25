@@ -1,9 +1,6 @@
 // Stub for @/cli/error
-export class FormatError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "FormatError"
-  }
+export function FormatError(error: Error): string {
+  return error.message || String(error)
 }
 
 export const FormatUnknownError = (error: unknown): string => {

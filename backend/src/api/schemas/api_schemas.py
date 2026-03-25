@@ -124,6 +124,7 @@ class ConvoRequest(ConvoRequestBase):
 
 class NewConvoRequest(ConvoRequestBase):
     title: str | None = "New Convo"
+    workspace_id: str = "default"
 
 
 class ConvoDeleteRequest(ConvoRequestBase):
@@ -148,6 +149,7 @@ class ConvoListItemResponse(ConvoRequestBase):
 
 
 class NewConvoResponse(ConvoRequestBase):
+    convo_id: str
     title: str | None = "New Convo"
     convo_metadata: dict[str, Any] | None = None
 

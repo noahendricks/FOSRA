@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js"
 import type { KeyBinding } from "@opentui/core"
 import { useKeybind } from "../context/keybind"
-import { Keybind } from "@/util/keybind"
+import { Keybind, type KeybindInfo } from "@/util/keybind"
 
 const TEXTAREA_ACTIONS = [
   "submit",
@@ -42,7 +42,7 @@ const TEXTAREA_ACTIONS = [
 ] as const
 
 function mapTextareaKeybindings(
-  keybinds: Record<string, Keybind.Info[]>,
+  keybinds: Record<string, KeybindInfo[]>,
   action: (typeof TEXTAREA_ACTIONS)[number],
 ): KeyBinding[] {
   const configKey = `input_${action.replace(/-/g, "_")}`

@@ -64,7 +64,7 @@ import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import parsers from "../../../../../../parsers-config.ts"
+import parsers from "../../parsers-config"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
@@ -148,7 +148,7 @@ export function Session() {
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
-  const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [sidebarOpen, setSidebarOpen] = createSignal(false as any)
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
@@ -172,7 +172,7 @@ export function Session() {
 
   const scrollAcceleration = createMemo(() => {
     const tui = tuiConfig
-    if (tui?.scroll_acceleration?.enabled) {
+    if (typeof tui?.scroll_acceleration === "object" && tui?.scroll_acceleration?.enabled) {
       return new MacOSScrollAccel()
     }
     if (tui?.scroll_speed) {
@@ -573,7 +573,7 @@ export function Session() {
       onSelect: (dialog) => {
         batch(() => {
           const isVisible = sidebarVisible()
-          setSidebar(() => (isVisible ? "hide" : "auto"))
+          setSidebar(() => (isVisible ? "hide" : "auto") as any)
           setSidebarOpen(!isVisible)
         })
         dialog.clear()
@@ -598,7 +598,7 @@ export function Session() {
         aliases: ["toggle-timestamps"],
       },
       onSelect: (dialog) => {
-        setTimestamps((prev) => (prev === "show" ? "hide" : "show"))
+        setTimestamps(((prev: any) => (prev === "show" ? "hide" : "show")) as any)
         dialog.clear()
       },
     },
@@ -612,7 +612,7 @@ export function Session() {
         aliases: ["toggle-thinking"],
       },
       onSelect: (dialog) => {
-        setShowThinking((prev) => !prev)
+        setShowThinking(((prev: any) => !prev) as any)
         dialog.clear()
       },
     },
@@ -622,7 +622,7 @@ export function Session() {
       keybind: "tool_details",
       category: "Session",
       onSelect: (dialog) => {
-        setShowDetails((prev) => !prev)
+        setShowDetails(((prev: any) => !prev) as any)
         dialog.clear()
       },
     },
@@ -632,7 +632,7 @@ export function Session() {
       keybind: "scrollbar_toggle",
       category: "Session",
       onSelect: (dialog) => {
-        setShowScrollbar((prev) => !prev)
+        setShowScrollbar(((prev: any) => !prev) as any)
         dialog.clear()
       },
     },
@@ -641,7 +641,7 @@ export function Session() {
       value: "session.toggle.header",
       category: "Session",
       onSelect: (dialog) => {
-        setShowHeader((prev) => !prev)
+        setShowHeader(((prev: any) => !prev) as any)
         dialog.clear()
       },
     },
@@ -650,7 +650,7 @@ export function Session() {
       value: "session.toggle.generic_tool_output",
       category: "Session",
       onSelect: (dialog) => {
-        setShowGenericToolOutput((prev) => !prev)
+        setShowGenericToolOutput(((prev: any) => !prev) as any)
         dialog.clear()
       },
     },
@@ -1075,7 +1075,7 @@ export function Session() {
                     <Match when={message.id === revert()?.messageID}>
                       {(function () {
                         const command = useCommandDialog()
-                        const [hover, setHover] = createSignal(false)
+                        const [hover, setHover] = createSignal(false as any)
                         const dialog = useDialog()
 
                         const handleUnrevert = async () => {
@@ -1240,7 +1240,7 @@ function UserMessage(props: {
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
-  const [hover, setHover] = createSignal(false)
+  const [hover, setHover] = createSignal(false as any)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
@@ -1588,7 +1588,7 @@ function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
-  const [expanded, setExpanded] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(false as any)
   const lines = createMemo(() => output().split("\n"))
   const maxLines = 3
   const overflow = createMemo(() => lines().length > maxLines)
@@ -1648,7 +1648,7 @@ function InlineTool(props: {
   const ctx = use()
   const sync = useSync()
   const renderer = useRenderer()
-  const [hover, setHover] = createSignal(false)
+  const [hover, setHover] = createSignal(false as any)
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
@@ -1733,7 +1733,7 @@ function BlockTool(props: {
 }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
-  const [hover, setHover] = createSignal(false)
+  const [hover, setHover] = createSignal(false as any)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
@@ -1776,7 +1776,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
-  const [expanded, setExpanded] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(false as any)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
   const limited = createMemo(() => {
@@ -1853,7 +1853,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
             <code
               conceal={false}
               fg={theme.text}
-              filetype={filetype(props.input.filePath!)}
+              filetype={filetype(Array.isArray(props.input.filePath) ? props.input.filePath[0] : props.input.filePath!) as string}
               syntaxStyle={syntax()}
               content={code()}
             />
@@ -1948,7 +1948,7 @@ function WebFetch(props: ToolProps<typeof WebFetchTool>) {
   )
 }
 
-function CodeSearch(props: ToolProps<any>) {
+function CodeSearch(props: ToolProps<any & { name: string }>) {
   const input = props.input as any
   const metadata = props.metadata as any
   return (
@@ -1958,7 +1958,7 @@ function CodeSearch(props: ToolProps<any>) {
   )
 }
 
-function WebSearch(props: ToolProps<any>) {
+function WebSearch(props: ToolProps<any & { name: string }>) {
   const input = props.input as any
   const metadata = props.metadata as any
   return (
@@ -2229,7 +2229,7 @@ function Skill(props: ToolProps<typeof SkillTool>) {
 function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
   const { theme } = useTheme()
   const errors = createMemo(() => {
-    const normalized = Filesystem.normalizePath(props.filePath)
+    const normalized = normalizePath(props.filePath)
     const arr = props.diagnostics?.[normalized] ?? []
     return arr.filter((x) => x.severity === 1).slice(0, 3)
   })
@@ -2276,6 +2276,6 @@ function filetype(input?: string) {
   if (!input) return "none"
   const ext = path.extname(input)
   const language = LANGUAGE_EXTENSIONS[ext]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
+  if (["typescriptreact", "javascriptreact", "javascript"].includes(Array.isArray(language) ? language[0] : language)) return "typescript"
   return language
 }

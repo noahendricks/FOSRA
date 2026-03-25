@@ -53,7 +53,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [sessionID: string]: SessionStatus
       }
       session_diff: {
-        [sessionID: string]: Snapshot.FileDiff[]
+        [sessionID: string]: any[]
       }
       todo: {
         [sessionID: string]: Todo[]
@@ -115,6 +115,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     sdk.event.listen((e) => {
       const event = e.details
+      Log.Default.info(`[SYNC] event received: ${event.type}`)
       switch (event.type) {
         case "server.instance.disposed":
           bootstrap()
@@ -127,7 +128,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             "permission",
             event.properties.sessionID,
-            produce((draft) => {
+            produce((draft: any) => {
               draft.splice(match.index, 1)
             }),
           )
@@ -149,7 +150,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             "permission",
             request.sessionID,
-            produce((draft) => {
+            produce((draft: any) => {
               draft.splice(match.index, 0, request)
             }),
           )
@@ -165,7 +166,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             "question",
             event.properties.sessionID,
-            produce((draft) => {
+            produce((draft: any) => {
               draft.splice(match.index, 1)
             }),
           )
@@ -187,7 +188,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             "question",
             request.sessionID,
-            produce((draft) => {
+            produce((draft: any) => {
               draft.splice(match.index, 0, request)
             }),
           )
@@ -203,11 +204,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          const result = Binary.search(store.session, event.properties.info.id, (s: any) => s.id)
           if (result.found) {
             setStore(
               "session",
-              produce((draft) => {
+              produce((draft: any) => {
                 draft.splice(result.index, 1)
               }),
             )
@@ -215,14 +216,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "session.updated": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          const result = Binary.search(store.session, event.properties.info.id, (s: any) => s.id)
           if (result.found) {
             setStore("session", result.index, reconcile(event.properties.info))
             break
           }
           setStore(
             "session",
-            produce((draft) => {
+            produce((draft: any) => {
               draft.splice(result.index, 0, event.properties.info)
             }),
           )
@@ -230,11 +231,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "session.status": {
+          Log.Default.info(`[SYNC] session.status: session=${event.properties.sessionID} status=${event.properties.status.type}`)
           setStore("session_status", event.properties.sessionID, event.properties.status)
           break
         }
 
         case "message.updated": {
+          Log.Default.info(`[SYNC] message.updated: id=${event.properties.info.id} role=${event.properties.info.role} session=${event.properties.info.sessionID}`)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
             setStore("message", event.properties.info.sessionID, [event.properties.info])
@@ -248,7 +251,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             "message",
             event.properties.info.sessionID,
-            produce((draft) => {
+            produce((draft: any) => {
               draft.splice(result.index, 0, event.properties.info)
             }),
           )
@@ -259,13 +262,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               setStore(
                 "message",
                 event.properties.info.sessionID,
-                produce((draft) => {
+                produce((draft: any) => {
                   draft.shift()
                 }),
               )
               setStore(
                 "part",
-                produce((draft) => {
+                produce((draft: any) => {
                   delete draft[oldest.id]
                 }),
               )
@@ -280,7 +283,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore(
               "message",
               event.properties.sessionID,
-              produce((draft) => {
+              produce((draft: any) => {
                 draft.splice(result.index, 1)
               }),
             )
@@ -288,6 +291,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
+          Log.Default.info(`[SYNC] message.part.updated: partID=${event.properties.part.id} type=${event.properties.part.type} msgID=${event.properties.part.messageID}`)
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
@@ -301,7 +305,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             "part",
             event.properties.part.messageID,
-            produce((draft) => {
+            produce((draft: any) => {
               draft.splice(result.index, 0, event.properties.part)
             }),
           )
@@ -310,13 +314,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "message.part.delta": {
           const parts = store.part[event.properties.messageID]
-          if (!parts) break
+          if (!parts) {
+            Log.Default.info(`[SYNC] message.part.delta: no parts for msgID=${event.properties.messageID}`)
+            break
+          }
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (!result.found) break
+          if (!result.found) {
+            Log.Default.info(`[SYNC] message.part.delta: part not found partID=${event.properties.partID} in msgID=${event.properties.messageID}`)
+            break
+          }
+          Log.Default.info(`[SYNC] message.part.delta: appending delta len=${event.properties.delta.length} to partID=${event.properties.partID}`)
           setStore(
             "part",
             event.properties.messageID,
-            produce((draft) => {
+            produce((draft: any) => {
               const part = draft[result.index]
               const field = event.properties.field as keyof typeof part
               const existing = part[field] as string | undefined
@@ -333,7 +344,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore(
               "part",
               event.properties.messageID,
-              produce((draft) => {
+              produce((draft: any) => {
                 draft.splice(result.index, 1)
               }),
             )
@@ -453,7 +464,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       },
       session: {
         get(sessionID: string) {
-          const match = Binary.search(store.session, sessionID, (s) => s.id)
+          const match = Binary.search(store.session, sessionID, (s: any) => s.id)
           if (match.found) return store.session[match.index]
           return undefined
         },
@@ -476,8 +487,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.diff({ sessionID }),
           ])
           setStore(
-            produce((draft) => {
-              const match = Binary.search(draft.session, sessionID, (s) => s.id)
+            produce((draft: any) => {
+              const match = Binary.search(draft.session, sessionID, (s: any) => s.id)
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []

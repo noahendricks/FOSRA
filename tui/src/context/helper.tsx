@@ -23,3 +23,4 @@ export function createSimpleContext<T, Props extends Record<string, any>>(input:
     },
   }
 }
+

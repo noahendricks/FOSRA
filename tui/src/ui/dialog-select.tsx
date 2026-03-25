@@ -8,7 +8,7 @@ import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
-import { Keybind } from "@/util/keybind"
+import { Keybind, type KeybindInfo } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 
 export interface DialogSelectProps<T> {
@@ -22,7 +22,7 @@ export interface DialogSelectProps<T> {
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
   keybind?: {
-    keybind?: Keybind.Info
+    keybind?: KeybindInfo
     title: string
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void

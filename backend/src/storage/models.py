@@ -121,6 +121,8 @@ class ConvoORM(Base):
 
     user_id: Mapped[str] = mapped_column(String(26), nullable=False, index=True)
 
+    workspace_id: Mapped[str] = mapped_column(String(26), nullable=False, index=True)
+
     title: Mapped[str | None] = mapped_column(String(500), default="New Convo")
 
     dynamic_prefs: Mapped[Optional[dict[str, Any]]] = mapped_column(
@@ -162,15 +164,26 @@ class MessageORM(Base):
 
     user_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
 
-    parent_id: Mapped[str | None] = mapped_column(String)
-
-    root_id: Mapped[str | None] = mapped_column(String)
-
-    root_message = relationship(
-        "MessageORM", back_populates="child_messages", remote_side=[message_id]
+    parent_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("messages.message_id"), nullable=True
     )
 
-    child_messages = relationship("MessageORM", back_populates="root_message")
+    root_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("messages.message_id"), nullable=True
+    )
+
+    root_message = relationship(
+        "MessageORM",
+        back_populates="child_messages",
+        remote_side=[message_id],
+        foreign_keys=[root_id],
+    )
+
+    child_messages = relationship(
+        "MessageORM",
+        back_populates="root_message",
+        foreign_keys=[root_id],
+    )
 
     role: Mapped[str] = mapped_column(String(20), nullable=False)
 

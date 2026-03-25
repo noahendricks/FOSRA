@@ -90,13 +90,16 @@ export function Home() {
   })
 
   // Wait for sync and model store to be ready before auto-submitting --prompt
+  let submitted = false
   createEffect(
     on(
       () => sync.ready && local.model.ready,
       (ready) => {
         if (!ready) return
+        if (submitted) return
         if (!args.prompt) return
         if (prompt.current?.input !== args.prompt) return
+        submitted = true
         prompt.submit()
       },
     ),

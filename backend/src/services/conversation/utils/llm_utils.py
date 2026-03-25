@@ -20,8 +20,8 @@ from backend.src.api.schemas.api_schemas import (
     UIMessage,
     UIMessagePart,
 )
-from backend.src.settings import LLMConfig, ScoredRetrieval
 from backend.src.domain.schemas.doc import Chunk, Doc, PDFMetadata
+from backend.src.settings import LLMConfig, ScoredRetrieval
 
 if TYPE_CHECKING:
     pass
@@ -42,6 +42,7 @@ PROVIDER_TO_LITELLM_MAP: dict[str, str] = {
     "VERTEX_AI": "vertex_ai",
     "PALM": "palm",
     "OPENROUTER": "openrouter",
+    "OLLAMA": "ollama_chat",
 }
 
 # =============================================================================
@@ -157,7 +158,9 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
 
         kwargs: dict[str, Any] = {
             "model": model_string,
-            "api_key": config.api_key,
+            "api_key": config.api_key.get_secret_value()
+            if hasattr(config.api_key, "get_secret_value")
+            else config.api_key,
             "streaming": True,
         }
 

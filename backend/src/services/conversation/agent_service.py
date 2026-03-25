@@ -18,7 +18,7 @@ Usage::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from deepagents import create_deep_agent
 from loguru import logger
@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 def create_fosra_agent(
     user_prefs: UserPreferences,
     system_prompt: str | None = None,
+    backend: Any | None = None,
 ) -> tuple[CompiledStateGraph, RetrievalResultStore]:
     """Create a FOSRA agent with retrieval capabilities.
 
@@ -51,6 +52,9 @@ def create_fosra_agent(
     system_prompt:
         Custom system prompt.  If ``None``, uses
         ``FOSRA_AGENT_SYSTEM_PROMPT`` from prompts module.
+    backend:
+        Optional filesystem backend for coding mode. When provided,
+        the agent gets read/write/edit/grep/glob tools.
 
     Returns
     -------
@@ -60,9 +64,12 @@ def create_fosra_agent(
         ``result_store.chunks`` after the agent finishes to build
         source-group SSE events.
     """
+
     # -- Resolve prompt ------------------------------------------------
     if system_prompt is None:
-        from backend.src.services.conversation.utils.prompts import FOSRA_AGENT_SYSTEM_PROMPT
+        from backend.src.services.conversation.utils.prompts import (
+            FOSRA_AGENT_SYSTEM_PROMPT,
+        )
 
         system_prompt = FOSRA_AGENT_SYSTEM_PROMPT
 
@@ -93,15 +100,20 @@ def create_fosra_agent(
     # for free.  The only custom tool we add is retrieval.
     #
     logger.info(
-        "Creating FOSRA agent with model={}/{}",
+        "Creating FOSRA agent with model={}/{} backend={}",
         llm_config.provider,
         llm_config.model,
+        type(backend).__name__ if backend else "none",
     )
 
-    agent = create_deep_agent(
-        model=llm,
-        tools=[retrieval_tool],
-        system_prompt=system_prompt,
-    )
+    kwargs: dict[str, Any] = {
+        "model": llm,
+        "tools": [retrieval_tool],
+        "system_prompt": system_prompt,
+    }
+    if backend is not None:
+        kwargs["backend"] = backend
+
+    agent = create_deep_agent(**kwargs)
 
     return agent, result_store

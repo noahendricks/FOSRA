@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js"
-import { Keybind } from "@/util/keybind"
+import { Keybind, type KeybindInfo } from "@/util/keybind"
 import { pipe, mapValues } from "remeda"
 import type { TuiConfig } from "@/config/tui"
 import type { ParsedKey, Renderable } from "@opentui/core"
@@ -7,6 +7,13 @@ import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { createSimpleContext } from "./helper"
 import { useTuiConfig } from "./tui-config"
+import * as fs from "fs"
+import * as path from "path"
+
+const KB_LOG = process.env.FOSRA_LOG_FILE ?? path.join(process.env.HOME ?? "/tmp", ".fosra-tui.log")
+function kbLog(action: string, data?: Record<string, unknown>) {
+  fs.appendFileSync(KB_LOG, JSON.stringify({ t: new Date().toISOString(), action, ...data }) + "\n")
+}
 
 export type KeybindKey = keyof NonNullable<TuiConfig.Info["keybinds"]> & string
 
@@ -14,7 +21,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
   name: "Keybind",
   init: () => {
     const config = useTuiConfig()
-    const keybinds = createMemo<Record<string, Keybind.Info[]>>(() => {
+    const keybinds = createMemo<Record<string, KeybindInfo[]>>(() => {
       return pipe(
         (config.keybinds ?? {}) as Record<string, string>,
         mapValues((value) => Keybind.parse(value)),
@@ -52,11 +59,13 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
 
     useKeyboard(async (evt) => {
       if (!store.leader && result.match("leader", evt)) {
+        kbLog("LEADER_ON")
         leader(true)
         return
       }
 
       if (store.leader && evt.name) {
+        kbLog("LEADER_KEY", { name: evt.name, ctrl: evt.ctrl })
         setImmediate(() => {
           if (focus && renderer.currentFocusedRenderable === focus) {
             focus.focus()
@@ -73,7 +82,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
       get leader() {
         return store.leader
       },
-      parse(evt: ParsedKey): Keybind.Info {
+      parse(evt: ParsedKey): KeybindInfo {
         // Handle special case for Ctrl+Underscore (represented as \x1F)
         if (evt.name === "\x1F") {
           return Keybind.fromParsedKey({ ...evt, name: "_", ctrl: true }, store.leader)
@@ -83,7 +92,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
       match(key: KeybindKey, evt: ParsedKey) {
         const keybind = keybinds()[key]
         if (!keybind) return false
-        const parsed: Keybind.Info = result.parse(evt)
+        const parsed: KeybindInfo = result.parse(evt)
         for (const key of keybind) {
           if (Keybind.match(key, parsed)) {
             return true
@@ -93,8 +102,12 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
       print(key: KeybindKey) {
         const first = keybinds()[key]?.at(0)
         if (!first) return ""
-        const result = Keybind.toString(first)
-        return result.replace("<leader>", Keybind.toString(keybinds().leader![0]!))
+        if (first.leader) {
+          const leaderInfo = keybinds().leader?.[0]
+          if (!leaderInfo) return first.name
+          return `${Keybind.toString(leaderInfo)} ${first.name}`
+        }
+        return Keybind.toString(first)
       },
     }
     return result

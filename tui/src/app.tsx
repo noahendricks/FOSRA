@@ -145,7 +145,7 @@ export function tui(input: {
                           url={input.url}
                           directory={input.directory}
                           fetch={input.fetch}
-                          headers={input.headers}
+                              headers={input.headers as Record<string, string> | undefined}
                           events={input.events}
                         >
                           <SyncProvider>
@@ -216,23 +216,24 @@ function App() {
   const promptRef = usePromptRef()
 
   useKeyboard((evt) => {
-    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-    if (!renderer.getSelection()) return
-
-    // Windows Terminal-like behavior:
-    // - Ctrl+C copies and dismisses selection
-    // - Esc dismisses selection
-    // - Most other key input dismisses selection and is passed through
     if (evt.ctrl && evt.name === "c") {
-      if (!Selection.copy(renderer, toast)) {
-        renderer.clearSelection()
-        return
+      console.log("CTRL_C_DETECTED", { selection: !!renderer.getSelection() })
+      if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT && renderer.getSelection()) {
+        if (!Selection.copy(renderer, toast)) {
+          renderer.clearSelection()
+          return
+        }
+      } else {
+        console.log("EXITING VIA CTRL_C")
+        exit()
       }
-
       evt.preventDefault()
       evt.stopPropagation()
       return
     }
+
+    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+    if (!renderer.getSelection()) return
 
     if (evt.name === "escape") {
       renderer.clearSelection()
@@ -677,28 +678,28 @@ function App() {
     },
   ])
 
-  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.trigger(evt.properties.command)
+  sdk.event.on(TuiEvent.CommandExecute.type as any, (evt) => {
+    command.trigger((evt as any).properties.command)
   })
 
-  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
+  sdk.event.on(TuiEvent.ToastShow.type as any, (evt) => {
     toast.show({
-      title: evt.properties.title,
-      message: evt.properties.message,
-      variant: evt.properties.variant,
-      duration: evt.properties.duration,
+      title: (evt as any).properties.title,
+      message: (evt as any).properties.message,
+      variant: (evt as any).properties.variant,
+      duration: (evt as any).properties.duration,
     })
   })
 
-  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+  sdk.event.on(TuiEvent.SessionSelect.type as any, (evt) => {
     route.navigate({
       type: "session",
-      sessionID: evt.properties.sessionID,
+      sessionID: (evt as any).properties.sessionID,
     })
   })
 
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
-    if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+  sdk.event.on(SessionApi.Event.Deleted.type as any, (evt) => {
+    if (route.data.type === "session" && route.data.sessionID === (evt as any).properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
@@ -707,8 +708,8 @@ function App() {
     }
   })
 
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
-    const error = evt.properties.error
+  sdk.event.on(SessionApi.Event.Error.type as any, (evt) => {
+    const error = (evt as any).properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
       if (!error) return "An error occurred"
@@ -729,11 +730,11 @@ function App() {
     })
   })
 
-  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on(Installation.Event.UpdateAvailable.type as any, (evt) => {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      message: `OpenCode v${(evt as any).properties.version} is available. Run 'opencode upgrade' to update manually.`,
       duration: 10000,
     })
   })

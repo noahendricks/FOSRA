@@ -1,8 +1,9 @@
-import builtins
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
+
 from msgspec import field
+
 from backend.src.domain.enums import MessageRole
 from backend.src.domain.schemas.doc import Doc, MDNFile
 from backend.src.storage.models import utc_now

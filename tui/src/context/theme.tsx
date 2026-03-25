@@ -2,7 +2,7 @@ import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
-import { Glob } from "../../../../util/glob"
+import { Glob } from "@/util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -362,8 +362,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     return {
       theme: new Proxy(values(), {
         get(_target, prop) {
-          // @ts-expect-error
-          return values()[prop]
+                    return values()[prop]
         },
       }),
       get selected() {

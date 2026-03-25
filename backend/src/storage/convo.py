@@ -11,10 +11,14 @@ from sqlalchemy.orm import selectinload
 
 from backend.src.api.schemas import MessageUpdateRequest, NewConvoRequest
 from backend.src.api.schemas.api_schemas import ConvoDeleteRequest, ConvoUpdateRequest
-from backend.src.domain.schemas.convo import Convo, Message, NewConvo
+from backend.src.domain.schemas.convo import Convo, ConvoFull, Message, NewConvo
 from backend.src.domain.schemas.doc import MDNFile
 from backend.src.storage.models import ConvoORM, MessageORM
 from backend.src.storage.utils.converters import orm_to_domain
+
+
+class ConvoError(Exception):
+    pass
 
 
 def file_part_to_dict(file_part: MDNFile) -> dict[str, Any]:
@@ -36,7 +40,7 @@ class ConvoRepo:
         session: AsyncSession,
         convo_id: str,
         user_id: str,
-    ) -> ConvoORM:
+    ) -> ConvoORM | None:
         stmt = (
             select(ConvoORM)
             .options(
@@ -48,14 +52,17 @@ class ConvoRepo:
 
         chat = await session.execute(statement=stmt)
 
-        chat = chat.scalar_one()
+        return chat.scalar_one_or_none()
 
-        if not chat:
-            raise ValueError(
-                f"Conversation not found or access denied: convo_id={convo_id}, user_id={user_id}"
-            )
-
-        return chat
+    @staticmethod
+    def _raise_if_not_found(
+        convo_id: str,
+        user_id: str,
+        entity: str = "Conversation",
+    ) -> None:
+        raise ConvoError(
+            f"{entity} not found or access denied: convo_id={convo_id}, user_id={user_id}"
+        )
 
     @staticmethod
     async def _get_message_orm(
@@ -76,6 +83,7 @@ class ConvoRepo:
 
             db_chat: ConvoORM = ConvoORM(
                 user_id=new_convo.user_id,
+                workspace_id=getattr(new_convo, "workspace_id", "default"),
                 title=new_convo.title or "New Conversation",
             )
 
@@ -99,24 +107,27 @@ class ConvoRepo:
         session: AsyncSession,
         user_id: str,
         convo_id: str,
-    ) -> Convo:
+    ) -> ConvoFull:
         try:
             logger.info(
                 f"Retrieving conversation: user_id={user_id}, convo_id={convo_id}"
             )
-            db_chat: ConvoORM = await ConvoRepo._get_convo_orm(
+            db_chat = await ConvoRepo._get_convo_orm(
                 session,
                 convo_id,
                 user_id=user_id,
             )
 
-            return orm_to_domain(db_chat, Convo)
+            if db_chat is None:
+                ConvoRepo._raise_if_not_found(convo_id, user_id)
 
-        except ValueError:
+            return orm_to_domain(db_chat, ConvoFull)
+
+        except ConvoError:
             raise
         except Exception as e:
             logger.error(f"Error retrieving conversation {convo_id}: {e}")
-            raise ValueError(f"Failed to retrieve conversation: {e}")
+            raise ConvoError(f"Failed to retrieve conversation: {e}")
 
     @staticmethod
     async def get_all_by_user_id(
@@ -149,11 +160,16 @@ class ConvoRepo:
         convo_update: ConvoUpdateRequest,
     ) -> Convo:
         try:
-            db_chat: ConvoORM = await ConvoRepo._get_convo_orm(
+            db_chat = await ConvoRepo._get_convo_orm(
                 session,
                 convo_update.convo_id,
                 convo_update.user_id,
             )
+
+            if db_chat is None:
+                ConvoRepo._raise_if_not_found(
+                    convo_update.convo_id, convo_update.user_id
+                )
 
             update_data: dict[str, Any] = convo_update.model_dump(exclude_unset=True)
 
@@ -168,12 +184,12 @@ class ConvoRepo:
 
             return orm_to_domain(db_chat, Convo)
 
-        except ValueError:
+        except ConvoError:
             raise
         except Exception as e:
             await session.rollback()
             logger.error(f"Error updating conversation: {e}")
-            raise RuntimeError(f"Failed to update conversation: {e}")
+            raise ConvoError(f"Failed to update conversation: {e}")
 
     @staticmethod
     async def delete(
@@ -181,11 +197,16 @@ class ConvoRepo:
         convo_request: ConvoDeleteRequest,
     ) -> bool:
         try:
-            db_chat: ConvoORM = await ConvoRepo._get_convo_orm(
+            db_chat = await ConvoRepo._get_convo_orm(
                 session,
                 convo_request.convo_id,
                 convo_request.user_id,
             )
+
+            if db_chat is None:
+                ConvoRepo._raise_if_not_found(
+                    convo_request.convo_id, convo_request.user_id
+                )
 
             await session.delete(db_chat)
             await session.commit()
@@ -193,12 +214,12 @@ class ConvoRepo:
             logger.info(f"Deleted conversation {convo_request.convo_id}")
             return True
 
-        except ValueError:
+        except ConvoError:
             raise
         except Exception as e:
             await session.rollback()
             logger.error(f"Error deleting conversation: {e}")
-            raise RuntimeError(f"Failed to delete conversation: {e}")
+            raise ConvoError(f"Failed to delete conversation: {e}")
 
     @staticmethod
     async def add_message(
@@ -267,62 +288,64 @@ class ConvoRepo:
             logger.error(f"Error adding message: {e}")
             raise RuntimeError(f"Failed to add message: {e}")
 
+    @staticmethod
+    async def update_message(
+        session: AsyncSession,
+        message_update: MessageUpdateRequest,
+    ) -> Message:
+        try:
+            if not message_update.user_id:
+                raise ValueError("User ID is required to update a message")
 
-async def update_message(
-    session: AsyncSession,
-    message_update: MessageUpdateRequest,
-) -> Message:
-    try:
-        if not message_update.user_id:
-            raise ValueError("User ID is required to update a message")
-
-        vld_result = await session.execute(
-            select(ConvoORM)
-            .options(selectinload(ConvoORM.messages))
-            .where(
-                ConvoORM.convo_id == message_update.convo_id,
-                ConvoORM.user_id == message_update.user_id,
+            vld_result = await session.execute(
+                select(ConvoORM)
+                .options(selectinload(ConvoORM.messages))
+                .where(
+                    ConvoORM.convo_id == message_update.convo_id,
+                    ConvoORM.user_id == message_update.user_id,
+                )
             )
-        )
-        chat_valid = vld_result.scalar_one_or_none()
+            chat_valid = vld_result.scalar_one_or_none()
 
-        if not chat_valid:
-            raise ValueError(
-                f"Conversation not found or access denied: convo_id={message_update.convo_id}"
-            )
+            if not chat_valid:
+                raise ValueError(
+                    f"Conversation not found or access denied: convo_id={message_update.convo_id}"
+                )
 
-        vld_result = await session.execute(
-            select(MessageORM).where(MessageORM.message_id == message_update.message_id)
-        )
-
-        existing_msg = vld_result.scalar_one_or_none()
-
-        if not existing_msg:
-            raise ValueError(
-                "Message Requested for Update didn't exist or can't be found"
+            vld_result = await session.execute(
+                select(MessageORM).where(
+                    MessageORM.message_id == message_update.message_id
+                )
             )
 
-        if message_update.text is not None:
-            existing_msg.text = message_update.text
+            existing_msg = vld_result.scalar_one_or_none()
 
-        if (
-            existing_msg.metadata
-            and not existing_msg.message_metadata == message_update.message_metadata
-        ):
-            existing_msg.message_metadata = message_update.message_metadata
+            if not existing_msg:
+                raise ValueError(
+                    "Message Requested for Update didn't exist or can't be found"
+                )
 
-        session.add(existing_msg)
-        await session.commit()
-        await session.refresh(existing_msg)
+            if message_update.text is not None:
+                existing_msg.text = message_update.text
 
-        logger.debug(
-            f"Updated {message_update.role} message in {message_update.convo_id}"
-        )
-        return orm_to_domain(existing_msg, Message)
+            if (
+                existing_msg.metadata
+                and not existing_msg.message_metadata == message_update.message_metadata
+            ):
+                existing_msg.message_metadata = message_update.message_metadata
 
-    except ValueError:
-        raise
-    except Exception as e:
-        await session.rollback()
-        logger.error(f"Error updating message: {e}")
-        raise RuntimeError(f"Failed to update message: {e}")
+            session.add(existing_msg)
+            await session.commit()
+            await session.refresh(existing_msg)
+
+            logger.debug(
+                f"Updated {message_update.role} message in {message_update.convo_id}"
+            )
+            return orm_to_domain(existing_msg, Message)
+
+        except ValueError:
+            raise
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Error updating message: {e}")
+            raise RuntimeError(f"Failed to update message: {e}")

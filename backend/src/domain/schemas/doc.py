@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import builtins
 from datetime import datetime
 from typing import Any, Literal, Self
 
 from chonkie.types import Chunk as ChonkieChunk
-from langchain_core.documents import Document
-from numpy import ndarray
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.v1.utils import to_camel
 from qdrant_client.models import SparseVector
 
 from backend.src.services.processing.utils.loader import code_mimes, text_mimes
-from backend.src.storage.models import ulid_factory
 from backend.src.storage.utils.converters import DomainStruct
 
 
@@ -31,8 +27,9 @@ class MDNFile(DomainStruct):
     type: str
     size: int
     name: str
-    bytes: builtins.bytes | str | None
     media_type: str
+    # base64-encoded content when transmitted over JSON
+    bytes: str | None = None
     url: str | None = None
     webkit_relative_path: str | None = None
 
@@ -40,7 +37,6 @@ class MDNFile(DomainStruct):
 class BaseDocumentMetadata(BaseModel):
     source: str | None = None
     mime_type: str | None = None
-
 
 class PDFMetadata(BaseDocumentMetadata):
     content_type: Literal["pdf"] = "pdf"
@@ -134,7 +130,6 @@ CodeMetadataUnion = FunctionsClassesMetadata | SimplifiedCodeMetadata | ImportsM
 
 
 # main doc with typed metadata - used everywhere Document(LC) would be
-from langchain_core.documents import Document
 
 
 class DocMetadata(_BaseModelFlex):
@@ -210,6 +205,7 @@ class ChunkMetadata(_BaseModelFlex):
     sparse_embedding: Any | SparseVector = None
     late_embedding: list[float] = []
     parent: HierarchicalChunk | None = Field(default=None, validate_default=False)
+
 
 
 class Chunk(_BaseModelFlex):

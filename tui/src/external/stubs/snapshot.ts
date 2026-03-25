@@ -7,6 +7,7 @@ export interface FileDiff {
   deletions: number
 }
 
-export const Snapshot = {
-  FileDiff: {} as FileDiff,
+export namespace Snapshot {
+  export type Tree = any
+  export const FileDiff = {} as FileDiff
 }

@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
-from typing import Any, Iterator, TypeVar, Type, cast, dataclass_transform
+from typing import Any, Iterator, Type, TypeVar, dataclass_transform
+
+import msgspec
 from fastapi import HTTPException
 from loguru import logger
-import msgspec
 from pydantic import BaseModel
 from sqlalchemy import inspect
 from sqlalchemy.orm import DeclarativeBase

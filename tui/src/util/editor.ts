@@ -20,10 +20,10 @@ export namespace Editor {
     try {
       const parts = editor.split(" ")
       const proc = Process.spawn([...parts, filepath], {
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
-        shell: process.platform === "win32",
+        stdin: "inherit" as any,
+        stdout: "inherit" as any,
+        stderr: "inherit" as any,
+        // shell: process.platform === "win32"
       })
       await proc.exited
       const content = await Filesystem.readText(filepath)

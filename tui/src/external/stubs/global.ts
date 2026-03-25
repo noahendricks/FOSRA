@@ -6,6 +6,7 @@ const homeDir = os.homedir()
 
 export const Global = {
   Path: {
+    home: homeDir,
     config: path.join(homeDir, ".config", "fosra"),
     state: path.join(homeDir, ".local", "state", "fosra"),
     worktree: process.cwd(),

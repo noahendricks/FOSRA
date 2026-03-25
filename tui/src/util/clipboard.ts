@@ -1,12 +1,12 @@
 import { platform, release } from "os"
 import clipboardy from "clipboardy"
-import { lazy } from "../../../../util/lazy.js"
+import { lazy } from "@/util/lazy"
 import { tmpdir } from "os"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../../../util/filesystem"
-import { Process } from "../../../../util/process"
-import { which } from "../../../../util/which"
+import { Filesystem } from "@/util/filesystem"
+import { Process } from "@/util/process"
+import { which } from "@/util/which"
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.

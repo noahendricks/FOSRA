@@ -11,6 +11,6 @@ export function strip(part: Item & { id: string; messageID: string; sessionID: s
 export function assign(part: Item): Item & { id: PartID } {
   return {
     ...part,
-    id: PartID.ascending(),
+    id: PartID.generate(),
   }
 }
