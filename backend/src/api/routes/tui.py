@@ -23,7 +23,12 @@ from backend.src.api.dependencies import (
     get_session_factory,
 )
 from backend.src.api.events import event_bus
-from backend.src.api.routes.oc.state import running_tasks, session_status
+from backend.src.api.routes.oc.state import (
+    running_tasks,
+    session_diffs,
+    session_status,
+    session_todos,
+)
 from backend.src.api.schemas.api_schemas import (
     ConvoDeleteRequest,
     ConvoUpdateRequest,
@@ -44,6 +49,12 @@ from backend.src.api.schemas.tui_schemas import (
 from backend.src.services.conversation.conversation_service import ConversationService
 
 router = APIRouter(prefix="/oc", tags=["TUI"])
+
+from backend.src.api.routes.oc.tui_events import router as tui_events_router
+from backend.src.api.routes.oc.session_ops import router as session_ops_router
+
+router.include_router(tui_events_router)
+router.include_router(session_ops_router)
 
 
 # SSE EVENT STREAM
@@ -271,7 +282,7 @@ async def abort_session(session_id: str):
 
 @router.get("/session/{session_id}/todo")
 async def get_todos(session_id: str):
-    return []
+    return session_todos.get(session_id, [])
 
 
 # DIFFS
@@ -279,7 +290,7 @@ async def get_todos(session_id: str):
 
 @router.get("/session/{session_id}/diff")
 async def get_diffs(session_id: str):
-    return []
+    return session_diffs.get(session_id, [])
 
 
 # CONFIG
@@ -386,12 +397,6 @@ async def get_path():
 # STUBS FOR TUI FEATURES NOT YET IMPLEMENTED
 
 
-@router.post("/session/{session_id}/fork")
-async def fork_session(session_id: str):
-    """stub — forking not yet supported."""
-    raise HTTPException(status_code=501, detail="fork not implemented")
-
-
 @router.post("/session/{session_id}/shell")
 async def shell_session(session_id: str):
     """stub — shell mode not yet supported."""
@@ -402,6 +407,3 @@ async def shell_session(session_id: str):
 async def command_session(session_id: str):
     """stub — slash commands not yet supported."""
     return {"ok": True}
-
-
-# define a plan to implement the tool calls in python and the sse events that are yet to be implemnted ( i am porting the opencode tui, but the entire backend will be my python backend so i need to make that transition

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,7 @@ from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from loguru import logger
 
 from backend.src.api.events import event_bus
+from backend.src.api.routes.oc.state import session_diffs, session_todos
 from backend.src.api.schemas.api_schemas import MessageResponse
 from backend.src.api.schemas.tui_schemas import (
     AssistantMessage,
@@ -72,6 +74,83 @@ def _unwrap_json_text(text: str) -> str:
     except (json.JSONDecodeError, TypeError):
         pass
     return text
+
+
+def _parse_todo_output(content: str) -> list[dict[str, Any]]:
+    """parse TodoWrite tool output into a list of Todo dicts."""
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, list):
+            return parsed
+        if isinstance(parsed, dict) and "todos" in parsed:
+            return parsed["todos"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    lines = content.strip().split("\n")
+    todos = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("- [ ]"):
+            todos.append(
+                {"content": line[5:].strip(), "status": "pending", "priority": "medium"}
+            )
+        elif line.startswith("- [x]") or line.startswith("- [X]"):
+            todos.append(
+                {
+                    "content": line[5:].strip(),
+                    "status": "completed",
+                    "priority": "medium",
+                }
+            )
+        elif line.startswith("-"):
+            todos.append(
+                {"content": line[1:].strip(), "status": "pending", "priority": "medium"}
+            )
+    return todos
+
+
+def _compute_git_diffs(project_dir: str) -> list[dict[str, Any]]:
+    """compute git diffs for the project directory."""
+    try:
+        stat_out = subprocess.check_output(
+            ["git", "diff", "--stat"],
+            cwd=project_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        full_out = subprocess.check_output(
+            ["git", "diff"],
+            cwd=project_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        diffs = []
+        for line in stat_out.strip().split("\n"):
+            parts = line.split()
+            if len(parts) >= 4 and parts[0] != "...":
+                filename = parts[-4] if len(parts) >= 4 else parts[0]
+                additions = 0
+                deletions = 0
+                for p in parts[-3:]:
+                    if "+" in p:
+                        additions += p.count("+")
+                    if "-" in p:
+                        deletions += p.count("-")
+                diffs.append(
+                    {
+                        "file": filename,
+                        "before": "",
+                        "after": "",
+                        "additions": additions,
+                        "deletions": deletions,
+                        "status": "modified",
+                    }
+                )
+        return diffs
+    except subprocess.CalledProcessError:
+        return []
 
 
 async def run_agent_with_events(
@@ -349,6 +428,19 @@ async def run_agent_with_events(
                             }
                         )
 
+                        if tc_info["tool"] == "TodoWrite":
+                            todos = _parse_todo_output(str(msg.content))
+                            session_todos[session_id] = todos
+                            await event_bus.publish(
+                                {
+                                    "type": "todo.updated",
+                                    "properties": {
+                                        "sessionID": session_id,
+                                        "todos": todos,
+                                    },
+                                }
+                            )
+
             logger.info(
                 "[STREAM] loop finished. chunks={} full_text_len={}",
                 chunk_count,
@@ -440,6 +532,15 @@ async def run_agent_with_events(
                 convo_id=session_id,
                 user_id=user_id,
                 session=db_session,
+            )
+
+            diffs = _compute_git_diffs(PROJECT_DIR)
+            session_diffs[session_id] = diffs
+            await event_bus.publish(
+                {
+                    "type": "session.diff",
+                    "properties": {"sessionID": session_id, "diff": diffs},
+                }
             )
 
     except asyncio.CancelledError:
