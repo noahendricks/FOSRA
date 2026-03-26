@@ -29,6 +29,7 @@ from backend.src.api.routes.oc.state import (
     session_status,
     session_todos,
 )
+from backend.src.api.schemas import MessageResponse
 from backend.src.api.schemas.api_schemas import (
     ConvoDeleteRequest,
     ConvoUpdateRequest,
@@ -50,17 +51,25 @@ from backend.src.services.conversation.conversation_service import ConversationS
 
 router = APIRouter(prefix="/oc", tags=["TUI"])
 
-from backend.src.api.routes.oc.tui_events import router as tui_events_router
-from backend.src.api.routes.oc.session_ops import router as session_ops_router
+from backend.src.api.routes.oc.extended import router as extended_router
+from backend.src.api.routes.oc.file import router as file_router
 from backend.src.api.routes.oc.message_ops import router as message_ops_router
 from backend.src.api.routes.oc.permission import router as permission_router
+from backend.src.api.routes.oc.project import router as project_router
 from backend.src.api.routes.oc.question import router as question_router
+from backend.src.api.routes.oc.session_ops import router as session_ops_router
+from backend.src.api.routes.oc.shell import router as shell_router
+from backend.src.api.routes.oc.tui_events import router as tui_events_router
 
 router.include_router(tui_events_router)
 router.include_router(session_ops_router)
 router.include_router(message_ops_router)
 router.include_router(permission_router)
 router.include_router(question_router)
+router.include_router(file_router)
+router.include_router(project_router)
+router.include_router(shell_router)
+router.include_router(extended_router)
 
 
 # SSE EVENT STREAM
@@ -239,7 +248,7 @@ async def list_messages(
                 for i, m in enumerate(messages)
                 if getattr(m, "message_id", None) == before
             )
-            messages = messages[idx + 1 :]
+            messages: list[MessageResponse] = messages[idx + 1 :]
         except StopIteration:
             pass
 
@@ -421,18 +430,3 @@ async def get_path():
         "config": "",
         "worktree": "",
     }
-
-
-# STUBS FOR TUI FEATURES NOT YET IMPLEMENTED
-
-
-@router.post("/session/{session_id}/shell")
-async def shell_session(session_id: str):
-    """stub — shell mode not yet supported."""
-    return {"ok": True}
-
-
-@router.post("/session/{session_id}/command")
-async def command_session(session_id: str):
-    """stub — slash commands not yet supported."""
-    return {"ok": True}

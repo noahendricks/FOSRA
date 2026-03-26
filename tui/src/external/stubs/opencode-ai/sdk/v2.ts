@@ -200,7 +200,8 @@ export const createOpencodeClient = (options: {
       dispose: async (_p?: any, _o?: any) => mock(true),
     },
     find: {
-      files: async (_p?: any, _o?: any) => mock<any[]>([]),
+      files: async (p: any, o?: any) =>
+        api<any[]>("/find/file", { method: "GET", ...opts(o) }),
     },
     auth: {
       set: async (_p?: any, _o?: any) => mock(true),
