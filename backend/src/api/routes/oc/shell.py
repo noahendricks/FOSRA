@@ -23,8 +23,23 @@ MAX_OUTPUT = 50 * 1024
 TIMEOUT = 30
 
 
+DANGEROUS_SHELL_CHARS = [";", "|", "&", "$(", "`", "${", ">", "<", "\n", "\r"]
+BLOCKED_COMMANDS = ["sudo", "chmod", "chown", "rm -rf", "dd", "mkfs", "fdisk"]
+
+
 def _validate_command(command: str) -> str:
-    """reject commands that try to escape PROJECT_DIR."""
+    """reject commands with shell metacharacters or dangerous patterns."""
+    for char in DANGEROUS_SHELL_CHARS:
+        if char in command:
+            raise HTTPException(
+                status_code=400, detail=f"Shell metacharacter not allowed: '{char}'"
+            )
+    lower = command.lower()
+    for blocked in BLOCKED_COMMANDS:
+        if blocked in lower:
+            raise HTTPException(
+                status_code=400, detail=f"Command not allowed: '{blocked}'"
+            )
     if ".." in command:
         raise HTTPException(status_code=400, detail="Path traversal not allowed")
     return command
@@ -43,10 +58,17 @@ async def run_shell(
     command = body.get("command", "")
     _validate_command(command)
 
+    import shlex
+
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid command: {e}")
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,
             cwd=PROJECT_DIR,
             capture_output=True,
             text=True,

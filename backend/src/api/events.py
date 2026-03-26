@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from uuid import uuid4
+from loguru import logger
 
 MAX_QUEUE_SIZE = 1000
 
@@ -31,7 +32,11 @@ class EventBus:
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
-                pass
+                logger.warning(
+                    "Slow consumer: dropping event "
+                    f"{event.get('type', 'unknown')} "
+                    f"(subscriber queue full, maxsize={MAX_QUEUE_SIZE})"
+                )
 
     @property
     def subscriber_count(self) -> int:

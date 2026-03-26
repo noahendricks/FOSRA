@@ -12,7 +12,7 @@ class Infrastructure:
     def __init__(self, settings):
         self.qdrant_client: AsyncQdrantClient | None = None
         self.session_factory: async_sessionmaker[AsyncSession] | None = None
-        self.engine = create_async_engine(settings.database.url, echo=True)
+        self.engine = create_async_engine(settings.database.url, echo=False)
         self.falkordb_client: FalkorDB | None = None
         self.falkordb_graph = None
         self.model_registry = None
@@ -103,6 +103,12 @@ class Infrastructure:
         if self.engine:
             await self.engine.dispose()
             logger.info("Database engine disposed.")
+
+        if self.falkordb_client:
+            try:
+                self.falkordb_client.close()
+            except Exception as e:
+                logger.warning("Error closing FalkorDB client: {}", e)
 
         logger.info("Infrastructure cleanup complete.")
 

@@ -22,8 +22,8 @@ class InterceptHandler(logging.Handler):
     def emit(self, record):
         try:
             level = logger.level(record.levelname).name
-        except ValueError:
-            level = record.levelno
+        except (ValueError, KeyError):
+            level = record.levelno if hasattr(record, "levelno") else "DEBUG"
 
         frame, depth = logging.currentframe(), 2
 
@@ -40,7 +40,10 @@ def setup_telemetry():
     if isinstance(_logs.get_logger_provider(), LoggerProvider):
         return
 
-    logger.remove()
+    try:
+        logger.remove()
+    except Exception:
+        pass
 
     logger.add(
         sys.stderr,

@@ -10,7 +10,9 @@ from taskiq import TaskiqDepends
 from backend.src.api.lifecycle import Infrastructure
 
 
-AUTH_ENABLED = False
+import os
+
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
 
 DEV_USER_ID = "dev-user-001"
 DEV_USER_NAME = "Development User"
@@ -49,10 +51,11 @@ async def get_current_user_id(
     x_user_id: Annotated[str | None, Header()] = None,
 ) -> str:
     if not AUTH_ENABLED:
-        return x_user_id or DEV_USER_ID
+        logger.warning("Auth disabled — using dev user for all requests")
+        return DEV_USER_ID
 
     if x_user_id:
-        logger.warning("Using X-User-ID header - not for production use")
+        logger.warning("Using X-User-ID header — not for production use")
         return x_user_id
 
     raise HTTPException(

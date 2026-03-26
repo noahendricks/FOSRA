@@ -70,9 +70,10 @@ async def read_file_content(
     supports offset and limit query params.
     """
     backend = _get_filesystem_backend()
-    abs_path = os.path.join(PROJECT_DIR, filePath)
+    joined = os.path.join(PROJECT_DIR, filePath)
+    abs_path = os.path.realpath(joined)
 
-    if not abs_path.startswith(PROJECT_DIR):
+    if not abs_path.startswith(os.path.realpath(PROJECT_DIR)):
         raise HTTPException(status_code=403, detail="Path outside project directory")
 
     try:

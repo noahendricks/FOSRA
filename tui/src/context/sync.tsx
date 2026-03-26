@@ -108,12 +108,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const sdk = useSDK()
 
     async function syncWorkspaces() {
-      const result = await sdk.client.experimental.workspace.list().catch(() => undefined)
+      let result: { data?: any } | undefined
+      try {
+        result = await (sdk.client.experimental.workspace.list as (p: any, o?: any) => Promise<{ data?: any }>)(undefined)
+      } catch {
+        result = undefined
+      }
       if (!result?.data) return
       setStore("workspaceList", reconcile(result.data))
     }
 
     sdk.event.listen((e) => {
+      try {
       const event = e.details
       Log.Default.info(`[SYNC] event received: ${event.type}`)
       switch (event.type) {
@@ -361,6 +367,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
       }
+      } catch (e) {
+        Log.Default.error("[SYNC] event handler error", {
+          error: e instanceof Error ? e.message : String(e),
+          name: e instanceof Error ? e.name : undefined,
+          stack: e instanceof Error ? e.stack : undefined,
+        })
+      }
     })
 
     const exit = useExit()
@@ -422,19 +435,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           // non-blocking
           Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
-            sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
-            sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
-            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
-            sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
+            sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))).catch(() => {}),
+            sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data ?? []))).catch(() => {}),
+            sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data ?? {}))).catch(() => {}),
+            (sdk.client.experimental.resource.list as (p: any, o?: any) => Promise<any>)(undefined).then((x: any) => setStore("mcp_resource", reconcile(x.data ?? {}))).catch(() => {}),
+            sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data ?? []))).catch(() => {}),
             sdk.client.session.status().then((x) => {
-              setStore("session_status", reconcile(x.data!))
-            }),
-            sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
-            sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
-            sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+              setStore("session_status", reconcile(x.data ?? {}))
+            }).catch(() => {}),
+            sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))).catch(() => {}),
+            sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data ?? {}))).catch(() => {}),
+            sdk.client.path.get().then((x) => setStore("path", reconcile(x.data ?? {}))).catch(() => {}),
             syncWorkspaces(),
           ]).then(() => {
+            setStore("status", "complete")
+          }).catch((e) => {
+            Log.Default.error("[SYNC] non-blocking bootstrap error", {
+              error: e instanceof Error ? e.message : String(e),
+            })
             setStore("status", "complete")
           })
         })
@@ -489,11 +507,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             produce((draft: any) => {
               const match = Binary.search(draft.session, sessionID, (s: any) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
+              const sessionData = session.data
+              if (sessionData) {
+                if (match.found) draft.session[match.index] = sessionData
+                else draft.session.splice(match.index, 0, sessionData)
+              }
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
+              const msgData = messages.data ?? []
+              draft.message[sessionID] = msgData.map((x: any) => x.info)
+              for (const message of msgData) {
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []

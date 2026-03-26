@@ -24,12 +24,18 @@ export const createOpencodeClient = (options: {
     const headers: Record<string, string> = { ...baseHeaders }
     if (init?.body) headers["Content-Type"] = "application/json"
 
-    const res = await fetchFn(`${baseUrl}${path}`, {
-      method: init?.method ?? "GET",
-      headers,
-      body: init?.body,
-      signal: init?.signal ?? signal,
-    })
+    let res: Response
+    try {
+      res = await fetchFn(`${baseUrl}${path}`, {
+        method: init?.method ?? "GET",
+        headers,
+        body: init?.body,
+        signal: init?.signal ?? signal,
+      })
+    } catch (e) {
+      if (init?.throwOnError) throw new Error(String(e))
+      return { error: { code: "NETWORK", message: String(e) } }
+    }
 
     if (!res.ok) {
       const msg = await res.text().catch(() => res.statusText)
@@ -38,8 +44,14 @@ export const createOpencodeClient = (options: {
     }
 
     const text = await res.text()
-    const data = text ? (JSON.parse(text) as T) : (undefined as T)
-    return { data, response: res }
+    if (!text) return { data: undefined as T, response: res }
+    try {
+      const data = JSON.parse(text) as T
+      return { data, response: res }
+    } catch {
+      if (init?.throwOnError) throw new Error(`JSON parse error: ${text.slice(0, 100)}`)
+      return { error: { code: "PARSE", message: `JSON parse error: ${text.slice(0, 100)}` }, response: res }
+    }
   }
 
   function opts(o?: any): { throwOnError?: boolean; signal?: AbortSignal } {
@@ -60,7 +72,8 @@ export const createOpencodeClient = (options: {
         })
 
         async function* parseSSE(): AsyncGenerator<Event> {
-          const reader = res.body!.getReader()
+          if (!res.body) return
+          const reader = res.body.getReader()
           const decoder = new TextDecoder()
           let buffer = ""
 
@@ -83,7 +96,9 @@ export const createOpencodeClient = (options: {
               if (data) {
                 try {
                   yield JSON.parse(data) as Event
-                } catch {}
+                } catch {
+                  // skip malformed SSE data
+                }
               }
             }
           }
@@ -128,9 +143,12 @@ export const createOpencodeClient = (options: {
       status: async (_p?: any, o?: any) => api<any>("/session/status", opts(o)),
       abort: async (p: any, o?: any) =>
         api<boolean>(`/session/${p.sessionID}/abort`, { method: "POST", ...opts(o) }),
-      summarize: async (_p?: any, _o?: any) => mock(true),
-      revert: async (_p?: any, _o?: any) => mock({} as Session),
-      unrevert: async (_p?: any, _o?: any) => mock({} as Session),
+      summarize: async (p: any, o?: any) =>
+        api<{ title: string }>(`/session/${p.sessionID}/summarize`, { method: "POST", ...opts(o) }),
+      revert: async (p: any, o?: any) =>
+        api<{ ok: boolean }>(`/session/${p.sessionID}/revert`, { method: "POST", ...opts(o) }),
+      unrevert: async (p: any, o?: any) =>
+        api<{ ok: boolean }>(`/session/${p.sessionID}/unrevert`, { method: "POST", ...opts(o) }),
       fork: async (p: any, o?: any) => {
         const { sessionID, ...body } = p
         return api<Session>(`/session/${sessionID}/fork`, { method: "POST", body: JSON.stringify(body), ...opts(o) })
@@ -153,8 +171,10 @@ export const createOpencodeClient = (options: {
         const { sessionID, ...body } = p
         return api<any>(`/session/${sessionID}/prompt`, { method: "POST", body: JSON.stringify(body), ...opts(o) })
       },
-      share: async (_p?: any, _o?: any) => mock({} as Session),
-      unshare: async (_p?: any, _o?: any) => mock({} as Session),
+      share: async (p: any, o?: any) =>
+        api<{ url: string }>(`/session/${p.sessionID}/share`, { method: "POST", ...opts(o) }),
+      unshare: async (p: any, o?: any) =>
+        api<{}>(`/session/${p.sessionID}/share`, { method: "DELETE", ...opts(o) }),
     },
     command: {
       list: async (_p?: any, o?: any) => api<any[]>("/command", opts(o)),
@@ -174,17 +194,23 @@ export const createOpencodeClient = (options: {
     },
     mcp: {
       status: async (_p?: any, o?: any) => api<any>("/mcp/status", opts(o)),
-      connect: async (_p?: any, _o?: any) => mock(true),
-      disconnect: async (_p?: any, _o?: any) => mock(true),
+      connect: async (p: any, o?: any) =>
+        api<{}>(`/mcp/${p.name}/connect`, { method: "POST", ...opts(o) }),
+      disconnect: async (p: any, o?: any) =>
+        api<boolean>(`/mcp/${p.name}/disconnect`, { method: "POST", ...opts(o) }),
     },
     experimental: {
       resource: {
-        list: async (_p?: any, _o?: any) => mock({}),
+        list: async (p: any, o?: any) =>
+          api<{}>("/experimental/resource", { method: "GET", ...opts(o) }),
       },
       workspace: {
-        list: async (_p?: any, _o?: any) => mock<any[]>([]),
-        create: async (_p?: any, _o?: any) => mock({} as any),
-        remove: async (_p?: any, _o?: any) => mock({} as any),
+        list: async (p: any, o?: any) =>
+          api<any[]>("/experimental/workspace", { method: "GET", ...opts(o) }),
+        create: async (p: any, o?: any) =>
+          api<{}>("/experimental/workspace", { method: "POST", body: JSON.stringify(p), ...opts(o) }),
+        remove: async (p: any, o?: any) =>
+          api<boolean>(`/experimental/workspace/${p.id}`, { method: "DELETE", ...opts(o) }),
       },
     },
     formatter: {
@@ -197,7 +223,8 @@ export const createOpencodeClient = (options: {
       get: async (_p?: any, o?: any) => api<any>("/path", opts(o)),
     },
     instance: {
-      dispose: async (_p?: any, _o?: any) => mock(true),
+      dispose: async (p: any, o?: any) =>
+        api<boolean>("/instance/dispose", { method: "POST", ...opts(o) }),
     },
     find: {
       files: async (p: any, o?: any) =>

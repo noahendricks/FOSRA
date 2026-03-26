@@ -184,6 +184,8 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
+            }).catch((e: unknown) => {
+              console.error("permission reply error", e)
             })
           }}
         />
@@ -195,6 +197,8 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               reply: "reject",
               requestID: props.request.id,
               message: message || undefined,
+            }).catch((e: unknown) => {
+              console.error("permission reject error", e)
             })
           }}
           onCancel={() => {

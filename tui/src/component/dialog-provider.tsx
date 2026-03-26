@@ -150,8 +150,12 @@ function AutoMethod(props: AutoMethodProps) {
       dialog.clear()
       return
     }
-    await sdk.client.instance.dispose()
-    await sync.bootstrap()
+    try {
+      await (sdk.client.instance.dispose as (p: any, o?: any) => Promise<any>)({})
+      await sync.bootstrap()
+    } catch (e: unknown) {
+      console.error("oauth callback error", e)
+    }
     dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
 
@@ -201,8 +205,12 @@ function CodeMethod(props: CodeMethodProps) {
           code: value,
         })
         if (!error) {
-          await sdk.client.instance.dispose()
-          await sync.bootstrap()
+          try {
+            await (sdk.client.instance.dispose as (p: any, o?: any) => Promise<any>)({})
+            await sync.bootstrap()
+          } catch (e: unknown) {
+            console.error("oauth confirm error", e)
+          }
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
         }
@@ -270,8 +278,12 @@ function ApiMethod(props: ApiMethodProps) {
             key: value,
           },
         })
-        await sdk.client.instance.dispose()
-        await sync.bootstrap()
+        try {
+          await (sdk.client.instance.dispose as (p: any, o?: any) => Promise<any>)({})
+          await sync.bootstrap()
+        } catch (e: unknown) {
+          console.error("auth set error", e)
+        }
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />

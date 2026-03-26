@@ -18,6 +18,7 @@ from backend.src.api.routes.oc.state import (
     permission_requests,
 )
 from backend.src.api.schemas.tui_schemas import PermissionRequest
+from loguru import logger
 
 router = APIRouter(prefix="/oc/permission", tags=["Permission"])
 
@@ -65,6 +66,12 @@ async def reply_permission(
 
     if not future.done():
         future.set_result(reply)
+
+    pending_permissions.pop(request_id, None)
+
+    message = body.get("message", "")
+    if message:
+        logger.info(f"Permission reject with feedback: {message}")
 
     await event_bus.publish(
         {

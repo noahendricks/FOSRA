@@ -382,7 +382,7 @@ export function Session() {
           .share({
             sessionID: route.sessionID,
           })
-          .then((res) => copy(res.data!.share!.url))
+          .then((res) => copy(res.data!.url))
           .catch((error) => {
             toast.show({
               message: error instanceof Error ? error.message : "Failed to share session",
@@ -521,6 +521,9 @@ export function Session() {
           })
           .then(() => {
             toBottom()
+          })
+          .catch((e: unknown) => {
+            console.error("revert error", e)
           })
         const parts = sync.data.part[message.id]
         prompt.set(

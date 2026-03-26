@@ -18,7 +18,14 @@ from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from loguru import logger
 
 from backend.src.api.events import event_bus
-from backend.src.api.routes.oc.state import session_diffs, session_todos
+from backend.src.api.routes.oc.state import (
+    ask_permission,
+    ask_question,
+    pending_permissions,
+    pending_questions,
+    session_diffs,
+    session_todos,
+)
 from backend.src.api.schemas.api_schemas import MessageResponse
 from backend.src.api.schemas.tui_schemas import (
     AssistantMessage,
@@ -54,6 +61,31 @@ from backend.src.storage.utils.converters import ulid_factory
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+
+_TOOL_PERMISSIONS: dict[str, str] = {
+    "read_file": "read",
+    "write_file": "write",
+    "edit_file": "edit",
+    "execute": "bash",
+    "BashTool": "bash",
+    "bash": "bash",
+    "TaskTool": "task",
+    "task": "task",
+    "WebFetchTool": "webfetch",
+    "webfetch": "webfetch",
+    "WebSearchTool": "websearch",
+    "websearch": "websearch",
+    "GrepTool": "grep",
+    "grep": "grep",
+    "GlobTool": "glob",
+    "glob": "glob",
+    "ListTool": "list",
+    "ls": "list",
+    "ReadTool": "read",
+    "WriteTool": "write",
+    "EditTool": "edit",
+}
 
 
 def _unwrap_json_text(text: str) -> str:
@@ -321,6 +353,8 @@ async def run_agent_with_events(
             lc_messages = [HumanMessage(content=user_text)]
             full_text = ""
             tool_call_parts: dict[str, dict[str, Any]] = {}
+            handled_blocked_calls: set[str] = set()
+            stream_abort = False
 
             logger.info("[STREAM] starting astream for session {}", session_id)
             chunk_count = 0
@@ -328,6 +362,8 @@ async def run_agent_with_events(
                 {"messages": lc_messages},
                 stream_mode="messages",
             ):
+                if stream_abort:
+                    break
                 chunk_count += 1
                 logger.info(
                     "[STREAM] chunk #{} type={} content_type={} content_repr={}",
@@ -396,9 +432,70 @@ async def run_agent_with_events(
                                 }
                             )
 
+                            tool_permission = _TOOL_PERMISSIONS.get(tool_name)
+                            if tool_permission:
+                                request_id, future = ask_permission(
+                                    session_id=session_id,
+                                    permission=tool_permission,
+                                    patterns=[str(tool_args.get("path", ""))]
+                                    if tool_args.get("path")
+                                    else [],
+                                    metadata={
+                                        "tool": tool_name,
+                                        "args": tool_args,
+                                        "messageID": assistant_msg_id,
+                                    },
+                                    always=[],
+                                    tool={
+                                        "messageID": assistant_msg_id,
+                                        "callID": call_id,
+                                    },
+                                )
+                                handled_blocked_calls.add(call_id)
+                                reply = await future
+                                if reply == "reject":
+                                    await event_bus.publish(
+                                        {
+                                            "type": "session.status",
+                                            "properties": {
+                                                "sessionID": session_id,
+                                                "status": {"type": "idle"},
+                                            },
+                                        }
+                                    )
+                                    stream_abort = True
+                                    break
+                            elif tool_name == "Question":
+                                request_id, future = ask_question(
+                                    session_id=session_id,
+                                    questions=tool_args.get("questions", []),
+                                    tool={
+                                        "messageID": assistant_msg_id,
+                                        "callID": call_id,
+                                    },
+                                )
+                                handled_blocked_calls.add(call_id)
+                                reply = await future
+                                if reply == "reject":
+                                    await event_bus.publish(
+                                        {
+                                            "type": "session.status",
+                                            "properties": {
+                                                "sessionID": session_id,
+                                                "status": {"type": "idle"},
+                                            },
+                                        }
+                                    )
+                                    stream_abort = True
+                                    break
+
                 elif isinstance(msg, ToolMessage):
                     call_id = getattr(msg, "tool_call_id", None)
-                    if call_id and call_id in tool_call_parts:
+                    if (
+                        call_id
+                        and call_id in tool_call_parts
+                        and call_id not in handled_blocked_calls
+                    ):
                         tc_info = tool_call_parts[call_id]
                         end_time = int(time.time())
 

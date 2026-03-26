@@ -173,8 +173,10 @@ class ConvoRepo:
 
             update_data: dict[str, Any] = convo_update.model_dump(exclude_unset=True)
 
+            _UPDATE_ALLOWLIST = {"title", "archived", "meta"}
+
             for key, value in update_data.items():
-                if hasattr(db_chat, key):
+                if key in _UPDATE_ALLOWLIST and hasattr(db_chat, key):
                     setattr(db_chat, key, value)
 
             await session.commit()

@@ -35,6 +35,35 @@ permission_requests: dict[str, list[dict[str, Any]]] = {}
 
 question_requests: dict[str, list[dict[str, Any]]] = {}
 
+_state_lock = asyncio.Lock()
+
+
+async def cleanup_session(session_id: str) -> None:
+    """Remove all state for a session. Call when a session is deleted."""
+    async with _state_lock:
+        session_status.pop(session_id, None)
+        session_todos.pop(session_id, None)
+        session_diffs.pop(session_id, None)
+        permission_requests.pop(session_id, None)
+        question_requests.pop(session_id, None)
+
+    task = running_tasks.get(session_id)
+    if task and not task.done():
+        task.cancel()
+    running_tasks.pop(session_id, None)
+
+    to_remove_perm = [
+        rid for rid, f in pending_permissions.items() if session_id in str(f)
+    ]
+    for rid in to_remove_perm:
+        pending_permissions.pop(rid, None)
+
+    to_remove_ques = [
+        rid for rid, f in pending_questions.items() if session_id in str(f)
+    ]
+    for rid in to_remove_ques:
+        pending_questions.pop(rid, None)
+
 
 def ask_permission(
     session_id: str,

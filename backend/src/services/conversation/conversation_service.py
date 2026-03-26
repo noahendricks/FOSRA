@@ -43,20 +43,17 @@ class ConversationService:
     ) -> NewConvoResponse:
         logger.info(f"Creating conversation for user {new_convo.user_id}")
 
-        try:
-            conversation: NewConvo = await ConvoRepo().create(
-                session=session,
-                new_convo=new_convo,
-            )
+        conversation: NewConvo = await ConvoRepo().create(
+            session=session,
+            new_convo=new_convo,
+        )
 
-            logger.success(f"Created conversation: {conversation.convo_id}")
+        logger.success(f"Created conversation: {conversation.convo_id}")
 
-            return domain_to_response(
-                conversation,
-                NewConvoResponse,
-            )
-        except Exception as e:
-            raise e
+        return domain_to_response(
+            conversation,
+            NewConvoResponse,
+        )
 
     @staticmethod
     async def get_conversation_by_id(
@@ -66,25 +63,22 @@ class ConversationService:
     ) -> ConvoFullResponse:
         logger.info(f"Retrieving conversation: {convo_id}")
 
-        try:
-            logger.info(
-                f"user id and convo_id get_conversation_by_id entrance : user_id: {user_id}, convo_id: {convo_id}"
-            )
+        logger.info(
+            f"user id and convo_id get_conversation_by_id entrance : user_id: {user_id}, convo_id: {convo_id}"
+        )
 
-            conversation: Convo = await ConvoRepo.get_by_id(
-                session=session,
-                user_id=user_id,
-                convo_id=convo_id,
-            )
+        conversation: Convo = await ConvoRepo.get_by_id(
+            session=session,
+            user_id=user_id,
+            convo_id=convo_id,
+        )
 
-            dtr = domain_to_response(
-                conversation,
-                ConvoFullResponse,
-            )
+        dtr = domain_to_response(
+            conversation,
+            ConvoFullResponse,
+        )
 
-            return dtr
-        except Exception as e:
-            raise e
+        return dtr
 
     @staticmethod
     async def list_conversations(
@@ -93,19 +87,15 @@ class ConversationService:
     ) -> list[ConvoListItemResponse]:
         logger.debug(f"Listing conversations for user {user_id}")
 
-        try:
-            conversations: list[Convo] = await ConvoRepo().get_all_by_user_id(
-                session=session,
-                user_id=user_id,
-            )
+        conversations: list[Convo] = await ConvoRepo().get_all_by_user_id(
+            session=session,
+            user_id=user_id,
+        )
 
-            logger.success(
-                f"Retrieved {len(conversations)} conversations for user {user_id}"
-            )
-            return [domain_to_response(c, ConvoListItemResponse) for c in conversations]
-
-        except Exception as e:
-            raise e
+        logger.success(
+            f"Retrieved {len(conversations)} conversations for user {user_id}"
+        )
+        return [domain_to_response(c, ConvoListItemResponse) for c in conversations]
 
     @staticmethod
     async def update_conversation(
@@ -114,18 +104,14 @@ class ConversationService:
     ) -> ConvoFullResponse:
         logger.info(f"Updating conversation: {convo_update.convo_id}")
 
-        try:
-            conversation: Convo = await ConvoRepo.update(
-                session=session,
-                convo_update=convo_update,
-            )
+        conversation: Convo = await ConvoRepo.update(
+            session=session,
+            convo_update=convo_update,
+        )
 
-            logger.success(f"Updated conversation: {convo_update.convo_id}")
+        logger.success(f"Updated conversation: {convo_update.convo_id}")
 
-            return domain_to_response(conversation, ConvoFullResponse)
-
-        except Exception as e:
-            raise e
+        return domain_to_response(conversation, ConvoFullResponse)
 
     @staticmethod
     async def delete_conversation(

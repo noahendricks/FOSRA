@@ -64,6 +64,8 @@ async def reply_question(
     if not future.done():
         future.set_result(answers)
 
+    pending_questions.pop(request_id, None)
+
     await event_bus.publish(
         {
             "type": "question.replied",
@@ -99,6 +101,8 @@ async def reject_question(
 
     if not future.done():
         future.set_result("reject")
+
+    pending_questions.pop(request_id, None)
 
     await event_bus.publish(
         {

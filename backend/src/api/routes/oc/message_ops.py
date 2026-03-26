@@ -46,8 +46,15 @@ router = APIRouter(prefix="/oc/session", tags=["Message Operations"])
 async def _get_message_orm(
     session: AsyncSession,
     message_id: str,
+    user_id: str,
+    convo_id: str,
 ) -> MessageORM:
-    stmt = select(MessageORM).where(MessageORM.message_id == message_id)
+    stmt = (
+        select(MessageORM)
+        .where(MessageORM.message_id == message_id)
+        .where(MessageORM.convo_id == convo_id)
+        .where(MessageORM.user_id == user_id)
+    )
     result = await session.execute(stmt)
     msg = result.scalar_one_or_none()
     if not msg:
@@ -158,7 +165,7 @@ async def get_message(
 ):
     """return a single message with its parts."""
     await _get_convo_for_user(session, user_id, session_id)
-    msg = await _get_message_orm(session, message_id)
+    msg = await _get_message_orm(session, message_id, user_id, session_id)
     return _message_orm_to_tui(msg, session_id)
 
 
@@ -171,7 +178,7 @@ async def delete_message(
 ):
     """delete a message and publish message.removed event."""
     await _get_convo_for_user(session, user_id, session_id)
-    msg = await _get_message_orm(session, message_id)
+    msg = await _get_message_orm(session, message_id, user_id, session_id)
 
     await session.execute(delete(MessageORM).where(MessageORM.message_id == message_id))
     await session.commit()
@@ -199,7 +206,7 @@ async def update_part(
     publishes message.part.updated with the updated TextPart.
     """
     await _get_convo_for_user(session, user_id, session_id)
-    msg = await _get_message_orm(session, message_id)
+    msg = await _get_message_orm(session, message_id, user_id, session_id)
 
     if "text" in body:
         msg.text = body["text"]

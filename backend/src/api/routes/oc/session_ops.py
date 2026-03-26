@@ -39,7 +39,28 @@ from backend.src.storage.utils.converters import ulid_factory
 
 router = APIRouter(prefix="/oc/session", tags=["Session Operations"])
 
-_session_snapshots: dict[str, list[dict[str, Any]]] = {}
+_session_snapshots: dict[str, tuple[list[dict[str, Any]], float]] = {}
+
+_SNAPSHOT_TTL_SECONDS = 3600
+
+
+def _get_snapshot(session_id: str) -> list[dict[str, Any]] | None:
+    snap = _session_snapshots.get(session_id)
+    if snap is None:
+        return None
+    snapshots, timestamp = snap
+    if time.time() - timestamp > _SNAPSHOT_TTL_SECONDS:
+        del _session_snapshots[session_id]
+        return None
+    return snapshots
+
+
+def _set_snapshot(session_id: str, data: list[dict[str, Any]]) -> None:
+    _session_snapshots[session_id] = (data, time.time())
+
+
+def _del_snapshot(session_id: str) -> None:
+    _session_snapshots.pop(session_id, None)
 
 
 def _get_parent_id(meta: dict[str, Any] | None) -> str | None:
@@ -321,7 +342,7 @@ async def revert_session(
         {"id": getattr(m, "message_id", None), "text": m.text, "role": m.role}
         for m in convo.messages
     ]
-    _session_snapshots[session_id] = snapshot
+    _set_snapshot(session_id, snapshot)
 
     from backend.src.api.schemas.api_schemas import ConvoDeleteRequest
 
@@ -357,7 +378,7 @@ async def unrevert_session(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """restore messages from the most recent revert snapshot."""
-    snapshot = _session_snapshots.get(session_id)
+    snapshot = _get_snapshot(session_id)
     if not snapshot:
         raise HTTPException(status_code=404, detail="No snapshot to restore")
 
@@ -372,7 +393,7 @@ async def unrevert_session(
         await ConvoRepo.add_message(session, new_msg)
 
     await session.commit()
-    del _session_snapshots[session_id]
+    _del_snapshot(session_id)
 
     await event_bus.publish(
         {

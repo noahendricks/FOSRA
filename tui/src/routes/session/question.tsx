@@ -48,12 +48,16 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     sdk.client.question.reply({
       requestID: props.request.id,
       answers,
+    }).catch((e: unknown) => {
+      console.error("question reply error", e)
     })
   }
 
   function reject() {
     sdk.client.question.reject({
       requestID: props.request.id,
+    }).catch((e: unknown) => {
+      console.error("question reject error", e)
     })
   }
 

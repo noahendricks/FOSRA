@@ -24,6 +24,7 @@ from backend.src.api.dependencies import (
 )
 from backend.src.api.events import event_bus
 from backend.src.api.routes.oc.state import (
+    cleanup_session,
     running_tasks,
     session_diffs,
     session_status,
@@ -90,12 +91,21 @@ async def event_stream(request: Request):
                     break
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=1.0)
-                    yield f"data: {json.dumps(event)}\n\n"
+                    try:
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except (TypeError, ValueError) as e:
+                        logger.warning(
+                            f"Failed to serialize event {event.get('type', 'unknown')}: {e}"
+                        )
+                        yield f"data: {json.dumps({'type': 'server.error', 'properties': {'message': 'Event serialization failed'}})}\n\n"
                     last_heartbeat = 0
                 except asyncio.TimeoutError:
                     last_heartbeat += 1
                     if last_heartbeat >= heartbeat_interval:
-                        yield f"data: {json.dumps({'type': 'server.heartbeat', 'properties': {}})}\n\n"
+                        try:
+                            yield f"data: {json.dumps({'type': 'server.heartbeat', 'properties': {}})}\n\n"
+                        except (TypeError, ValueError):
+                            pass
                         last_heartbeat = 0
         finally:
             event_bus.unsubscribe(sub_id)
@@ -208,6 +218,7 @@ async def delete_session(
         convo_request=delete_req,
     )
     if deleted:
+        await cleanup_session(session_id)
         session_info = convo_to_session(convo_id=session_id, user_id=user_id)
         await event_bus.publish(
             {
