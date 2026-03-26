@@ -52,9 +52,15 @@ router = APIRouter(prefix="/oc", tags=["TUI"])
 
 from backend.src.api.routes.oc.tui_events import router as tui_events_router
 from backend.src.api.routes.oc.session_ops import router as session_ops_router
+from backend.src.api.routes.oc.message_ops import router as message_ops_router
+from backend.src.api.routes.oc.permission import router as permission_router
+from backend.src.api.routes.oc.question import router as question_router
 
 router.include_router(tui_events_router)
 router.include_router(session_ops_router)
+router.include_router(message_ops_router)
+router.include_router(permission_router)
+router.include_router(question_router)
 
 
 # SSE EVENT STREAM
@@ -211,14 +217,37 @@ async def list_messages(
     session_id: str,
     user_id: Annotated[str, Depends(get_current_user_id)],
     session=Depends(get_db_session),
+    limit: int | None = None,
+    before: str | None = None,
 ):
+    """
+    list messages for a session, newest first.
+    supports pagination via `limit` (max messages) and `before` (message ID cursor).
+    """
     convo = await ConversationService.get_conversation_by_id(
         session=session,
         user_id=user_id,
         convo_id=session_id,
     )
+
+    messages = list(convo.messages)
+
+    if before:
+        try:
+            idx = next(
+                i
+                for i, m in enumerate(messages)
+                if getattr(m, "message_id", None) == before
+            )
+            messages = messages[idx + 1 :]
+        except StopIteration:
+            pass
+
+    if limit:
+        messages = messages[:limit]
+
     result = []
-    for msg in convo.messages:
+    for msg in messages:
         result.append(message_to_tui(msg, session_id))
     return result
 

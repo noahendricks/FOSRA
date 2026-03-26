@@ -160,11 +160,14 @@ export const createOpencodeClient = (options: {
       list: async (_p?: any, o?: any) => api<any[]>("/command", opts(o)),
     },
     permission: {
-      reply: async (_p?: any, _o?: any) => mock(true),
+      reply: async (p: any, o?: any) =>
+        api<boolean>(`/permission/${p.requestID}/reply`, { method: "POST", body: JSON.stringify(p), ...opts(o) }),
     },
     question: {
-      reply: async (_p?: any, _o?: any) => mock(true),
-      reject: async (_p?: any, _o?: any) => mock(true),
+      reply: async (p: any, o?: any) =>
+        api<boolean>(`/question/${p.requestID}/reply`, { method: "POST", body: JSON.stringify(p), ...opts(o) }),
+      reject: async (p: any, o?: any) =>
+        api<boolean>(`/question/${p.requestID}/reject`, { method: "POST", body: JSON.stringify(p), ...opts(o) }),
     },
     lsp: {
       status: async (_p?: any, o?: any) => api<any[]>("/lsp/status", opts(o)),
