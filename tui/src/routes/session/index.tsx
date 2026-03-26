@@ -128,7 +128,16 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
-  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const messages = createMemo(() =>
+    (sync.data.message[route.sessionID] ?? []).toSorted((a, b) => {
+      const dt = a.time.created - b.time.created
+      if (dt !== 0) return dt
+      // user before assistant when timestamps are equal
+      if (a.role === "user" && b.role !== "user") return -1
+      if (a.role !== "user" && b.role === "user") return 1
+      return 0
+    }),
+  )
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])

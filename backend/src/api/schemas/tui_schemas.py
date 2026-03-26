@@ -565,22 +565,6 @@ class CompactionPart(BaseModel):
     overflow: Optional[bool] = None
 
 
-Part = Union[
-    TextPart,
-    ToolPart,
-    ReasoningPart,
-    FilePart,
-    StepStartPart,
-    StepFinishPart,
-    AgentPart,
-    SubtaskPart,
-    RetryPart,
-    CompactionPart,
-    SnapshotPart,
-    PatchPart,
-]
-
-
 # =============================================================================
 # CORE: TOOL STATE
 # =============================================================================
@@ -651,6 +635,22 @@ class ToolPart(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+Part = Union[
+    TextPart,
+    ToolPart,
+    ReasoningPart,
+    FilePart,
+    StepStartPart,
+    StepFinishPart,
+    AgentPart,
+    SubtaskPart,
+    RetryPart,
+    CompactionPart,
+    SnapshotPart,
+    PatchPart,
+]
+
+
 # =============================================================================
 # CORE: SESSION STATUS
 # =============================================================================
@@ -679,6 +679,7 @@ SessionStatus = Union[SessionStatusIdle, SessionStatusBusy, SessionStatusRetry]
 # =============================================================================
 # CORE: ERROR TYPES
 # =============================================================================
+
 
 class ApiErrorData(BaseModel):
     message: str
@@ -755,6 +756,7 @@ class ContextOverflowError(BaseModel):
 # PERMISSION & QUESTION
 # =============================================================================
 
+
 class PermissionRequestTool(BaseModel):
     messageID: str
     callID: str
@@ -817,6 +819,7 @@ class QuestionAnswer(BaseModel):
 # TODO
 # =============================================================================
 
+
 class Todo(BaseModel):
     content: str
     status: str
@@ -826,6 +829,7 @@ class Todo(BaseModel):
 # =============================================================================
 # TUI EVENTS (server → TUI via SSE)
 # =============================================================================
+
 
 class EventTuiPromptAppendProperties(BaseModel):
     text: str
@@ -890,6 +894,7 @@ class EventTuiSessionSelect(BaseModel):
 # MESSAGE EVENTS
 # =============================================================================
 
+
 class EventMessageUpdatedProperties(BaseModel):
     info: Message
 
@@ -945,6 +950,7 @@ class EventMessagePartRemoved(BaseModel):
 # =============================================================================
 # SESSION EVENTS
 # =============================================================================
+
 
 class EventSessionCreatedProperties(BaseModel):
     info: Session
@@ -1035,6 +1041,7 @@ class EventSessionError(BaseModel):
 # PERMISSION & QUESTION EVENTS
 # =============================================================================
 
+
 class EventPermissionAsked(BaseModel):
     type: Literal["permission.asked"]
     properties: PermissionRequest
@@ -1081,6 +1088,7 @@ class EventQuestionRejected(BaseModel):
 # TODO EVENTS
 # =============================================================================
 
+
 class EventTodoUpdatedProperties(BaseModel):
     sessionID: str
     todos: List[Todo]
@@ -1094,6 +1102,7 @@ class EventTodoUpdated(BaseModel):
 # =============================================================================
 # VCS / PATH EVENTS
 # =============================================================================
+
 
 class EventVcsBranchUpdatedProperties(BaseModel):
     branch: Optional[str] = None
@@ -1112,6 +1121,7 @@ class EventLspUpdated(BaseModel):
 # =============================================================================
 # PROVIDER / AGENT / MODEL (bootstrap data)
 # =============================================================================
+
 
 class ModelApi(BaseModel):
     id: str
@@ -1229,6 +1239,7 @@ class Agent(BaseModel):
 # =============================================================================
 # CONFIG
 # =============================================================================
+
 
 class LogLevel(BaseModel):
     pass
@@ -1431,7 +1442,6 @@ class LayoutConfig(BaseModel):
 
 
 class Config(BaseModel):
-    $schema: Optional[str] = None
     logLevel: Optional[LogLevel] = None
     server: Optional[ServerConfig] = None
     command: Optional[Dict[str, ConfigCommandEntry]] = None
@@ -1451,7 +1461,9 @@ class Config(BaseModel):
     mode: Optional[Dict[str, Optional[AgentConfig]]] = None
     agent: Optional[ConfigAgent] = None
     provider: Optional[Dict[str, ProviderConfig]] = None
-    mcp: Optional[Dict[str, Union[McpLocalConfig, McpRemoteConfig, ConfigMcpValue]]] = None
+    mcp: Optional[Dict[str, Union[McpLocalConfig, McpRemoteConfig, ConfigMcpValue]]] = (
+        None
+    )
     formatter: Optional[Union[bool, ConfigFormatter]] = None
     lsp: Optional[Union[bool, ConfigLsp]] = None
     instructions: Optional[List[str]] = None
@@ -1466,6 +1478,7 @@ class Config(BaseModel):
 # =============================================================================
 # PROMPT REQUEST (inbound from TUI)
 # =============================================================================
+
 
 class TextPartInput(BaseModel):
     id: Optional[str] = None
@@ -1510,7 +1523,7 @@ class SubtaskPartInput(BaseModel):
 
 
 class PromptRequest(BaseModel):
-    sessionID: str
+    sessionID: Optional[str] = None
     messageID: Optional[str] = None
     parts: List[
         Union[TextPartInput, FilePartInput, AgentPartInput, SubtaskPartInput]
@@ -1518,11 +1531,16 @@ class PromptRequest(BaseModel):
     model: Optional[AgentModel] = None
     agent: Optional[str] = None
     variant: Optional[str] = None
+    providerID: Optional[str] = None
+    modelID: Optional[str] = None
+
+    model_config = {"extra": "allow"}
 
 
 # =============================================================================
 # FILE / VCS / PATH
 # =============================================================================
+
 
 class FileDiff(BaseModel):
     file: str
@@ -1644,6 +1662,7 @@ class Command(BaseModel):
 # LSP / FORMATTER STATUS
 # =============================================================================
 
+
 class LspStatus(BaseModel):
     id: str
     name: str
@@ -1660,6 +1679,7 @@ class FormatterStatus(BaseModel):
 # =============================================================================
 # MCP
 # =============================================================================
+
 
 class McpResource(BaseModel):
     name: str
@@ -1722,6 +1742,7 @@ class EventMcpToolsChanged(BaseModel):
 # PROVIDER AUTH
 # =============================================================================
 
+
 class ProviderAuthMethodPromptWhen(BaseModel):
     key: str
     op: Literal["eq", "neq"]
@@ -1771,6 +1792,7 @@ class ProviderAuthAuthorization(BaseModel):
 # =============================================================================
 # WORKSPACE / PROJECT
 # =============================================================================
+
 
 class ProjectIcon(BaseModel):
     url: Optional[str] = None
@@ -1861,6 +1883,7 @@ class EventWorkspaceFailed(BaseModel):
 # SYMBOL / CODE NAVIGATION
 # =============================================================================
 
+
 class SymbolLocation(BaseModel):
     uri: str
     range: Range
@@ -1875,6 +1898,7 @@ class Symbol(BaseModel):
 # =============================================================================
 # AUTH TYPES
 # =============================================================================
+
 
 class OAuth(BaseModel):
     type: Literal["oauth"]
@@ -1904,6 +1928,7 @@ class Auth(BaseModel):
 # ERROR RESPONSES
 # =============================================================================
 
+
 class NotFoundErrorData(BaseModel):
     message: str
 
@@ -1922,6 +1947,7 @@ class BadRequestError(BaseModel):
 # =============================================================================
 # PTY (pseudo-terminal - stub, not used in FOSRA)
 # =============================================================================
+
 
 class Pty(BaseModel):
     id: str
@@ -1974,6 +2000,7 @@ class EventPtyDeleted(BaseModel):
 # GLOBAL / MULTI-INSTANCE (stub - not used in FOSRA)
 # =============================================================================
 
+
 class ClientOptions(BaseModel):
     baseUrl: str
 
@@ -2010,6 +2037,7 @@ class EventGlobalDisposed(BaseModel):
 # FILE WATCHER (stub - not used in FOSRA)
 # =============================================================================
 
+
 class EventFileEditedProperties(BaseModel):
     file: str
 
@@ -2033,6 +2061,7 @@ class EventFileWatcherUpdated(BaseModel):
 # LSP DIAGNOSTICS (stub - not used in FOSRA)
 # =============================================================================
 
+
 class EventLspClientDiagnosticsProperties(BaseModel):
     serverID: str
     path: str
@@ -2046,6 +2075,7 @@ class EventLspClientDiagnostics(BaseModel):
 # =============================================================================
 # INSTALLATION / UPDATE (stub - not used in FOSRA)
 # =============================================================================
+
 
 class EventInstallationUpdatedProperties(BaseModel):
     version: str
@@ -2069,6 +2099,7 @@ class EventInstallationUpdateAvailable(BaseModel):
 # MCP BROWSER (stub - not used in FOSRA)
 # =============================================================================
 
+
 class EventMcpBrowserOpenFailedProperties(BaseModel):
     mcpName: str
     url: str
@@ -2082,6 +2113,7 @@ class EventMcpBrowserOpenFailed(BaseModel):
 # =============================================================================
 # COMMAND EXECUTED (stub - not used in FOSRA)
 # =============================================================================
+
 
 class EventCommandExecutedProperties(BaseModel):
     name: str
@@ -2098,6 +2130,7 @@ class EventCommandExecuted(BaseModel):
 # =============================================================================
 # WORKTREE EVENTS (stub - not used in FOSRA)
 # =============================================================================
+
 
 class EventWorktreeReadyProperties(BaseModel):
     name: str

@@ -74,8 +74,6 @@ router.include_router(extended_router)
 
 
 # SSE EVENT STREAM
-
-
 @router.get("/event")
 async def event_stream(request: Request):
     """global sse endpoint. the tui subscribes here for all real-time events."""
@@ -174,7 +172,7 @@ async def create_session(
     await event_bus.publish(
         {
             "type": "session.created",
-            "properties": {"info": session_info},
+            "properties": {"info": session_info.model_dump()},
         }
     )
     return session_info
@@ -200,7 +198,7 @@ async def update_session(
     await event_bus.publish(
         {
             "type": "session.updated",
-            "properties": {"info": session_info},
+            "properties": {"info": session_info.model_dump()},
         }
     )
     return session_info
@@ -223,7 +221,7 @@ async def delete_session(
         await event_bus.publish(
             {
                 "type": "session.deleted",
-                "properties": {"info": session_info},
+                "properties": {"info": session_info.model_dump()},
             }
         )
     return deleted

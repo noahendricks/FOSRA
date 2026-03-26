@@ -2,17 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated, AsyncGenerator
 
-from fastapi import Depends, Header, HTTPException, Request, status
-from loguru import logger
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from taskiq import TaskiqDepends
 
 from backend.src.api.lifecycle import Infrastructure
 
-
-import os
-
-AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
 
 DEV_USER_ID = "dev-user-001"
 DEV_USER_NAME = "Development User"
@@ -46,20 +41,5 @@ async def get_session_factory(
     return infra.session_factory
 
 
-async def get_current_user_id(
-    authorization: Annotated[str | None, Header()] = None,
-    x_user_id: Annotated[str | None, Header()] = None,
-) -> str:
-    if not AUTH_ENABLED:
-        logger.warning("Auth disabled — using dev user for all requests")
-        return DEV_USER_ID
-
-    if x_user_id:
-        logger.warning("Using X-User-ID header — not for production use")
-        return x_user_id
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+async def get_current_user_id() -> str:
+    return DEV_USER_ID
