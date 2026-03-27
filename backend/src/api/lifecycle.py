@@ -20,6 +20,7 @@ class Infrastructure:
         self.falkordb_graph = None
         self.model_registry = None
         self._tables_created = False
+        self.checkpointer = None
 
     def init(self):
         from backend.src.settings.fosra_dirs import fosra_dirs
@@ -104,6 +105,7 @@ class Infrastructure:
             raise
 
         await self._init_session_state_manager()
+        await self._init_checkpointer()
 
     async def _init_session_state_manager(self):
         try:
@@ -123,6 +125,22 @@ class Infrastructure:
                 "Session persistence will be in-memory only.",
                 e,
             )
+
+    async def _init_checkpointer(self):
+        try:
+            from langgraph.checkpoint.postgres import AsyncPostgresSaver
+
+            conn_string = settings.database.url
+            self.checkpointer = AsyncPostgresSaver.from_conn_string(conn_string)
+            await self.checkpointer.setup()
+            logger.info("LangGraph Postgres checkpointer initialized.")
+        except Exception as e:
+            logger.warning(
+                "Checkpointer initialization failed: {}. "
+                "Agent will be stateless per turn.",
+                e,
+            )
+        self.checkpointer: AsyncPostgresSaver | None = None
 
     async def close(self):
         if self.qdrant_client:

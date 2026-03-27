@@ -26,6 +26,7 @@ dependencies = [
   "langchain[exa,huggingface,litellm,ollama,unstructured]>=1.0.5",
   "langchain-community>=0.4.1",
   "langgraph>=0.3.29",
+  "langgraph-checkpoint-postgres>=0.3.29",
   "linkup-sdk>=0.2.4",
   "litellm>=1.78.0",
   "loguru>=0.7.3",

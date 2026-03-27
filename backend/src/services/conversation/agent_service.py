@@ -41,6 +41,7 @@ def create_fosra_agent(
     user_prefs: UserPreferences,
     system_prompt: str | None = None,
     backend: Any | None = None,
+    checkpointer: Any | None = None,
 ) -> tuple[CompiledStateGraph, RetrievalResultStore]:
     """Create a FOSRA agent with retrieval capabilities.
 
@@ -137,6 +138,8 @@ def create_fosra_agent(
     }
     if backend is not None:
         kwargs["backend"] = backend
+    if checkpointer is not None:
+        kwargs["checkpointer"] = checkpointer
 
     agent = create_deep_agent(**kwargs)
 

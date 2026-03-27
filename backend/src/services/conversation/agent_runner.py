@@ -18,6 +18,7 @@ from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from loguru import logger
 
 from backend.src.api.events import event_bus
+from backend.src.api.lifecycle import global_infra
 from backend.src.api.routes.oc.state import (
     ask_permission,
     ask_question,
@@ -447,7 +448,11 @@ async def run_agent_with_events(
 
                 backend = FilesystemBackend(root_dir=PROJECT_DIR)
 
-            agent, result_store = create_fosra_agent(user_prefs, backend=backend)
+            agent, result_store = create_fosra_agent(
+                user_prefs,
+                backend=backend,
+                checkpointer=global_infra.checkpointer,
+            )
 
             lc_messages = [HumanMessage(content=user_text)]
             full_text = ""
@@ -459,8 +464,10 @@ async def run_agent_with_events(
 
             logger.info("[STREAM] starting astream for session {}", session_id)
             chunk_count = 0
+            config = {"configurable": {"thread_id": session_id}}
             async for msg, _metadata in agent.astream(
                 {"messages": lc_messages},
+                config=config,
                 stream_mode="messages",
             ):
                 if stream_abort:
