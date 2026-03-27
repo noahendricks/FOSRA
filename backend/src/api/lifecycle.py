@@ -1,3 +1,6 @@
+import asyncio
+import os
+
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -19,6 +22,10 @@ class Infrastructure:
         self._tables_created = False
 
     def init(self):
+        from backend.src.settings.fosra_dirs import fosra_dirs
+
+        _ = fosra_dirs.fosra
+
         self.session_factory = async_sessionmaker(
             self.engine,
             expire_on_commit=False,

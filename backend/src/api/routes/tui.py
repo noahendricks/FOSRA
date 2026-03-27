@@ -11,10 +11,17 @@ import asyncio
 import json
 import os
 import subprocess
-from typing import Annotated, Any
+from typing import Annotated, Any, AsyncIterable
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+)
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from loguru import logger
 
 from backend.src.api.dependencies import (
@@ -63,9 +70,8 @@ from backend.src.api.routes.oc.project import router as project_router
 from backend.src.api.routes.oc.question import router as question_router
 from backend.src.api.routes.oc.session_ops import router as session_ops_router
 from backend.src.api.routes.oc.shell import router as shell_router
-from backend.src.api.routes.oc.tui_events import router as tui_events_router
+from backend.src.api.routes.oc.skill import router as skill_router
 
-router.include_router(tui_events_router)
 router.include_router(session_ops_router)
 router.include_router(message_ops_router)
 router.include_router(permission_router)
@@ -73,54 +79,58 @@ router.include_router(question_router)
 router.include_router(file_router)
 router.include_router(project_router)
 router.include_router(shell_router)
+router.include_router(skill_router)
 router.include_router(extended_router)
 
 
-# SSE EVENT STREAM
-@router.get("/event")
-async def event_stream(request: Request):
-    """global sse endpoint. the tui subscribes here for all real-time events."""
+@router.get("/event", response_class=EventSourceResponse)
+async def sse_endpoint(
+    request: Request,
+    last_event_id: int | None = Header(None, alias="Last-Event-ID"),
+) -> AsyncIterable[ServerSentEvent]:
+    """
+    Global SSE endpoint. The TUI subscribes here for all real-time events.
+
+    FastAPI SSE provides:
+    - 15s keep-alive pings automatically
+    - Cache-Control: no-cache, X-Accel-Buffering: no
+    - Last-Event-ID reconnection replay via replay_missed()
+    """
     sub_id, queue = event_bus.subscribe()
-    heartbeat_interval = 10
 
-    async def generate():
-        try:
-            await event_bus.publish({"type": "server.connected", "properties": {}})
-            last_heartbeat = 0
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
-                    try:
-                        yield f"data: {json.dumps(event)}\n\n"
-                    except (TypeError, ValueError) as e:
-                        logger.warning(
-                            f"Failed to serialize event {event.get('type', 'unknown')}: {e}"
-                        )
-                        yield f"data: {json.dumps({'type': 'server.error', 'properties': {'message': 'Event serialization failed'}})}\n\n"
-                    last_heartbeat = 0
-                except asyncio.TimeoutError:
-                    last_heartbeat += 1
-                    if last_heartbeat >= heartbeat_interval:
-                        try:
-                            yield f"data: {json.dumps({'type': 'server.heartbeat', 'properties': {}})}\n\n"
-                        except (TypeError, ValueError):
-                            pass
-                        last_heartbeat = 0
-        finally:
-            event_bus.unsubscribe(sub_id)
+    async def event_generator():
+        for missed in event_bus.replay_missed(last_event_id or 0):
+            yield ServerSentEvent(
+                data=json.dumps({"type": missed.type, "properties": missed.properties}),
+                event=missed.type,
+                id=str(missed.sequence_nr),
+                retry=5000,
+            )
 
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "Content-Type": "text/event-stream",
-            "X-Accel-Buffering": "no",
-        },
-    )
+        yield ServerSentEvent(
+            data=json.dumps({"type": "server.connected", "properties": {}}),
+            event="server.connected",
+            id="0",
+            retry=5000,
+        )
+
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                ev = await asyncio.wait_for(queue.get(), timeout=5.0)
+                yield ServerSentEvent(
+                    data=json.dumps({"type": ev.type, "properties": ev.properties}),
+                    event=ev.type,
+                    id=str(ev.sequence_nr),
+                    retry=5000,
+                )
+            except asyncio.TimeoutError:
+                pass
+
+        event_bus.unsubscribe(sub_id)
+
+    return event_generator()
 
 
 # SESSION CRUD
@@ -404,6 +414,22 @@ async def formatter_status():
     return []
 
 
+# Path aliases (canonical paths without /status suffix)
+@router.get("/lsp")
+async def lsp_alias():
+    return []
+
+
+@router.get("/mcp")
+async def mcp_alias():
+    return {}
+
+
+@router.get("/formatter")
+async def formatter_alias():
+    return []
+
+
 # VCS
 
 
@@ -434,3 +460,13 @@ async def get_path():
         "config": "",
         "worktree": "",
     }
+
+
+# VERSION
+
+SERVER_VERSION = "0.2.0"
+
+
+@router.get("/version")
+async def get_version():
+    return {"version": SERVER_VERSION}

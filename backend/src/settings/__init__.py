@@ -10,6 +10,8 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from backend.src.settings.fosra_dirs import fosra_dirs
+
 
 from backend.src.domain.enums import SourceType, EmbedderType
 

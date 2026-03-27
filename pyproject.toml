@@ -75,8 +75,7 @@ dependencies = [
   "pudb>=2025.1.4",
   "hunter>=3.9.0",
   "aiofiles>=25.1.0",
-  "fastapi[cli]>=0.124.4",
-  "fastapi-cli>=0.0.16",
+  "fastapi>=0.135.0",
   "aiobotocore>=3.0.0",
   "llama-parse>=0.6.88",
   "basedpyright>=1.36.1",
@@ -125,6 +124,7 @@ dependencies = [
   "tree-sitter-typescript>=0.23.2",
   "tree-sitter-go>=0.23.4",
   "tree-sitter-rust>=0.23.2",
+  "icecream>=2.1.10",
 ]
 
 [project.scripts]

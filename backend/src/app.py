@@ -1,3 +1,5 @@
+import asyncio
+import os
 import warnings
 from asyncio import CancelledError
 from contextlib import asynccontextmanager
@@ -70,6 +72,16 @@ async def lifespan(app: FastAPI):
 
     finally:
         logger.info("Shutting down application...")
+
+        from backend.src.api.events import event_bus
+
+        await event_bus.publish(
+            {
+                "type": "server.instance.disposed",
+                "properties": {"directory": str(os.getcwd())},
+            }
+        )
+        await asyncio.sleep(0.5)
 
         if not broker.is_worker_process:
             await broker.shutdown()

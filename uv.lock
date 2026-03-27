@@ -1880,31 +1880,18 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.128.0"
+version = "0.135.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
     { name = "pydantic" },
     { name = "starlette" },
     { name = "typing-extensions" },
+    { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/52/08/8c8508db6c7b9aae8f7175046af41baad690771c9bcde676419965e338c7/fastapi-0.128.0.tar.gz", hash = "sha256:1cc179e1cef10a6be60ffe429f79b829dce99d8de32d7acb7e6c8dfdf7f2645a", size = 365682, upload-time = "2025-12-27T15:21:13.714Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c4/73/5903c4b13beae98618d64eb9870c3fac4f605523dd0312ca5c80dadbd5b9/fastapi-0.135.2.tar.gz", hash = "sha256:88a832095359755527b7f63bb4c6bc9edb8329a026189eed83d6c1afcf419d56", size = 395833, upload-time = "2026-03-23T14:12:41.697Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/05/5cbb59154b093548acd0f4c7c474a118eda06da25aa75c616b72d8fcd92a/fastapi-0.128.0-py3-none-any.whl", hash = "sha256:aebd93f9716ee3b4f4fcfe13ffb7cf308d99c9f3ab5622d8877441072561582d", size = 103094, upload-time = "2025-12-27T15:21:12.154Z" },
-]
-
-[[package]]
-name = "fastapi-cli"
-version = "0.0.20"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "rich-toolkit" },
-    { name = "typer" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/ca/d90fb3bfbcbd6e56c77afd9d114dd6ce8955d8bb90094399d1c70e659e40/fastapi_cli-0.0.20.tar.gz", hash = "sha256:d17c2634f7b96b6b560bc16b0035ed047d523c912011395f49f00a421692bc3a", size = 19786, upload-time = "2025-12-22T17:13:33.794Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/08/89/5c4eef60524d0fd704eb0706885b82cd5623a43396b94e4a5b17d3a3f516/fastapi_cli-0.0.20-py3-none-any.whl", hash = "sha256:e58b6a0038c0b1532b7a0af690656093dee666201b6b19d3c87175b358e9f783", size = 12390, upload-time = "2025-12-22T17:13:31.708Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/ea/18f6d0457f9efb2fc6fa594857f92810cadb03024975726db6546b3d6fcf/fastapi-0.135.2-py3-none-any.whl", hash = "sha256:0af0447d541867e8db2a6a25c23a8c4bd80e2394ac5529bd87501bbb9e240ca5", size = 117407, upload-time = "2026-03-23T14:12:43.284Z" },
 ]
 
 [[package]]
@@ -2174,7 +2161,6 @@ dependencies = [
     { name = "en-core-web-sm" },
     { name = "falkordb" },
     { name = "fastapi" },
-    { name = "fastapi-cli" },
     { name = "fastembed" },
     { name = "faster-whisper" },
     { name = "firecrawl-py" },
@@ -2186,6 +2172,7 @@ dependencies = [
     { name = "graphviz" },
     { name = "httpx" },
     { name = "hunter" },
+    { name = "icecream" },
     { name = "ipdb" },
     { name = "ipython" },
     { name = "joblib" },
@@ -2310,8 +2297,7 @@ requires-dist = [
     { name = "elasticsearch", specifier = ">=9.1.1" },
     { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "falkordb", specifier = ">=1.6.0" },
-    { name = "fastapi", extras = ["cli"], specifier = ">=0.124.4" },
-    { name = "fastapi-cli", specifier = ">=0.0.16" },
+    { name = "fastapi", specifier = ">=0.135.0" },
     { name = "fastembed", specifier = ">=0.7.3" },
     { name = "faster-whisper", specifier = ">=1.1.0" },
     { name = "firecrawl-py", specifier = ">=1.12.0" },
@@ -2323,6 +2309,7 @@ requires-dist = [
     { name = "graphviz", specifier = ">=0.21" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "hunter", specifier = ">=3.9.0" },
+    { name = "icecream", specifier = ">=2.1.10" },
     { name = "ipdb", specifier = ">=0.13.13" },
     { name = "ipython", specifier = ">=9.9.0" },
     { name = "joblib", specifier = ">=1.5.3" },
@@ -3000,6 +2987,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/02/e7/94f8232d4a74cc99514c13a9f995811485a6903d48e5d952771ef6322e30/hyperframe-6.1.0.tar.gz", hash = "sha256:f630908a00854a7adeabd6382b43923a4c4cd4b821fcb527e6ab9e15382a3b08", size = 26566, upload-time = "2025-01-22T21:41:49.302Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/48/30/47d0bf6072f7252e6521f3447ccfa40b421b6824517f82854703d0f5a98b/hyperframe-6.1.0-py3-none-any.whl", hash = "sha256:b03380493a519fce58ea5af42e4a42317bf9bd425596f7a0835ffce80f1a42e5", size = 13007, upload-time = "2025-01-22T21:41:47.295Z" },
+]
+
+[[package]]
+name = "icecream"
+version = "2.1.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "asttokens" },
+    { name = "colorama" },
+    { name = "executing" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fe/e2/3d064dfedbbc16687e0f56cd9b1d55e4e6dfd13d61b9435b61c250aaef3c/icecream-2.1.10.tar.gz", hash = "sha256:15900126ba7dbe1f83819583cbe5ff79a2943224600878d89307e4633b32e528", size = 13924, upload-time = "2026-01-21T07:34:17.652Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/4f/91c4ee1af60bb4b2519540fd46fb56dfc70ede0cf3d97f57aff62d61190b/icecream-2.1.10-py3-none-any.whl", hash = "sha256:6b0ae3e899de12954cd26d8611dcff86518ff19f40deef333427da2ccf4036b2", size = 16373, upload-time = "2026-01-21T07:34:15.801Z" },
 ]
 
 [[package]]
@@ -7685,20 +7687,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a1/84/4831f881aa6ff3c976f6d6809b58cdfa350593ffc0dc3c58f5f6586780fb/rich-14.3.1.tar.gz", hash = "sha256:b8c5f568a3a749f9290ec6bddedf835cec33696bfc1e48bcfecb276c7386e4b8", size = 230125, upload-time = "2026-01-24T21:40:44.847Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/87/2a/a1810c8627b9ec8c57ec5ec325d306701ae7be50235e8fd81266e002a3cc/rich-14.3.1-py3-none-any.whl", hash = "sha256:da750b1aebbff0b372557426fb3f35ba56de8ef954b3190315eb64076d6fb54e", size = 309952, upload-time = "2026-01-24T21:40:42.969Z" },
-]
-
-[[package]]
-name = "rich-toolkit"
-version = "0.17.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "rich" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/97/09/3f9b8d9daaf235195c626f21e03604c05b987404ee3bcacee0c1f67f2a8e/rich_toolkit-0.17.1.tar.gz", hash = "sha256:5af54df8d1dd9c8530e462e1bdcaed625c9b49f5a55b035aa0ba1c17bdb87c9a", size = 187925, upload-time = "2025-12-17T10:49:22.583Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/7b/15e55fa8a76d0d41bf34d965af78acdaf80a315907adb30de8b63c272694/rich_toolkit-0.17.1-py3-none-any.whl", hash = "sha256:96d24bb921ecd225ffce7c526a9149e74006410c05e6d405bd74ffd54d5631ed", size = 31412, upload-time = "2025-12-17T10:49:21.793Z" },
 ]
 
 [[package]]
