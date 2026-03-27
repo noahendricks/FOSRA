@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from loguru import logger
 
-from backend.src.api.events import event_bus
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.lifecycle import global_infra
 from backend.src.api.routes.oc.state import (
     ask_permission,
@@ -64,6 +64,8 @@ from backend.src.storage.utils.converters import ulid_factory
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+event_emitter = get_event_emitter()
 
 
 _TOOL_PERMISSIONS: dict[str, str] = {
@@ -322,15 +324,7 @@ async def run_agent_with_events(
         return
 
     try:
-        await event_bus.publish(
-            {
-                "type": "session.status",
-                "properties": {
-                    "sessionID": session_id,
-                    "status": {"type": "busy"},
-                },
-            }
-        )
+        await event_emitter.emit_busy(session_id)
 
         user_msg = UserMessage(
             id=user_msg_id,
@@ -343,12 +337,7 @@ async def run_agent_with_events(
                 modelID=DEFAULT_MODEL_ID,
             ),
         ).model_dump()
-        await event_bus.publish(
-            {
-                "type": "message.updated",
-                "properties": {"info": user_msg},
-            }
-        )
+        await event_emitter.emit_message_updated(user_msg)
 
         user_text_part = TextPart(
             id=ulid_factory(),
@@ -358,12 +347,7 @@ async def run_agent_with_events(
             text=user_text,
             time=TextPartTime(start=now, end=now),
         ).model_dump()
-        await event_bus.publish(
-            {
-                "type": "message.part.updated",
-                "properties": {"part": user_text_part},
-            }
-        )
+        await event_emitter.emit_message_part_updated(user_text_part)
 
         assistant_msg = AssistantMessage(
             id=assistant_msg_id,
@@ -384,12 +368,7 @@ async def run_agent_with_events(
                 cache=AssistantMessageTokensCache(read=1, write=0),
             ),
         ).model_dump()
-        await event_bus.publish(
-            {
-                "type": "message.updated",
-                "properties": {"info": assistant_msg},
-            }
-        )
+        await event_emitter.emit_message_updated(assistant_msg)
 
         step_start = StepStartPart(
             id=step_start_id,
@@ -397,12 +376,7 @@ async def run_agent_with_events(
             messageID=assistant_msg_id,
             type="step-start",
         ).model_dump()
-        await event_bus.publish(
-            {
-                "type": "message.part.updated",
-                "properties": {"part": step_start},
-            }
-        )
+        await event_emitter.emit_message_part_updated(step_start)
 
         text_part = TextPart(
             id=text_part_id,
@@ -412,12 +386,7 @@ async def run_agent_with_events(
             text="",
             time=TextPartTime(start=now, end=None),
         ).model_dump()
-        await event_bus.publish(
-            {
-                "type": "message.part.updated",
-                "properties": {"part": text_part},
-            }
-        )
+        await event_emitter.emit_message_part_updated(text_part)
 
         async with session_factory() as db_session:
             from backend.src.api.request_context import RequestContext
@@ -504,39 +473,26 @@ async def run_agent_with_events(
                                                 start=now_ts, end=None
                                             ),
                                         ).model_dump()
-                                        await event_bus.publish(
-                                            {
-                                                "type": "message.part.updated",
-                                                "properties": {"part": rp},
-                                            }
+                                        await event_emitter.emit_message_part_updated(
+                                            rp
                                         )
-                                    await event_bus.publish(
-                                        {
-                                            "type": "message.part.delta",
-                                            "properties": {
-                                                "sessionID": session_id,
-                                                "messageID": assistant_msg_id,
-                                                "partID": reasoning_part_id,
-                                                "field": "text",
-                                                "delta": reasoning_text,
-                                            },
-                                        }
+                                    await event_emitter.emit_message_part_delta(
+                                        session_id,
+                                        assistant_msg_id,
+                                        reasoning_part_id,
+                                        "text",
+                                        reasoning_text,
                                     )
                             elif block_type == "text":
                                 text_val = block.get("text", "") or ""
                                 if text_val:
                                     full_text += text_val
-                                    await event_bus.publish(
-                                        {
-                                            "type": "message.part.delta",
-                                            "properties": {
-                                                "sessionID": session_id,
-                                                "messageID": assistant_msg_id,
-                                                "partID": text_part_id,
-                                                "field": "text",
-                                                "delta": text_val,
-                                            },
-                                        }
+                                    await event_emitter.emit_message_part_delta(
+                                        session_id,
+                                        assistant_msg_id,
+                                        text_part_id,
+                                        "text",
+                                        text_val,
                                     )
                     elif msg.content:
                         text_chunk = (
@@ -546,22 +502,17 @@ async def run_agent_with_events(
                         )
                         if text_chunk:
                             full_text += text_chunk
-                            await event_bus.publish(
-                                {
-                                    "type": "message.part.delta",
-                                    "properties": {
-                                        "sessionID": session_id,
-                                        "messageID": assistant_msg_id,
-                                        "partID": text_part_id,
-                                        "field": "text",
-                                        "delta": text_chunk,
-                                    },
-                                }
+                            await event_emitter.emit_message_part_delta(
+                                session_id,
+                                assistant_msg_id,
+                                text_part_id,
+                                "text",
+                                text_chunk,
                             )
                             logger.info(
                                 "[STREAM] published delta len={} subscribers={}",
                                 len(text_chunk),
-                                event_bus.subscriber_count,
+                                event_emitter._bus.subscriber_count,
                             )
 
                     if hasattr(msg, "tool_calls") and msg.tool_calls:
@@ -592,12 +543,7 @@ async def run_agent_with_events(
                                     time=ToolStateRunningTime(start=int(time.time())),
                                 ),
                             ).model_dump()
-                            await event_bus.publish(
-                                {
-                                    "type": "message.part.updated",
-                                    "properties": {"part": tool_part},
-                                }
-                            )
+                            await event_emitter.emit_message_part_updated(tool_part)
 
                             tool_permission = _TOOL_PERMISSIONS.get(tool_name)
                             if tool_permission:
@@ -620,23 +566,12 @@ async def run_agent_with_events(
                                         "callID": call_id,
                                     },
                                 )
-                                await event_bus.publish(
-                                    {
-                                        "type": "permission.asked",
-                                        "properties": request,
-                                    }
-                                )
+                                await event_emitter.emit_permission_asked(request)
                                 handled_blocked_calls.add(call_id)
                                 reply = await future
                                 if reply == "reject":
-                                    await event_bus.publish(
-                                        {
-                                            "type": "session.status",
-                                            "properties": {
-                                                "sessionID": session_id,
-                                                "status": {"type": "idle"},
-                                            },
-                                        }
+                                    await event_emitter.emit_session_status(
+                                        session_id, {"type": "idle"}
                                     )
                                     stream_abort = True
                                     break
@@ -649,23 +584,12 @@ async def run_agent_with_events(
                                         "callID": call_id,
                                     },
                                 )
-                                await event_bus.publish(
-                                    {
-                                        "type": "question.asked",
-                                        "properties": request,
-                                    }
-                                )
+                                await event_emitter.emit_question_asked(request)
                                 handled_blocked_calls.add(call_id)
                                 reply = await future
                                 if reply == "reject":
-                                    await event_bus.publish(
-                                        {
-                                            "type": "session.status",
-                                            "properties": {
-                                                "sessionID": session_id,
-                                                "status": {"type": "idle"},
-                                            },
-                                        }
+                                    await event_emitter.emit_session_status(
+                                        session_id, {"type": "idle"}
                                     )
                                     stream_abort = True
                                     break
@@ -706,12 +630,7 @@ async def run_agent_with_events(
                                 ),
                             ),
                         ).model_dump()
-                        await event_bus.publish(
-                            {
-                                "type": "message.part.updated",
-                                "properties": {"part": tool_part},
-                            }
-                        )
+                        await event_emitter.emit_message_part_updated(tool_part)
 
                         new_text_part_id = ulid_factory()
                         text_part = TextPart(
@@ -722,23 +641,12 @@ async def run_agent_with_events(
                             text="",
                             time=TextPartTime(start=int(time.time()), end=None),
                         ).model_dump()
-                        await event_bus.publish(
-                            {
-                                "type": "message.part.updated",
-                                "properties": {"part": text_part},
-                            }
-                        )
+                        await event_emitter.emit_message_part_updated(text_part)
                         text_part_id = new_text_part_id
 
                         if tool_name == "todowrite":
-                            await event_bus.publish(
-                                {
-                                    "type": "todo.updated",
-                                    "properties": {
-                                        "sessionID": session_id,
-                                        "todos": metadata.get("todos", []),
-                                    },
-                                }
+                            await event_emitter.emit_todo_updated(
+                                session_id, metadata.get("todos", [])
                             )
 
             logger.info(
@@ -757,12 +665,7 @@ async def run_agent_with_events(
                 text=full_text,
                 time=TextPartTime(start=now, end=end_time),
             ).model_dump()
-            await event_bus.publish(
-                {
-                    "type": "message.part.updated",
-                    "properties": {"part": text_part_final},
-                }
-            )
+            await event_emitter.emit_message_part_updated(text_part_final)
 
             if reasoning_part_id is not None and reasoning_start_time is not None:
                 reasoning_part_final = ReasoningPart(
@@ -773,12 +676,7 @@ async def run_agent_with_events(
                     text="",
                     time=ReasoningPartTime(start=reasoning_start_time, end=end_time),
                 ).model_dump()
-                await event_bus.publish(
-                    {
-                        "type": "message.part.updated",
-                        "properties": {"part": reasoning_part_final},
-                    }
-                )
+                await event_emitter.emit_message_part_updated(reasoning_part_final)
 
             step_finish = StepFinishPart(
                 id=step_finish_id,
@@ -794,12 +692,7 @@ async def run_agent_with_events(
                     cache=StepFinishPartTokensCache(read=1, write=0),
                 ),
             ).model_dump()
-            await event_bus.publish(
-                {
-                    "type": "message.part.updated",
-                    "properties": {"part": step_finish},
-                }
-            )
+            await event_emitter.emit_message_part_updated(step_finish)
 
             assistant_msg_final = AssistantMessage(
                 id=assistant_msg_id,
@@ -821,12 +714,7 @@ async def run_agent_with_events(
                 ),
                 finish="stop",
             ).model_dump()
-            await event_bus.publish(
-                {
-                    "type": "message.updated",
-                    "properties": {"info": assistant_msg_final},
-                }
-            )
+            await event_emitter.emit_message_updated(assistant_msg_final)
 
             sources_as_dicts = []
             if result_store.items:
@@ -866,33 +754,17 @@ async def run_agent_with_events(
                         title=new_title,
                     ),
                 )
-                await event_bus.publish(
-                    {
-                        "type": "session.updated",
-                        "properties": {"info": {"id": session_id, "title": new_title}},
-                    }
+                await event_emitter.emit_session_updated(
+                    {"id": session_id, "title": new_title}
                 )
 
             diffs = _compute_git_diffs(PROJECT_DIR)
             session_diffs[session_id] = diffs
-            await event_bus.publish(
-                {
-                    "type": "session.diff",
-                    "properties": {"sessionID": session_id, "diff": diffs},
-                }
-            )
+            await event_emitter.emit_session_diff(session_id, diffs)
 
     except asyncio.CancelledError:
         logger.info("Agent task cancelled for session {}", session_id)
-        await event_bus.publish(
-            {
-                "type": "session.status",
-                "properties": {
-                    "sessionID": session_id,
-                    "status": {"type": "idle"},
-                },
-            }
-        )
+        await event_emitter.emit_session_status(session_id, {"type": "idle"})
         return
 
     except Exception as e:
@@ -921,20 +793,8 @@ async def run_agent_with_events(
                 data=UnknownErrorData(message=str(e)),
             ),
         ).model_dump()
-        await event_bus.publish(
-            {
-                "type": "message.updated",
-                "properties": {"info": error_msg},
-            }
-        )
+        await event_emitter.emit_message_updated(error_msg)
+        await event_emitter.emit_session_error(session_id, error_msg["error"])
 
     finally:
-        await event_bus.publish(
-            {
-                "type": "session.status",
-                "properties": {
-                    "sessionID": session_id,
-                    "status": {"type": "idle"},
-                },
-            }
-        )
+        await event_emitter.emit_session_status(session_id, {"type": "idle"})

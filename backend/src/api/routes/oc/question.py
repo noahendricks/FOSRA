@@ -12,7 +12,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.src.api.dependencies import get_current_user_id
-from backend.src.api.events import event_bus
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.routes.oc.state import (
     pending_questions,
     question_requests,
@@ -20,6 +20,7 @@ from backend.src.api.routes.oc.state import (
 from backend.src.api.schemas.tui_schemas import QuestionRequest
 
 router = APIRouter(prefix="/oc/question", tags=["Question"])
+event_emitter = get_event_emitter()
 
 
 @router.get("")
@@ -66,16 +67,7 @@ async def reply_question(
 
     pending_questions.pop(request_id, None)
 
-    await event_bus.publish(
-        {
-            "type": "question.replied",
-            "properties": {
-                "sessionID": session_id,
-                "requestID": request_id,
-                "answers": answers,
-            },
-        }
-    )
+    await event_emitter.emit_question_replied(session_id, request_id, answers)
     return True
 
 
@@ -104,13 +96,5 @@ async def reject_question(
 
     pending_questions.pop(request_id, None)
 
-    await event_bus.publish(
-        {
-            "type": "question.rejected",
-            "properties": {
-                "sessionID": session_id,
-                "requestID": request_id,
-            },
-        }
-    )
+    await event_emitter.emit_question_rejected(session_id, request_id)
     return True

@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.dependencies import get_current_user_id, get_db_session
-from backend.src.api.events import event_bus
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_MODEL_ID,
     DEFAULT_PROVIDER_ID,
@@ -41,6 +41,7 @@ from backend.src.storage.models import ConvoORM, MessageORM
 from backend.src.storage.utils.converters import ulid_factory
 
 router = APIRouter(prefix="/oc/session", tags=["Message Operations"])
+event_emitter = get_event_emitter()
 
 
 async def _get_message_orm(
@@ -183,12 +184,7 @@ async def delete_message(
     await session.execute(delete(MessageORM).where(MessageORM.message_id == message_id))
     await session.commit()
 
-    await event_bus.publish(
-        {
-            "type": "message.removed",
-            "properties": {"sessionID": session_id, "messageID": message_id},
-        }
-    )
+    await event_emitter.emit_message_removed(session_id, message_id)
     return True
 
 
@@ -222,12 +218,7 @@ async def update_part(
         time=TextPartTime(start=created, end=int(time.time())),
     )
 
-    await event_bus.publish(
-        {
-            "type": "message.part.updated",
-            "properties": {"part": updated_part},
-        }
-    )
+    await event_emitter.emit_message_part_updated(updated_part)
     return {"ok": True}
 
 
@@ -245,14 +236,5 @@ async def delete_part(
     """
     await _get_convo_for_user(session, user_id, session_id)
 
-    await event_bus.publish(
-        {
-            "type": "message.part.removed",
-            "properties": {
-                "sessionID": session_id,
-                "messageID": message_id,
-                "partID": part_id,
-            },
-        }
-    )
+    await event_emitter.emit_message_part_removed(session_id, message_id, part_id)
     return True

@@ -12,7 +12,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.src.api.dependencies import get_current_user_id
-from backend.src.api.events import event_bus
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.routes.oc.state import (
     pending_permissions,
     permission_requests,
@@ -21,6 +21,7 @@ from backend.src.api.schemas.tui_schemas import PermissionRequest
 from loguru import logger
 
 router = APIRouter(prefix="/oc/permission", tags=["Permission"])
+event_emitter = get_event_emitter()
 
 
 @router.get("")
@@ -73,14 +74,7 @@ async def reply_permission(
     if message:
         logger.info(f"Permission reject with feedback: {message}")
 
-    await event_bus.publish(
-        {
-            "type": "permission.replied",
-            "properties": {
-                "sessionID": body.get("sessionID", ""),
-                "requestID": request_id,
-                "reply": reply,
-            },
-        }
+    await event_emitter.emit_permission_replied(
+        body.get("sessionID", ""), request_id, reply
     )
     return True

@@ -29,7 +29,7 @@ from backend.src.api.dependencies import (
     get_db_session,
     get_session_factory,
 )
-from backend.src.api.events import event_bus
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.routes.oc.state import (
     cleanup_session,
     running_tasks,
@@ -61,6 +61,7 @@ from backend.src.api.schemas.tui_schemas import (
 from backend.src.services.conversation.conversation_service import ConversationService
 
 router = APIRouter(prefix="/oc", tags=["TUI"])
+event_emitter = get_event_emitter()
 
 from backend.src.api.routes.oc.file import router as file_router
 from backend.src.api.routes.oc.message_ops import router as message_ops_router
@@ -94,11 +95,11 @@ async def sse_endpoint(
     - Cache-Control: no-cache, X-Accel-Buffering: no
     - Last-Event-ID reconnection replay via replay_missed()
     """
-    sub_id, queue = event_bus.subscribe()
+    sub_id, queue = event_emitter.subscribe()
 
     async def event_generator():
         try:
-            for missed in event_bus.replay_missed(last_event_id or 0):
+            for missed in event_emitter.replay_missed(last_event_id or 0):
                 yield ServerSentEvent(
                     data=json.dumps(
                         {"type": missed.type, "properties": missed.properties}
@@ -129,7 +130,7 @@ async def sse_endpoint(
                 except asyncio.TimeoutError:
                     pass
         finally:
-            event_bus.unsubscribe(sub_id)
+            event_emitter.unsubscribe(sub_id)
 
     return event_generator()
 
@@ -183,12 +184,7 @@ async def create_session(
         title=result.title,
     )
 
-    await event_bus.publish(
-        {
-            "type": "session.created",
-            "properties": {"info": session_info.model_dump()},
-        }
-    )
+    await event_emitter.emit_session_created(session_info.model_dump())
     return session_info
 
 
@@ -209,12 +205,7 @@ async def update_session(
         convo_update=update,
     )
     session_info = convo_full_to_session(result)
-    await event_bus.publish(
-        {
-            "type": "session.updated",
-            "properties": {"info": session_info.model_dump()},
-        }
-    )
+    await event_emitter.emit_session_updated(session_info.model_dump())
     return session_info
 
 
@@ -232,12 +223,7 @@ async def delete_session(
     if deleted:
         await cleanup_session(session_id)
         session_info = convo_to_session(convo_id=session_id, user_id=user_id)
-        await event_bus.publish(
-            {
-                "type": "session.deleted",
-                "properties": {"info": session_info.model_dump()},
-            }
-        )
+        await event_emitter.emit_session_deleted(session_info.model_dump())
     return deleted
 
 
@@ -325,15 +311,7 @@ async def abort_session(session_id: str):
         task.cancel()
         running_tasks.pop(session_id, None)
         session_status[session_id] = {"type": "idle"}
-        await event_bus.publish(
-            {
-                "type": "session.status",
-                "properties": {
-                    "sessionID": session_id,
-                    "status": {"type": "idle"},
-                },
-            }
-        )
+        await event_emitter.emit_session_status(session_id, {"type": "idle"})
         return True
     return False
 
@@ -405,6 +383,18 @@ async def lsp_status():
     return []
 
 
+@router.post("/lsp/updated")
+async def emit_lsp_updated(
+    body: dict[str, Any],
+):
+    """
+    emit lsp.updated to all SSE subscribers.
+    body: arbitrary LSP state dict — the TUI consumes this to refresh diagnostics.
+    """
+    await event_emitter.emit_lsp_updated(body)
+    return {"ok": True}
+
+
 @router.get("/mcp/status")
 async def mcp_status():
     return {}
@@ -433,9 +423,12 @@ async def formatter_alias():
 
 # VCS
 
+_last_vcs_branch: str | None = None
+
 
 @router.get("/vcs")
 async def vcs_info():
+    global _last_vcs_branch
     try:
         branch = subprocess.check_output(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -443,9 +436,13 @@ async def vcs_info():
             stderr=subprocess.DEVNULL,
             text=True,
         ).strip()
-        return {"branch": branch, "dirty": False}
     except Exception:
-        return {"branch": "main", "dirty": False}
+        branch = "main"
+
+    if _last_vcs_branch is not None and _last_vcs_branch != branch:
+        await event_emitter.emit_vcs_branch_updated({"branch": branch})
+    _last_vcs_branch = branch
+    return {"branch": branch, "dirty": False}
 
 
 # PATH

@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.dependencies import get_current_user_id, get_db_session
-from backend.src.api.events import event_bus
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.routes.oc.state import session_status
 from backend.src.api.schemas.api_schemas import (
     ConvoUpdateRequest,
@@ -38,6 +38,7 @@ from backend.src.storage.convo import ConvoRepo
 from backend.src.storage.utils.converters import ulid_factory
 
 router = APIRouter(prefix="/oc/session", tags=["Session Operations"])
+event_emitter = get_event_emitter()
 
 _session_snapshots: dict[str, tuple[list[dict[str, Any]], float]] = {}
 
@@ -214,12 +215,7 @@ async def fork_session(
         meta=new_conv_orm.meta if new_conv_orm else None,
     )
 
-    await event_bus.publish(
-        {
-            "type": "session.created",
-            "properties": {"info": session_info},
-        }
-    )
+    await event_emitter.emit_session_created(session_info)
 
     return session_info
 
@@ -317,12 +313,7 @@ async def summarize_session(
         ),
     )
 
-    await event_bus.publish(
-        {
-            "type": "session.updated",
-            "properties": {"info": {"id": session_id, "title": title}},
-        }
-    )
+    await event_emitter.emit_session_updated({"id": session_id, "title": title})
 
     return {"title": title}
 
@@ -366,12 +357,7 @@ async def revert_session(
 
     await session.commit()
 
-    await event_bus.publish(
-        {
-            "type": "session.updated",
-            "properties": {"info": {"id": session_id}},
-        }
-    )
+    await event_emitter.emit_session_updated({"id": session_id})
 
     return {"ok": True}
 
@@ -400,11 +386,6 @@ async def unrevert_session(
     await session.commit()
     _del_snapshot(session_id)
 
-    await event_bus.publish(
-        {
-            "type": "session.updated",
-            "properties": {"info": {"id": session_id}},
-        }
-    )
+    await event_emitter.emit_session_updated({"id": session_id})
 
     return {"ok": True}
