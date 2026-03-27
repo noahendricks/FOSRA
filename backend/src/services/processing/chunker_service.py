@@ -34,7 +34,6 @@ from backend.src.settings import ChunkerConfig
 # !hack : to be implemented:  user config retrieval (env , database or in-memory)
 
 # !todo: Fix class state references
-# pyright: reportIgnoreCommentWithoutRule=false
 
 
 class ChunkerService:
@@ -116,7 +115,18 @@ class ChunkerService:
 
         parse_result.file_path = doc.metadata.source
 
-        return parse_result.chunks
+        return [
+            Chunk(
+                text=cc.code,
+                metadata=ChunkMetadata(
+                    chunk_id=cc.name or str(uuid4()),
+                    start_char=0,
+                    end_char=0,
+                    token_count=0,
+                ),
+            )
+            for cc in parse_result.chunks
+        ]
 
     @staticmethod
     async def _chunk_text(doc: Doc, config: ChunkerConfig) -> list[Chunk]:

@@ -213,3 +213,6 @@ class MessageORM(Base):
             "role IN ('user', 'assistant', 'system', 'tool')", name="check_valid_role"
         ),
     )
+
+
+from backend.src.storage.session_state import SessionStateORM  # noqa: E402,F401

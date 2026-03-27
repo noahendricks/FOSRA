@@ -4,6 +4,12 @@ centralized in-memory state for the tui backend.
 all mutable in-memory state lives here — session status, running tasks,
 pending permission/question futures, todos, and diffs.
 sub-routers import from here instead of scattering state across tui.py.
+
+runtime state (not persisted): running_tasks, pending_permissions,
+pending_questions, permission_requests, question_requests.
+
+session state (persisted via SessionStateManager): session_status,
+session_todos, session_diffs.
 """
 
 from __future__ import annotations
@@ -17,6 +23,9 @@ if TYPE_CHECKING:
         PermissionRequest,
         QuestionRequest,
         Todo,
+    )
+    from backend.src.services.session.session_state_manager import (
+        SessionStateManager,
     )
 
 session_status: dict[str, dict[str, Any]] = {}
@@ -36,6 +45,63 @@ permission_requests: dict[str, list[dict[str, Any]]] = {}
 question_requests: dict[str, list[dict[str, Any]]] = {}
 
 _state_lock = asyncio.Lock()
+
+_session_state_manager: "SessionStateManager | None" = None
+
+
+async def get_session_state_manager() -> "SessionStateManager":
+    global _session_state_manager
+    if _session_state_manager is None:
+        from backend.src.services.session.session_state_manager import (
+            SessionStateManager,
+        )
+
+        _session_state_manager = await SessionStateManager.get_instance()
+    return _session_state_manager
+
+
+async def get_persisted_session_state(
+    session_id: str,
+) -> dict[str, Any] | None:
+    """Get persisted session state (agent_snapshot, interaction_snapshot, etc.)."""
+    manager = await get_session_state_manager()
+    return await manager.get(session_id)
+
+
+async def persist_session_state(
+    session_id: str,
+    agent_snapshot: dict[str, Any] | None = None,
+    interaction_snapshot: dict[str, Any] | None = None,
+    workspace_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist session state to DB."""
+    manager = await get_session_state_manager()
+    return await manager.upsert(
+        session_id=session_id,
+        agent_snapshot=agent_snapshot,
+        interaction_snapshot=interaction_snapshot,
+        workspace_id=workspace_id,
+        metadata=metadata,
+    )
+
+
+async def update_persisted_session_state(
+    session_id: str,
+    agent_snapshot: dict[str, Any] | None = None,
+    interaction_snapshot: dict[str, Any] | None = None,
+    workspace_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Update persisted session state in DB."""
+    manager = await get_session_state_manager()
+    return await manager.update(
+        session_id=session_id,
+        agent_snapshot=agent_snapshot,
+        interaction_snapshot=interaction_snapshot,
+        workspace_id=workspace_id,
+        metadata=metadata,
+    )
 
 
 async def cleanup_session(session_id: str) -> None:
@@ -63,6 +129,9 @@ async def cleanup_session(session_id: str) -> None:
     ]
     for rid in to_remove_ques:
         pending_questions.pop(rid, None)
+
+    manager = await get_session_state_manager()
+    await manager.delete(session_id)
 
 
 def ask_permission(

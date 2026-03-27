@@ -97,36 +97,39 @@ async def sse_endpoint(
     sub_id, queue = event_bus.subscribe()
 
     async def event_generator():
-        for missed in event_bus.replay_missed(last_event_id or 0):
+        try:
+            for missed in event_bus.replay_missed(last_event_id or 0):
+                yield ServerSentEvent(
+                    data=json.dumps(
+                        {"type": missed.type, "properties": missed.properties}
+                    ),
+                    event=missed.type,
+                    id=str(missed.sequence_nr),
+                    retry=5000,
+                )
+
             yield ServerSentEvent(
-                data=json.dumps({"type": missed.type, "properties": missed.properties}),
-                event=missed.type,
-                id=str(missed.sequence_nr),
+                data=json.dumps({"type": "server.connected", "properties": {}}),
+                event="server.connected",
+                id="0",
                 retry=5000,
             )
 
-        yield ServerSentEvent(
-            data=json.dumps({"type": "server.connected", "properties": {}}),
-            event="server.connected",
-            id="0",
-            retry=5000,
-        )
-
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                ev = await asyncio.wait_for(queue.get(), timeout=5.0)
-                yield ServerSentEvent(
-                    data=json.dumps({"type": ev.type, "properties": ev.properties}),
-                    event=ev.type,
-                    id=str(ev.sequence_nr),
-                    retry=5000,
-                )
-            except asyncio.TimeoutError:
-                pass
-
-        event_bus.unsubscribe(sub_id)
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    ev = await asyncio.wait_for(queue.get(), timeout=5.0)
+                    yield ServerSentEvent(
+                        data=json.dumps({"type": ev.type, "properties": ev.properties}),
+                        event=ev.type,
+                        id=str(ev.sequence_nr),
+                        retry=5000,
+                    )
+                except asyncio.TimeoutError:
+                    pass
+        finally:
+            event_bus.unsubscribe(sub_id)
 
     return event_generator()
 
