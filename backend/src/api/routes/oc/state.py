@@ -141,11 +141,12 @@ def ask_permission(
     metadata: dict[str, Any],
     always: list[str],
     tool: dict[str, Any] | None = None,
-) -> tuple[str, asyncio.Future[Any]]:
+) -> tuple[str, asyncio.Future[Any], dict[str, Any]]:
     """
     register a pending permission request and return a future that blocks until the user replies.
-    returns (request_id, future).
+    returns (request_id, future, request).
     the caller should await the future to get the reply ("once" | "always" | "reject").
+    the request dict matches the PermissionRequest shape the TUI SDK expects.
     """
     from backend.src.storage.utils.converters import ulid_factory
 
@@ -154,7 +155,7 @@ def ask_permission(
     future: asyncio.Future[Any] = loop.create_future()
     pending_permissions[request_id] = future
 
-    request = {
+    request: dict[str, Any] = {
         "id": request_id,
         "sessionID": session_id,
         "permission": permission,
@@ -164,18 +165,19 @@ def ask_permission(
         "tool": tool,
     }
     permission_requests.setdefault(session_id, []).append(request)
-    return request_id, future
+    return request_id, future, request
 
 
 def ask_question(
     session_id: str,
     questions: list[dict[str, Any]],
     tool: dict[str, Any] | None = None,
-) -> tuple[str, asyncio.Future[Any]]:
+) -> tuple[str, asyncio.Future[Any], dict[str, Any]]:
     """
     register a pending question request and return a future that blocks until the user replies.
-    returns (request_id, future).
+    returns (request_id, future, request).
     the caller should await the future to get the answers list (or "reject" string).
+    the request dict matches the QuestionRequest shape the TUI SDK expects.
     """
     from backend.src.storage.utils.converters import ulid_factory
 
@@ -184,11 +186,11 @@ def ask_question(
     future: asyncio.Future[Any] = loop.create_future()
     pending_questions[request_id] = future
 
-    request = {
+    request: dict[str, Any] = {
         "id": request_id,
         "sessionID": session_id,
         "questions": questions,
         "tool": tool,
     }
     question_requests.setdefault(session_id, []).append(request)
-    return request_id, future
+    return request_id, future, request

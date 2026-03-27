@@ -21,6 +21,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+from deepagents.middleware.skills import SkillsMiddleware
+from deepagents.middleware.summarization import SummarizationMiddleware
 from loguru import logger
 
 from backend.src.services.conversation.tools import (
@@ -30,6 +33,7 @@ from backend.src.services.conversation.tools import (
 from backend.src.services.conversation.utils.llm_utils import build_llm
 from backend.src.settings import LLMConfig
 from backend.src.settings.config import EmbedderConfig, VectorStoreConfig
+from backend.src.settings.fosra_dirs import fosra_dirs
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -140,6 +144,19 @@ def create_fosra_agent(
         kwargs["backend"] = backend
     if checkpointer is not None:
         kwargs["checkpointer"] = checkpointer
+
+    mw_backend = FilesystemBackend(root_dir=fosra_dirs.data_dir)
+    summarization_mw = SummarizationMiddleware(
+        model=f"{llm_config.provider}:{llm_config.model}",
+        backend=mw_backend,
+        trigger=("fraction", 0.85),
+        keep=("fraction", 0.10),
+    )
+    skills_mw = SkillsMiddleware(
+        backend=mw_backend,
+        sources=[str(fosra_dirs.skills_dir)],
+    )
+    kwargs["middleware"] = [summarization_mw, skills_mw]
 
     agent = create_deep_agent(**kwargs)
 

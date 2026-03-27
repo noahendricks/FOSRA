@@ -601,12 +601,14 @@ async def run_agent_with_events(
 
                             tool_permission = _TOOL_PERMISSIONS.get(tool_name)
                             if tool_permission:
-                                request_id, future = ask_permission(
+                                request_id, future, request = ask_permission(
                                     session_id=session_id,
                                     permission=tool_permission,
-                                    patterns=[str(tool_args.get("path", ""))]
-                                    if tool_args.get("path")
-                                    else [],
+                                    patterns=[
+                                        str(tool_args.get("path", ""))
+                                        if tool_args.get("path")
+                                        else []
+                                    ],
                                     metadata={
                                         "tool": tool_name,
                                         "args": tool_args,
@@ -617,6 +619,12 @@ async def run_agent_with_events(
                                         "messageID": assistant_msg_id,
                                         "callID": call_id,
                                     },
+                                )
+                                await event_bus.publish(
+                                    {
+                                        "type": "permission.asked",
+                                        "properties": request,
+                                    }
                                 )
                                 handled_blocked_calls.add(call_id)
                                 reply = await future
@@ -633,13 +641,19 @@ async def run_agent_with_events(
                                     stream_abort = True
                                     break
                             elif tool_name == "Question":
-                                request_id, future = ask_question(
+                                request_id, future, request = ask_question(
                                     session_id=session_id,
                                     questions=tool_args.get("questions", []),
                                     tool={
                                         "messageID": assistant_msg_id,
                                         "callID": call_id,
                                     },
+                                )
+                                await event_bus.publish(
+                                    {
+                                        "type": "question.asked",
+                                        "properties": request,
+                                    }
                                 )
                                 handled_blocked_calls.add(call_id)
                                 reply = await future
