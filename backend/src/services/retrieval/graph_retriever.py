@@ -38,7 +38,7 @@ class GraphRetriever:
         self,
         query_embedding: list[float],
         node_types: list[GraphNodeType] | None = None,
-        file_ids: list[str] | None = None,
+        file_ids: list[int] | None = None,
         limit: int = 20,
     ) -> GraphQueryResult:
         """Search for nodes by embedding similarity.

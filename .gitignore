@@ -227,3 +227,4 @@ __marimo__/
 # Node modules
 tui/node_modules/
 .zed/debug.json
+tui/ARCHITECTURE.md

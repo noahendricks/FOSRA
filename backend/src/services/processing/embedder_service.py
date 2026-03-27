@@ -15,7 +15,7 @@ from backend.src.domain.schemas.doc import Chunk
 if TYPE_CHECKING:
     from backend.src.settings import EmbedderConfig
 
-from fastembed import (LateInteractionTextEmbedding, SparseTextEmbedding, TextEmbedding)
+from fastembed import LateInteractionTextEmbedding, SparseTextEmbedding, TextEmbedding
 
 from backend.src.settings import EmbedderConfig
 
@@ -39,13 +39,12 @@ class AllEmbedders(_BaseModelFlex):
 
 
 class EmbeddedQueries(_BaseModelFlex):
-    dense: list = []
+    dense: list[Any] = []
     sparse: SparseVector | None = None
     late: NumpyArray | Document | None = None
 
 
 class EmbedderService:
-
     _semaphore: asyncio.Semaphore = asyncio.Semaphore(3)
 
     def _get_embedders(self, config: EmbedderConfig):

@@ -30,13 +30,14 @@ from loguru import logger
 
 # NOTE: issues that remain: hash not implemented, other pdf parser options not available, pdf metadata type is limited to PyMuPDFParser
 class LoaderService:
-
     @staticmethod
     def _parse_files(files: list[str | Path | MDNFile]) -> list[Doc]:
         from content_types import EXTENSION_TO_CONTENT_TYPE
         from content_types import get_content_type as get_mime
         from langchain_community.document_loaders.parsers import PyMuPDFParser
-        from langchain_community.document_loaders.parsers.language.language_parser import LanguageParser
+        from langchain_community.document_loaders.parsers.language.language_parser import (
+            LanguageParser,
+        )
         from langchain_community.document_loaders.parsers.txt import TextParser
         from langchain_core.document_loaders import Blob
 
@@ -181,8 +182,9 @@ class LoaderService:
 
             if files_list:
                 logger.info("Running parse on {} files", len(files_list))
-
                 all_files = LoaderService()._parse_files(files_list)
+            else:
+                all_files = []
 
             return all_files
 

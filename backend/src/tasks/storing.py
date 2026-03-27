@@ -1,3 +1,5 @@
+from typing import Any
+
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from backend.src.settings import VectorStoreConfig
@@ -10,7 +12,7 @@ from .broker import broker
 async def store_file_vectors(
     config: VectorStoreConfig,
     embed_config,
-    chunks: list,
+    chunks: list[Any],
 ) -> list[str]:
     """Upsert source documents and their vectors into the store."""
 

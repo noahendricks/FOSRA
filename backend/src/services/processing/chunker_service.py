@@ -38,7 +38,6 @@ from backend.src.settings import ChunkerConfig
 
 
 class ChunkerService:
-
     @staticmethod
     async def chunk_documents(
         docs: list[Doc], config: ChunkerConfig
@@ -58,9 +57,7 @@ class ChunkerService:
 
                 logger.debug(f"Processing {doc_type} document: {doc.id}")
                 try:
-
                     if doc.is_code:
-
                         ccode_task = group.create_task(
                             ChunkerService._chunk_code(
                                 doc,
@@ -113,15 +110,13 @@ class ChunkerService:
 
         from backend.src.services.processing.utils.loader import code_mimes
 
-        chunks = chunker.parse(
+        parse_result = chunker.parse(
             doc.page_content, language=code_mimes[doc.metadata.mime_type]
         )
 
-        chunks.file_path = doc.metadata.source
+        parse_result.file_path = doc.metadata.source
 
-        # TODO: tsrts
-
-        return chunks
+        return parse_result.chunks
 
     @staticmethod
     async def _chunk_text(doc: Doc, config: ChunkerConfig) -> list[Chunk]:

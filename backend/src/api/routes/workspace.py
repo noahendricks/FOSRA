@@ -70,6 +70,24 @@ def _retrieved_chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrie
     )
 
 
+def _accumulated_to_retrieved(item: "AccumulatedItem") -> RetrievedChunk:
+    from backend.src.domain.schemas.retrieval import AccumulatedItem
+
+    return RetrievedChunk(
+        id=item.file_id,
+        score=item.score,
+        text=item.content,
+        payload={
+            "source_id": item.file_id,
+            "doc_title": item.path,
+            "chunk_id": item.file_id,
+            "end_char": 0,
+        },
+        start_char=item.line_start,
+        token_count=0,
+    )
+
+
 def _chunks_to_source_groups(
     chunks: list[RetrievedChunk],
 ) -> list[SourceGroupResponse]:
@@ -238,7 +256,9 @@ async def send_message_stream(
 
                 yield emit_chunk({"type": "text-end", "id": text_part_id})
 
-                source_groups = _chunks_to_source_groups(result_store.items)
+                source_groups = _chunks_to_source_groups(
+                    [_accumulated_to_retrieved(item) for item in result_store.items]
+                )
                 sources_as_dicts: list[dict[str, Any]] = [
                     group.model_dump(mode="json") for group in source_groups
                 ]

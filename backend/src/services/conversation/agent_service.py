@@ -23,12 +23,12 @@ from typing import TYPE_CHECKING, Any
 from deepagents import create_deep_agent
 from loguru import logger
 
-from backend.src.services.conversation.llm_service import LLMService
 from backend.src.services.conversation.tools import (
     RetrievalResultStore,
     create_retrieval_tool,
 )
 from backend.src.services.conversation.utils.llm_utils import build_llm
+from backend.src.settings import LLMConfig
 from backend.src.settings.config import EmbedderConfig, VectorStoreConfig
 
 if TYPE_CHECKING:
@@ -74,7 +74,31 @@ def create_fosra_agent(
         system_prompt = FOSRA_AGENT_SYSTEM_PROMPT
 
     # -- Resolve LLM ---------------------------------------------------
-    llm_config = LLMService._resolve_llm_config(user_prefs)
+    llm_config: LLMConfig
+    if user_prefs:
+        for cfg in (
+            user_prefs.llm_default,
+            user_prefs.llm_logic,
+            user_prefs.llm_fast,
+            user_prefs.llm_heavy,
+        ):
+            if cfg is not None:
+                llm_config = cfg
+                break
+        else:
+            llm_config = LLMConfig(
+                provider="openai",
+                model="Qwen3.5-35B-A3B-Q4_K_M.gguf",
+                api_key="not-needed",
+                api_base="http://localhost:8045/v1",
+            )
+    else:
+        llm_config = LLMConfig(
+            provider="openai",
+            model="Qwen3.5-35B-A3B-Q4_K_M.gguf",
+            api_key="not-needed",
+            api_base="http://localhost:8045/v1",
+        )
     llm = build_llm(llm_config)
 
     # -- Build retrieval tool ------------------------------------------

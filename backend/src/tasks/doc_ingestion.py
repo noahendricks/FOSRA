@@ -36,7 +36,7 @@ async def ingest_docs(
     embedder_config: EmbedderConfig,
     vector_config: VectorStoreConfig,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Ingest documents into Qdrant with dual collections (parents + chunks).
 
     Flow:

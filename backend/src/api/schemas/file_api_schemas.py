@@ -32,10 +32,3 @@ class FileResponse(_BaseModelFlex):
 
     class Config:
         from_attributes = True
-
-
-class FileResponse(_BaseModelFlex):
-    origin_path: str
-    uploaded_at: datetime = Field(default_factory=datetime.now)
-    name: str = ""
-    hash: str = ""

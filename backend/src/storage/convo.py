@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any
+from typing import Any, cast, cast
 
 import msgspec
 from loguru import logger
@@ -121,7 +121,7 @@ class ConvoRepo:
             if db_chat is None:
                 ConvoRepo._raise_if_not_found(convo_id, user_id)
 
-            return orm_to_domain(db_chat, ConvoFull)
+            return orm_to_domain(cast(ConvoORM, db_chat), ConvoFull)
 
         except ConvoError:
             raise
@@ -171,20 +171,20 @@ class ConvoRepo:
                     convo_update.convo_id, convo_update.user_id
                 )
 
+            chat: ConvoORM = cast(ConvoORM, db_chat)
+            _UPDATE_ALLOWLIST = {"title", "archived", "meta"}
             update_data: dict[str, Any] = convo_update.model_dump(exclude_unset=True)
 
-            _UPDATE_ALLOWLIST = {"title", "archived", "meta"}
-
             for key, value in update_data.items():
-                if key in _UPDATE_ALLOWLIST and hasattr(db_chat, key):
-                    setattr(db_chat, key, value)
+                if key in _UPDATE_ALLOWLIST and hasattr(chat, key):
+                    setattr(chat, key, value)
 
             await session.commit()
-            await session.refresh(db_chat)
+            await session.refresh(chat)
 
             logger.success(f"Updated conversation {convo_update.convo_id}")
 
-            return orm_to_domain(db_chat, Convo)
+            return orm_to_domain(chat, Convo)
 
         except ConvoError:
             raise
@@ -330,9 +330,8 @@ class ConvoRepo:
             if message_update.text is not None:
                 existing_msg.text = message_update.text
 
-            if (
-                existing_msg.metadata
-                and not existing_msg.message_metadata == message_update.message_metadata
+            if existing_msg.metadata and not (
+                existing_msg.message_metadata == message_update.message_metadata
             ):
                 existing_msg.message_metadata = message_update.message_metadata
 

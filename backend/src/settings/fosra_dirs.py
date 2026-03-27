@@ -27,12 +27,17 @@ class FosraDirs:
 
     def _ensure(self) -> None:
         created: list[str] = []
+        existing: list[str] = []
         for path in [self._fosra_dir, self._config_dir]:
-            path.mkdir(parents=True, exist_ok=True)
-            if not any(path.iterdir()):
+            if path.exists():
+                existing.append(str(path))
+            else:
+                path.mkdir(parents=True, exist_ok=True)
                 created.append(str(path))
         if created:
             logger.info(f"FOSRA directories created: {created}")
+        if existing:
+            logger.debug(f"FOSRA directories already exist: {existing}")
 
     @property
     def fosra(self) -> Path:

@@ -4,6 +4,19 @@ import time
 import numpy as np
 from pathlib import Path
 
+# Rich and Icecream for pretty printing
+from rich.pretty import pprint as pp
+from rich.console import Console
+from rich.table import Table
+from rich.syntax import Syntax
+from rich.traceback import install
+import icecream as ic
+
+install(show_locals=True)
+
+console = Console()
+ic.configureOutput(prefix="DEBUG | ", includeContext=True)
+
 # Qdrant imports
 from qdrant_client import QdrantClient
 from qdrant_client.async_qdrant_client import AsyncQdrantClient
@@ -53,7 +66,7 @@ from backend.src.services.conversation.llm_service import LLMService
 from backend.src.domain.schemas.doc import Doc, Chunk
 from backend.src.domain.schemas.retrieval import AccumulatedContext
 
-print("All imports successful!")
+pp("All imports successful!")
 
 # %% Cell 2 - Initialize Services and Clients
 embedder_config = EmbedderConfig()
@@ -66,9 +79,7 @@ vector_store_config = VectorStoreConfig(
 )
 chunker_config = ChunkerConfig()
 reranker_config = RerankerConfig()
-
-# LLM Config for agentic loop
-llm_config = LLMService._resolve_llm_config(None)  # Uses defaults
+llm_config = LLMService._resolve_llm_config(None)
 
 qdrant_client = QdrantClient(url="http://localhost:6333")
 qdrant_async_client = AsyncQdrantClient(url="http://localhost:6333")
@@ -77,45 +88,45 @@ falkordb_client = FalkorDB(host="localhost", port=6379)
 graph_service = GraphService(client=falkordb_client, graph_name="codebase")
 graph_retriever = GraphRetriever(graph_service=graph_service)
 
-print("All services initialized!")
-print(f"LLM Config: {llm_config.provider}/{llm_config.model}")
+pp("=== SERVICES INITIALIZED ===")
+ic(embedder_config, vector_store_config, reranker_config, llm_config)
+ic(type(qdrant_client), type(falkordb_client))
+pp(f"LLM: {llm_config.provider}/{llm_config.model}")
 
 
 # %% Cell 3 - Ensure Qdrant Collections Exist
 async def setup_collections():
     await VectorService.ensure_dual_collections(qdrant_async_client, embedder_config)
-    print("Collections ensured!")
 
 
-asyncio.run(setup_collections())
+await setup_collections()  # pyright: ignore
+pp("Qdrant collections ensured")
 
 
 # %% Cell 4 - Ensure FalkorDB Indexes Exist
 def setup_graph_indexes():
     graph_service.create_indexes()
-    print("Graph indexes created/verified!")
 
 
 setup_graph_indexes()
+pp("FalkorDB indexes created/verified")
 
 # %% Cell 5 - INGESTION: Qdrant Docs Folder
 QDRANT_DOCS_FOLDER = "/home/roccoluxe/Documents/docs/03-databases/qdrant"
 
 
 async def ingest_qdrant_docs_folder():
-    """Ingest all docs from the Qdrant folder into Qdrant vector store."""
     loader = LoaderService()
     structurer = HiChunkStructurer(config=chunker_config)
     embedder = EmbedderService()
 
     docs = loader._parse_directory(QDRANT_DOCS_FOLDER)
-    print(f"Loaded {len(docs)} documents from {QDRANT_DOCS_FOLDER}")
+    ic(docs)
 
     all_chunks = []
     for doc in docs:
         chunks = HiChunk.index(document=doc, structurer=structurer)
         all_chunks.extend(chunks)
-    print(f"Created {len(all_chunks)} chunks")
 
     parent_chunks = []
     leaf_chunks = []
@@ -128,15 +139,10 @@ async def ingest_qdrant_docs_folder():
         else:
             leaf_chunks.append(chunk)
 
-    print(
-        f"Separated into {len(parent_chunks)} parent chunks and {len(leaf_chunks)} leaf chunks"
-    )
-
     if parent_chunks:
         await embedder.embed_chunks(parent_chunks, embedder_config)
     if leaf_chunks:
         await embedder.embed_chunks(leaf_chunks, embedder_config)
-    print("Embeddings created")
 
     parent_points = []
     leaf_points = []
@@ -157,33 +163,31 @@ async def ingest_qdrant_docs_folder():
         "parent_chunks": parent_chunks,
         "leaf_chunks": leaf_chunks,
     }
-    print(
-        f"Qdrant docs ingestion complete: {qdrant_docs_result['docs_count']} docs, "
-        f"{qdrant_docs_result['parent_chunks_upserted']} parents, "
-        f"{qdrant_docs_result['leaf_chunks_upserted']} leaf chunks"
-    )
     return qdrant_docs_result
 
 
-qdrant_docs_result = asyncio.run(ingest_qdrant_docs_folder())
+qdrant_docs_result = await ingest_qdrant_docs_folder()  # pyright: ignore
 QDRANT_DOC_IDS = {doc.id for doc in qdrant_docs_result["docs"]}
-print(f"Qdrant doc IDs: {QDRANT_DOC_IDS}")
+pp("=== QDRANT DOCS INGESTION COMPLETE ===")
+ic(
+    qdrant_docs_result["docs_count"],
+    qdrant_docs_result["parent_chunks_upserted"],
+    qdrant_docs_result["leaf_chunks_upserted"],
+)
+ic(QDRANT_DOC_IDS)
 
 # %% Cell 6 - INGESTION: Single Markdown File
 SINGLE_FILE_PATH = "/home/roccoluxe/Documents/docs/03-databases/qdrant/01-core-concepts/documentation_concepts_filtering.md"
 
 
 async def ingest_single_file():
-    """Ingest a single markdown file into Qdrant."""
     loader = LoaderService()
     structurer = HiChunkStructurer(config=chunker_config)
     embedder = EmbedderService()
 
     docs = loader._parse_files([SINGLE_FILE_PATH])
-    print(f"Loaded document: {docs[0].metadata.doc_title}")
 
     chunks = HiChunk.index(document=docs[0], structurer=structurer)
-    print(f"Created {len(chunks)} chunks")
 
     parent_chunks = []
     leaf_chunks = []
@@ -219,15 +223,17 @@ async def ingest_single_file():
         "parent_chunks": parent_chunks,
         "leaf_chunks": leaf_chunks,
     }
-    print(
-        f"Single file ingestion complete: {len(parent_points)} parents, {len(leaf_points)} leaf chunks"
-    )
     return single_file_result
 
 
-single_file_result = asyncio.run(ingest_single_file())
+single_file_result = await ingest_single_file()  # pyright: ignore
 SINGLE_FILE_DOC_ID = single_file_result["doc"].id
-print(f"Single file doc ID: {SINGLE_FILE_DOC_ID}")
+pp("=== SINGLE FILE INGESTION COMPLETE ===")
+ic(single_file_result["doc"].metadata.doc_title, SINGLE_FILE_DOC_ID)
+ic(
+    single_file_result["parent_chunks_upserted"],
+    single_file_result["leaf_chunks_upserted"],
+)
 
 # %% Cell 7 - INGESTION: Codebase (Trustgraph Monorepo)
 CODEBASE_PATH = "/home/roccoluxe/trustgraph"
@@ -235,7 +241,6 @@ CODEBASE_REPO_NAME = "trustgraph"
 
 
 async def ingest_codebase():
-    """Ingest the trustgraph codebase into FalkorDB."""
     from pathlib import Path
     import hashlib
 
@@ -272,14 +277,7 @@ async def ingest_codebase():
     files = [f for f in files if not any(part in excluded_dirs for part in f.parts)]
     files = sorted(files)[:50]
 
-    print(f"Found {len(files)} code files to ingest (limited to 50 for demo)")
-
-    stats = {
-        "files_processed": 0,
-        "total_nodes": 0,
-        "total_call_edges": 0,
-    }
-
+    stats = {"files_processed": 0, "total_nodes": 0, "total_call_edges": 0}
     codebase_graph_results = []
 
     for file_path in files:
@@ -315,7 +313,7 @@ async def ingest_codebase():
                 codebase_graph_results.append(graph_result)
 
         except Exception as e:
-            print(f"Error processing {file_path}: {e}")
+            ic(file_path, e)
 
     codebase_result = {
         "files_processed": stats["files_processed"],
@@ -323,17 +321,14 @@ async def ingest_codebase():
         "total_call_edges": stats["total_call_edges"],
         "graph_results": codebase_graph_results,
     }
-
-    print(
-        f"Codebase ingestion complete: {stats['files_processed']} files, "
-        f"{stats['total_nodes']} nodes, {stats['total_call_edges']} edges"
-    )
     return codebase_result
 
 
-codebase_result = asyncio.run(ingest_codebase())
+codebase_result = await ingest_codebase()  # pyright: ignore
 CODEBASE_FILE_IDS = {gr.file_id for gr in codebase_result["graph_results"]}
-print(f"Codebase file IDs (sample): {list(CODEBASE_FILE_IDS)[:10]}")
+pp("=== CODEBASE INGESTION COMPLETE ===")
+ic(codebase_result)
+ic(list(CODEBASE_FILE_IDS)[:5])
 
 
 # %% Cell 8 - INGESTION SUMMARY
@@ -350,15 +345,13 @@ async def get_ingestion_stats():
     }
 
 
-ingestion_stats = asyncio.run(get_ingestion_stats())
-print("=== INGESTION SUMMARY ===")
-for k, v in ingestion_stats.items():
-    print(f"  {k}: {v}")
+ingestion_stats = await get_ingestion_stats()  # pyright: ignore
+pp("=== INGESTION SUMMARY ===")
+ic(ingestion_stats)
 
 
 # %% Cell 9 - STEP 1: Query Expansion
 async def test_query_expansion(user_query: str):
-    """Test query expansion step."""
     expansion = await QueryExpander.expand(
         user_query=user_query,
         llm_config=llm_config,
@@ -368,18 +361,24 @@ async def test_query_expansion(user_query: str):
 
 
 QUERY = "How does filtering work in Qdrant?"
-query_expansion = asyncio.run(test_query_expansion(QUERY))
-print(f"=== Query Expansion: '{QUERY}' ===")
-print(f"  Rewritten query: {query_expansion.rewritten_query}")
-print(f"  Checklist ({len(query_expansion.checklist)} items):")
+query_expansion = await test_query_expansion(QUERY)  # pyright: ignore
+pp(f"=== QUERY EXPANSION: '{QUERY}' ===")
+ic(query_expansion.rewritten_query)
+pp("Checklist:")
+
+table = Table(title="Query Expansion Checklist")
+table.add_column("ID", style="cyan")
+table.add_column("Question", style="white")
+table.add_column("Status", style="green")
+
 for item in query_expansion.checklist:
     status = "✓" if item.answered else "○"
-    print(f"    {status} [{item.id}] {item.question}")
+    table.add_row(str(item.id), item.question, status)
+console.print(table)
 
 
 # %% Cell 10 - STEP 2: Initial Retrieval (Dual Retrieve)
 async def test_initial_retrieval(query: str):
-    """Test initial retrieval with dual_retrieve."""
     parent_results, file_ids, merged_context = await VectorService.dual_retrieve(
         client=qdrant_client,
         embed_config=embedder_config,
@@ -398,23 +397,28 @@ async def test_initial_retrieval(query: str):
 
 
 INITIAL_QUERY = query_expansion.rewritten_query
-initial_retrieval_result = asyncio.run(test_initial_retrieval(INITIAL_QUERY))
-print(f"=== Initial Retrieval ===")
-print(f"  Query: {INITIAL_QUERY}")
-print(f"  Parent results: {len(initial_retrieval_result['parent_results'])}")
-print(f"  File IDs: {initial_retrieval_result['file_ids']}")
-print(f"  Merged context ({len(initial_retrieval_result['merged_context'])} chars):")
-print(f"  {initial_retrieval_result['merged_context'][:300]}...")
+initial_retrieval_result = await test_initial_retrieval(INITIAL_QUERY)  # pyright: ignore
+pp(f"=== INITIAL RETRIEVAL ===")
+pp(f"Query: {INITIAL_QUERY}")
+ic(
+    len(initial_retrieval_result["parent_results"]),
+    initial_retrieval_result["file_ids"],
+)
+pp("Merged Context Preview:")
+console.print(
+    Syntax(
+        initial_retrieval_result["merged_context"][:500],
+        "markdown",
+        theme="monokai",
+        line_numbers=True,
+    )
+)
 
 
 # %% Cell 11 - STEP 3: Agentic Loop - Assess and Plan
 async def test_agentic_loop(
-    original_query: str,
-    checklist: list,
-    context: AccumulatedContext,
-    iteration: int,
+    original_query: str, checklist: list, context: AccumulatedContext, iteration: int
 ):
-    """Test a single agentic loop iteration."""
     result = await Subagent.assess_and_plan(
         original_query=original_query,
         checklist=checklist,
@@ -445,32 +449,35 @@ for chunk in initial_retrieval_result["parent_results"]:
 
 initial_context = AccumulatedContext(items=initial_items)
 
-agentic_result_1 = asyncio.run(
-    test_agentic_loop(
-        original_query=QUERY,
-        checklist=query_expansion.checklist,
-        context=initial_context,
-        iteration=1,
-    )
+agentic_result_1 = await test_agentic_loop(  # pyright: ignore
+    original_query=QUERY,
+    checklist=query_expansion.checklist,
+    context=initial_context,
+    iteration=1,
 )
 
-print(f"=== Agentic Loop Iteration 1 ===")
-print(f"  All answered: {agentic_result_1.all_answered}")
-print(f"  Updated checklist:")
+pp("=== AGENTIC LOOP ITERATION 1 ===")
+ic(agentic_result_1.all_answered)
+
+table = Table(title="Checklist")
+table.add_column("ID", style="cyan")
+table.add_column("Question", style="white")
+table.add_column("Status", style="green")
 for item in agentic_result_1.checklist:
     status = "✓" if item.answered else "○"
-    print(f"    {status} [{item.id}] {item.question}")
-print(f"  Planned retrieval queries ({len(agentic_result_1.retrieval_queries)}):")
-for rq in agentic_result_1.retrieval_queries:
-    print(f"    - [{rq.target.value}] {rq.query}")
+    table.add_row(str(item.id), item.question, status)
+console.print(table)
+
+pp("Planned Retrieval Queries:")
+for i, rq in enumerate(agentic_result_1.retrieval_queries):
+    ic(i + 1, rq.target.value, rq.query)
 
 
-# %% Cell 12 - STEP 4: Execute Retrieval Queries from Agentic Plan
+# %% Cell 12 - STEP 4: Execute Retrieval Queries
 async def execute_retrieval_queries(
     retrieval_queries: list, current_context: AccumulatedContext
 ):
-    """Execute the retrieval queries planned by the agentic loop."""
-    from backend.src.domain.schemas.retrieval import RetrievalTarget
+    from backend.src.domain.schemas.retrieval import RetrievalTarget, AccumulatedItem
 
     new_items = []
 
@@ -490,8 +497,6 @@ async def execute_retrieval_queries(
             )
 
             for chunk in chunks:
-                from backend.src.domain.schemas.retrieval import AccumulatedItem
-
                 new_items.append(
                     AccumulatedItem(
                         file_id=chunk.payload.get("doc_id", ""),
@@ -539,53 +544,51 @@ async def execute_retrieval_queries(
                     )
 
                     for node in result.nodes:
-                        from backend.src.domain.schemas.retrieval import AccumulatedItem
-
                         new_items.append(node.to_accumulated_item())
                 except Exception as e:
-                    print(f"  Graph retrieval error: {e}")
+                    ic(e)
 
     updated_context = current_context.add_items(new_items)
     return updated_context, new_items
 
 
 if agentic_result_1.retrieval_queries:
-    updated_context, new_items = asyncio.run(
-        execute_retrieval_queries(
-            agentic_result_1.retrieval_queries,
-            initial_context,
-        )
+    updated_context, new_items = await execute_retrieval_queries(  # pyright: ignore
+        agentic_result_1.retrieval_queries, initial_context
     )
-    print(f"=== Retrieved {len(new_items)} new items ===")
-    print(f"  Total context items: {len(updated_context.items)}")
+    pp("=== RETRIEVAL EXECUTION COMPLETE ===")
+    ic(len(new_items), len(updated_context.items))
 else:
     updated_context = initial_context
-    print("No retrieval queries to execute")
+    pp("No retrieval queries to execute")
 
 # %% Cell 13 - STEP 5: Agentic Loop Iteration 2
-agentic_result_2 = asyncio.run(
-    test_agentic_loop(
-        original_query=QUERY,
-        checklist=agentic_result_1.checklist,
-        context=updated_context,
-        iteration=2,
-    )
+agentic_result_2 = await test_agentic_loop(  # pyright: ignore
+    original_query=QUERY,
+    checklist=agentic_result_1.checklist,
+    context=updated_context,
+    iteration=2,
 )
 
-print(f"=== Agentic Loop Iteration 2 ===")
-print(f"  All answered: {agentic_result_2.all_answered}")
-print(f"  Updated checklist:")
+pp("=== AGENTIC LOOP ITERATION 2 ===")
+ic(agentic_result_2.all_answered)
+
+table = Table(title="Updated Checklist")
+table.add_column("ID", style="cyan")
+table.add_column("Question", style="white")
+table.add_column("Status", style="green")
 for item in agentic_result_2.checklist:
     status = "✓" if item.answered else "○"
-    print(f"    {status} [{item.id}] {item.question}")
-print(f"  Planned retrieval queries ({len(agentic_result_2.retrieval_queries)}):")
-for rq in agentic_result_2.retrieval_queries:
-    print(f"    - [{rq.target.value}] {rq.query}")
+    table.add_row(str(item.id), item.question, status)
+console.print(table)
+
+pp("Planned Retrieval Queries:")
+for i, rq in enumerate(agentic_result_2.retrieval_queries):
+    ic(i + 1, rq.target.value, rq.query)
 
 
 # %% Cell 14 - STEP 6: Final Rerank
 def test_rerank_final(user_query: str, context: AccumulatedContext):
-    """Rerank accumulated context against original query."""
     if not context.items:
         return context
 
@@ -595,20 +598,13 @@ def test_rerank_final(user_query: str, context: AccumulatedContext):
             token_count=len(item.content.split()),
             start_char=item.line_start,
             score=item.score,
-            payload={
-                "doc_id": item.file_id,
-                "doc_title": item.path,
-            },
+            payload={"doc_id": item.file_id, "doc_title": item.path},
         )
         for item in context.items
     ]
 
     reranker = RerankerService(config=reranker_config)
-    reranked = reranker.rerank(
-        query=user_query,
-        chunks=chunks,
-        top_k=10,
-    )
+    reranked = reranker.rerank(query=user_query, chunks=chunks, top_k=10)
 
     reranked_items = []
     for chunk in reranked:
@@ -621,15 +617,21 @@ def test_rerank_final(user_query: str, context: AccumulatedContext):
 
 
 final_context = test_rerank_final(QUERY, updated_context)
-print(f"=== Final Reranked Context ===")
-print(f"  Items after rerank: {len(final_context.items)}")
-formatted = final_context.to_formatted_context()
-print(f"  Formatted context preview:\n{formatted[:500]}...")
+pp("=== FINAL RERANKED CONTEXT ===")
+ic(len(final_context.items))
+pp("Formatted Context Preview:")
+console.print(
+    Syntax(
+        final_context.to_formatted_context()[:500],
+        "markdown",
+        theme="monokai",
+        line_numbers=True,
+    )
+)
 
 
-# %% Cell 15 - FULL PIPELINE: End-to-End Retrieval Pipeline
+# %% Cell 15 - FULL PIPELINE: End-to-End
 async def run_full_retrieval_pipeline(user_query: str, max_iterations: int = 3):
-    """Run the complete retrieval pipeline end-to-end."""
     pipeline = build_retrieval_pipeline(
         llm_config=llm_config,
         embedder_config=embedder_config,
@@ -645,24 +647,27 @@ async def run_full_retrieval_pipeline(user_query: str, max_iterations: int = 3):
 
 
 PIPELINE_QUERY = "How does filtering work in Qdrant collections?"
-print(f"=== Running Full Retrieval Pipeline ===")
-print(f"  Query: {PIPELINE_QUERY}")
+pp(f"=== RUNNING FULL PIPELINE: '{PIPELINE_QUERY}' ===")
 
 start_time = time.time()
-pipeline_result = asyncio.run(run_full_retrieval_pipeline(PIPELINE_QUERY))
+pipeline_result = await run_full_retrieval_pipeline(PIPELINE_QUERY)  # pyright: ignore
 elapsed = time.time() - start_time
 
-print(f"\n  Pipeline completed in {elapsed:.2f}s")
-print(f"  Iterations: {pipeline_result.get('iteration', 'N/A')}")
-print(f"  File IDs: {pipeline_result.get('file_ids', set())}")
-print(
-    f"  Context items: {len(pipeline_result.get('accumulated_context', AccumulatedContext()).items)}"
-)
-print(
-    f"\n  Formatted context preview:\n{pipeline_result.get('formatted_context', '')[:600]}..."
+pp(f"Pipeline completed in {elapsed:.2f}s")
+ic(pipeline_result.get("iteration"), pipeline_result.get("file_ids"))
+ic(len(pipeline_result.get("accumulated_context", AccumulatedContext()).items))
+
+pp("Formatted Context Preview:")
+console.print(
+    Syntax(
+        pipeline_result.get("formatted_context", "")[:600],
+        "markdown",
+        theme="monokai",
+        line_numbers=True,
+    )
 )
 
-# %% Cell 16 - RETRIEVAL TOOL: Create and Test Tool
+# %% Cell 16 - RETRIEVAL TOOL
 result_store = RetrievalResultStore()
 
 retrieval_tool = create_retrieval_tool(
@@ -676,34 +681,33 @@ retrieval_tool = create_retrieval_tool(
     result_store=result_store,
 )
 
-print(f"=== Retrieval Tool Created ===")
-print(f"  Tool name: {retrieval_tool.name}")
-print(f"  Tool description: {retrieval_tool.description[:100]}...")
+pp("=== RETRIEVAL TOOL CREATED ===")
+ic(retrieval_tool.name)
+pp(f"Description: {retrieval_tool.description[:100]}...")
 
-# Test the tool directly
 TOOL_TEST_QUERY = "What is vector search in Qdrant?"
-print(f"\n=== Testing Retrieval Tool ===")
-print(f"  Query: {TOOL_TEST_QUERY}")
+pp(f"=== TESTING RETRIEVAL TOOL ===")
+pp(f"Query: {TOOL_TEST_QUERY}")
 
 start_time = time.time()
 tool_result = await retrieval_tool.ainvoke({"query": TOOL_TEST_QUERY, "target": "both"})
 elapsed = time.time() - start_time
 
-print(f"  Completed in {elapsed:.2f}s")
-print(f"  Result preview:\n{tool_result[:500]}...")
-print(f"  Result store items: {len(result_store.items)}")
+pp(f"Completed in {elapsed:.2f}s")
+ic(len(result_store.items))
+pp("Result Preview:")
+console.print(Syntax(tool_result[:500], "markdown", theme="monokai", line_numbers=True))
 
-# %% Cell 17 - AGENT: Create FOSRA Agent
+# %% Cell 17 - FOSRA AGENT
 from backend.src.services.conversation.utils.prompts import FOSRA_AGENT_SYSTEM_PROMPT
 
 agent, agent_result_store = create_fosra_agent(
-    user_prefs=None,  # Uses defaults
+    user_prefs=None,
     system_prompt=FOSRA_AGENT_SYSTEM_PROMPT,
 )
 
-print(f"=== FOSRA Agent Created ===")
-print(f"  Agent type: {type(agent)}")
-print(f"  Result store: {agent_result_store}")
+pp("=== FOSRA AGENT CREATED ===")
+ic(type(agent).__name__, type(agent_result_store).__name__)
 
 
 # %% Cell 18 - UTILITY: Collection Stats
@@ -713,25 +717,29 @@ async def count_collections():
     return {"parents": parents, "chunks": chunks}
 
 
-counts = asyncio.run(count_collections())
-print("=== Collection Counts ===")
-print(f"  Parents: {counts['parents']}")
-print(f"  Chunks: {counts['chunks']}")
+counts = await count_collections()  # pyright: ignore
+pp("=== COLLECTION COUNTS ===")
+ic(counts)
 
-print("\n=== REPL Ready for Interactive Testing ===")
-print("Available variables:")
-print(f"  - qdrant_docs_result: Qdrant folder ingestion result")
-print(f"  - single_file_result: Single file ingestion result")
-print(f"  - codebase_result: Codebase ingestion result")
-print(f"  - ingestion_stats: Summary of all ingested data")
-print(f"  - query_expansion: Last query expansion result")
-print(f"  - initial_retrieval_result: Initial dual_retrieve result")
-print(f"  - agentic_result_1: First agentic loop iteration")
-print(f"  - agentic_result_2: Second agentic loop iteration")
-print(f"  - updated_context: Context after retrieval queries")
-print(f"  - final_context: Reranked final context")
-print(f"  - pipeline_result: Full pipeline result")
-print(f"  - result_store: Retrieval result store")
-print(f"  - retrieval_tool: The retrieval tool")
-print(f"  - agent: The FOSRA agent")
-print(f"  - agent_result_store: Agent's result store")
+pp("=== REPL Ready for Interactive Testing ===")
+pp(
+    {
+        "available_variables": [
+            "qdrant_docs_result",
+            "single_file_result",
+            "codebase_result",
+            "ingestion_stats",
+            "query_expansion",
+            "initial_retrieval_result",
+            "agentic_result_1",
+            "agentic_result_2",
+            "updated_context",
+            "final_context",
+            "pipeline_result",
+            "result_store",
+            "retrieval_tool",
+            "agent",
+            "agent_result_store",
+        ]
+    }
+)

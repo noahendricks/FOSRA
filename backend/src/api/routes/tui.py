@@ -62,7 +62,6 @@ from backend.src.services.conversation.conversation_service import ConversationS
 
 router = APIRouter(prefix="/oc", tags=["TUI"])
 
-from backend.src.api.routes.oc.extended import router as extended_router
 from backend.src.api.routes.oc.file import router as file_router
 from backend.src.api.routes.oc.message_ops import router as message_ops_router
 from backend.src.api.routes.oc.permission import router as permission_router
@@ -80,7 +79,6 @@ router.include_router(file_router)
 router.include_router(project_router)
 router.include_router(shell_router)
 router.include_router(skill_router)
-router.include_router(extended_router)
 
 
 @router.get("/event", response_class=EventSourceResponse)

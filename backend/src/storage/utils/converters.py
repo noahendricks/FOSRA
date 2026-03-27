@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any, Iterator, Type, TypeVar, dataclass_transform
+from typing import Any, Iterator, Type, TypeVar, cast, dataclass_transform
 
 import msgspec
 from fastapi import HTTPException
@@ -85,7 +85,7 @@ def _handle_convo_relationships(
     if "messages" not in inspector.unloaded and hasattr(convo_orm, "messages"):
         data["messages"] = []
 
-        for message in convo_orm.messages:
+        for message in cast(ConvoORM, convo_orm).messages:
             msg_inspector = inspect(message)
             msg_data = msg_inspector.dict.copy()
 

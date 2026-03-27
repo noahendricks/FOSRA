@@ -37,7 +37,7 @@ async def ingest_codebase(
     falkordb_client: "FalkorDB",
     session_factory: async_sessionmaker[AsyncSession],
     recursive: bool = True,
-) -> dict:
+) -> dict[str, Any]:
     """
     ingest a codebase directory into falkordb.
 
@@ -102,7 +102,7 @@ async def ingest_single_file(
     embedder_config: EmbedderConfig,
     falkordb_client: "FalkorDB",
     session_factory: async_sessionmaker[AsyncSession],
-) -> dict:
+) -> dict[str, Any]:
     """
     ingest a single code file into falkordb.
     """
@@ -138,7 +138,7 @@ async def _process_file(
     graph_service: GraphService,
     session: AsyncSession,
     base_dir: Path,
-) -> dict:
+) -> dict[str, Any]:
     """
     process a single file: register, extract graph, upsert to falkordb.
     """
@@ -247,7 +247,7 @@ async def reindex_codebase(
     embedder_config: EmbedderConfig,
     falkordb_client: "FalkorDB",
     session_factory: async_sessionmaker[AsyncSession],
-) -> dict:
+) -> dict[str, Any]:
     """
     full re-index: clear graph and rebuild from scratch.
     """

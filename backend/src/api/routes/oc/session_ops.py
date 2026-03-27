@@ -117,11 +117,15 @@ async def _fork_copy_messages(
     id_map: dict[str, str] = {}
 
     for msg in source.messages:
-        old_id = msg.message_id
+        old_id: str | None = msg.message_id
+        if old_id is None:
+            continue
         new_id = ulid_factory()
         id_map[old_id] = new_id
 
     for msg in source.messages:
+        if msg.message_id is None:
+            continue
         new_id = id_map[msg.message_id]
         parent_id = id_map.get(msg.parent_id) if msg.parent_id else None
         root_id = id_map.get(msg.root_id) if msg.root_id else None
@@ -191,11 +195,12 @@ async def fork_session(
     new_conv_id = result.convo_id
 
     new_conv_orm = await ConvoRepo._get_convo_orm(session, new_conv_id, user_id)
-    if new_conv_orm and new_conv_orm.meta is None:
-        new_conv_orm.meta = {}
     if new_conv_orm:
-        new_conv_orm.meta = new_conv_orm.meta or {}
-        new_conv_orm.meta["parent_id"] = session_id
+        meta = new_conv_orm.meta
+        if meta is None:
+            meta = {}
+            new_conv_orm.meta = meta
+        meta["parent_id"] = session_id
     await session.commit()
 
     await _fork_copy_messages(session, session_id, new_conv_id, user_id)

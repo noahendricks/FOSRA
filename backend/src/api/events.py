@@ -9,6 +9,7 @@ import asyncio
 from uuid import uuid4
 from loguru import logger
 from dataclasses import dataclass
+from typing import Any
 
 MAX_QUEUE_SIZE = 1000
 MAX_RECENT_EVENTS = 100
@@ -17,7 +18,7 @@ MAX_RECENT_EVENTS = 100
 @dataclass
 class BusEvent:
     type: str
-    properties: dict
+    properties: dict[str, Any]
     sequence_nr: int
 
 
@@ -25,21 +26,21 @@ class EventBus:
     """asyncio-based broadcast bus. each subscriber gets its own queue."""
 
     def __init__(self) -> None:
-        self._subscribers: dict[str, asyncio.Queue] = {}
+        self._subscribers: dict[str, asyncio.Queue[BusEvent]] = {}
         self._sequence: int = 0
         self._recent: list[BusEvent] = []
         self._lock = asyncio.Lock()
 
-    def subscribe(self) -> tuple[str, asyncio.Queue]:
+    def subscribe(self) -> tuple[str, asyncio.Queue[BusEvent]]:
         sub_id = str(uuid4())
-        queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)
+        queue: asyncio.Queue[BusEvent] = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)
         self._subscribers[sub_id] = queue
         return sub_id, queue
 
     def unsubscribe(self, sub_id: str) -> None:
         self._subscribers.pop(sub_id, None)
 
-    async def publish(self, event: dict) -> None:
+    async def publish(self, event: dict[str, Any]) -> None:
         async with self._lock:
             self._sequence += 1
             seq = self._sequence

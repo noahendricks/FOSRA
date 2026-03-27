@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException
 
@@ -48,7 +48,7 @@ def _validate_command(command: str) -> str:
 @router.post("/{session_id}/shell")
 async def run_shell(
     session_id: str,
-    body: dict,
+    body: dict[str, Any],
 ):
     """
     execute a shell command.

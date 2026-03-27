@@ -21,15 +21,15 @@ if TYPE_CHECKING:
 
 session_status: dict[str, dict[str, Any]] = {}
 
-running_tasks: dict[str, asyncio.Task] = {}
+running_tasks: dict[str, asyncio.Task[Any]] = {}
 
 session_todos: dict[str, list[dict[str, Any]]] = {}
 
 session_diffs: dict[str, list[dict[str, Any]]] = {}
 
-pending_permissions: dict[str, asyncio.Future] = {}
+pending_permissions: dict[str, asyncio.Future[Any]] = {}
 
-pending_questions: dict[str, asyncio.Future] = {}
+pending_questions: dict[str, asyncio.Future[Any]] = {}
 
 permission_requests: dict[str, list[dict[str, Any]]] = {}
 
@@ -72,7 +72,7 @@ def ask_permission(
     metadata: dict[str, Any],
     always: list[str],
     tool: dict[str, Any] | None = None,
-) -> tuple[str, asyncio.Future]:
+) -> tuple[str, asyncio.Future[Any]]:
     """
     register a pending permission request and return a future that blocks until the user replies.
     returns (request_id, future).
@@ -82,7 +82,7 @@ def ask_permission(
 
     request_id = ulid_factory()
     loop = asyncio.get_running_loop()
-    future: asyncio.Future = loop.create_future()
+    future: asyncio.Future[Any] = loop.create_future()
     pending_permissions[request_id] = future
 
     request = {
@@ -102,7 +102,7 @@ def ask_question(
     session_id: str,
     questions: list[dict[str, Any]],
     tool: dict[str, Any] | None = None,
-) -> tuple[str, asyncio.Future]:
+) -> tuple[str, asyncio.Future[Any]]:
     """
     register a pending question request and return a future that blocks until the user replies.
     returns (request_id, future).
@@ -112,7 +112,7 @@ def ask_question(
 
     request_id = ulid_factory()
     loop = asyncio.get_running_loop()
-    future: asyncio.Future = loop.create_future()
+    future: asyncio.Future[Any] = loop.create_future()
     pending_questions[request_id] = future
 
     request = {

@@ -255,9 +255,6 @@ class SearchStrategy(StrEnum):
     MULTI_QUERY = "MULTI_QUERY"
 
 
-from enum import StrEnum, auto
-
-
 class DocType(StrEnum):
     """Supported document types based on official IANA Media Types."""
 

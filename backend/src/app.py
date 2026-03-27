@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
         import litellm
 
         litellm.set_verbose = False
-        litellm.suppress_debug_info
+        litellm.suppress_debug_info = True
 
         yield
 

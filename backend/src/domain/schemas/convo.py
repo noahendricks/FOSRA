@@ -18,7 +18,7 @@ class Message(DomainStruct):
     message_id: str | None = None
     parent_id: str | None = None
     root_id: str | None = None
-    metadata: None = None
+    metadata: dict[str, Any] | None = None
     attached_files: list[MDNFile] | None = None
     attached_sources: list[dict[str, Any]] | None = None
     sources_count: int = 0

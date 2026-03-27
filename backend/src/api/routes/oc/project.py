@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import time
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
@@ -22,7 +23,7 @@ from backend.src.api.schemas.tui_schemas import (
 
 router = APIRouter(prefix="/oc", tags=["Project"])
 
-_in_memory_projects: dict[str, dict] = {}
+_in_memory_projects: dict[str, dict[str, Any]] = {}
 
 
 def _default_project() -> dict:

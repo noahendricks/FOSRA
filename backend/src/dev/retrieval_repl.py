@@ -8,43 +8,14 @@ from pathlib import Path
 from rich.pretty import pprint as pp
 from rich.console import Console
 from rich.table import Table
+from rich.syntax import Syntax
+from rich.traceback import install
 import icecream as ic
 
+install(show_locals=True)
+
 console = Console()
-
-# Qdrant imports
-from qdrant_client import QdrantClient
-from qdrant_client.async_qdrant_client import AsyncQdrantClient
-
-# FalkorDB imports
-from falkordb import FalkorDB
-
-# Config imports
-from backend.src.settings.config import (
-    EmbedderConfig,
-    VectorStoreConfig,
-    RerankerConfig,
-    QdrantConfig,
-    ChunkerConfig,
-)
-from backend.src.domain.enums import VectorStoreType
-
-# Service imports
-from backend.src.services.retrieval.vector_service import VectorService, RetrievedChunk
-from backend.src.services.retrieval.graph_service import GraphService
-from backend.src.services.retrieval.graph_retriever import GraphRetriever
-from backend.src.services.retrieval.reranker_service import RerankerService
-
-# Processing imports
-from backend.src.services.processing.chunker_service import ChunkerService
-from backend.src.services.processing.embedder_service import EmbedderService
-from backend.src.services.processing.loader_service import LoaderService
-from backend.src.services.processing.hi_chunk import HiChunk, HiChunkStructurer
-from backend.src.services.processing.callgraph_service import CallGraphService
-
-# Domain imports
-from backend.src.domain.schemas.doc import Doc, Chunk
-from backend.src.domain.enums import GraphNodeType
+ic.configureOutput(prefix="DEBUG | ", includeContext=True)
 
 pp("All imports successful!")
 
@@ -67,33 +38,27 @@ falkordb_client = FalkorDB(host="localhost", port=6379)
 graph_service = GraphService(client=falkordb_client, graph_name="codebase")
 graph_retriever = GraphRetriever(graph_service=graph_service)
 
-pp(
-    {
-        "embedder_config": embedder_config,
-        "vector_store_config": vector_store_config,
-        "reranker_config": reranker_config,
-        "qdrant_client": qdrant_client,
-        "falkordb_client": falkordb_client,
-    }
-)
+pp("=== SERVICES INITIALIZED ===")
+ic(embedder_config, vector_store_config, reranker_config)
+ic(type(qdrant_client), type(falkordb_client))
 
 
 # %% Cell 3 - Ensure Qdrant Collections Exist
 async def setup_collections():
     await VectorService.ensure_dual_collections(qdrant_async_client, embedder_config)
-    pp("Collections ensured!")
 
 
 asyncio.run(setup_collections())
+pp("Qdrant collections ensured")
 
 
 # %% Cell 4 - Ensure FalkorDB Indexes Exist
 def setup_graph_indexes():
     graph_service.create_indexes()
-    pp("Graph indexes created/verified!")
 
 
 setup_graph_indexes()
+pp("FalkorDB indexes created/verified")
 
 # %% Cell 5 - INGESTION: Qdrant Docs Folder
 QDRANT_DOCS_FOLDER = "/home/roccoluxe/Documents/docs/03-databases/qdrant"
@@ -105,13 +70,12 @@ async def ingest_qdrant_docs_folder():
     embedder = EmbedderService()
 
     docs = loader._parse_directory(QDRANT_DOCS_FOLDER)
-    pp({"loaded_docs_count": len(docs), "folder": QDRANT_DOCS_FOLDER})
+    ic(docs)
 
     all_chunks = []
     for doc in docs:
         chunks = HiChunk.index(document=doc, structurer=structurer)
         all_chunks.extend(chunks)
-    pp({"total_chunks_created": len(all_chunks)})
 
     parent_chunks = []
     leaf_chunks = []
@@ -123,8 +87,6 @@ async def ingest_qdrant_docs_folder():
             parent_chunks.append(chunk)
         else:
             leaf_chunks.append(chunk)
-
-    pp({"parent_chunks": len(parent_chunks), "leaf_chunks": len(leaf_chunks)})
 
     if parent_chunks:
         await embedder.embed_chunks(parent_chunks, embedder_config)
@@ -150,13 +112,18 @@ async def ingest_qdrant_docs_folder():
         "parent_chunks": parent_chunks,
         "leaf_chunks": leaf_chunks,
     }
-    pp({"qdrant_docs_ingestion_complete": qdrant_docs_result})
     return qdrant_docs_result
 
 
 qdrant_docs_result = asyncio.run(ingest_qdrant_docs_folder())
 QDRANT_DOC_IDS = {doc.id for doc in qdrant_docs_result["docs"]}
-pp({"QDRANT_DOC_IDS": QDRANT_DOC_IDS})
+pp("=== QDRANT DOCS INGESTION COMPLETE ===")
+ic(
+    qdrant_docs_result["docs_count"],
+    qdrant_docs_result["parent_chunks_upserted"],
+    qdrant_docs_result["leaf_chunks_upserted"],
+)
+ic(QDRANT_DOC_IDS)
 
 # %% Cell 6 - INGESTION: Single Markdown File
 SINGLE_FILE_PATH = "/home/roccoluxe/Documents/docs/03-databases/qdrant/01-core-concepts/documentation_concepts_filtering.md"
@@ -168,10 +135,8 @@ async def ingest_single_file():
     embedder = EmbedderService()
 
     docs = loader._parse_files([SINGLE_FILE_PATH])
-    pp({"loaded_document": docs[0].metadata.doc_title})
 
     chunks = HiChunk.index(document=docs[0], structurer=structurer)
-    pp({"chunks_created": len(chunks)})
 
     parent_chunks = []
     leaf_chunks = []
@@ -207,13 +172,17 @@ async def ingest_single_file():
         "parent_chunks": parent_chunks,
         "leaf_chunks": leaf_chunks,
     }
-    pp({"single_file_ingestion_complete": single_file_result})
     return single_file_result
 
 
 single_file_result = asyncio.run(ingest_single_file())
 SINGLE_FILE_DOC_ID = single_file_result["doc"].id
-pp({"SINGLE_FILE_DOC_ID": SINGLE_FILE_DOC_ID})
+pp("=== SINGLE FILE INGESTION COMPLETE ===")
+ic(single_file_result["doc"].metadata.doc_title, SINGLE_FILE_DOC_ID)
+ic(
+    single_file_result["parent_chunks_upserted"],
+    single_file_result["leaf_chunks_upserted"],
+)
 
 # %% Cell 7 - INGESTION: Codebase (Trustgraph Monorepo)
 CODEBASE_PATH = "/home/roccoluxe/trustgraph"
@@ -257,8 +226,6 @@ async def ingest_codebase():
     files = [f for f in files if not any(part in excluded_dirs for part in f.parts)]
     files = sorted(files)[:50]
 
-    pp({"code_files_found": len(files), "limit": 50})
-
     stats = {"files_processed": 0, "total_nodes": 0, "total_call_edges": 0}
     codebase_graph_results = []
 
@@ -295,7 +262,7 @@ async def ingest_codebase():
                 codebase_graph_results.append(graph_result)
 
         except Exception as e:
-            pp({f"error_processing": str(file_path), "error": e})
+            ic(file_path, e)
 
     codebase_result = {
         "files_processed": stats["files_processed"],
@@ -303,13 +270,14 @@ async def ingest_codebase():
         "total_call_edges": stats["total_call_edges"],
         "graph_results": codebase_graph_results,
     }
-    pp({"codebase_ingestion_complete": codebase_result})
     return codebase_result
 
 
 codebase_result = asyncio.run(ingest_codebase())
 CODEBASE_FILE_IDS = {gr.file_id for gr in codebase_result["graph_results"]}
-pp({"CODEBASE_FILE_IDS_sample": list(CODEBASE_FILE_IDS)[:10]})
+pp("=== CODEBASE INGESTION COMPLETE ===")
+ic(codebase_result)
+ic(list(CODEBASE_FILE_IDS)[:5])
 
 
 # %% Cell 8 - Get Ingestion Summary Stats
@@ -327,7 +295,8 @@ async def get_ingestion_stats():
 
 
 ingestion_stats = asyncio.run(get_ingestion_stats())
-pp({"=== INGESTION SUMMARY ===": ingestion_stats})
+pp("=== INGESTION SUMMARY ===")
+ic(ingestion_stats)
 
 
 # %% Cell 9 - VECTOR SEARCH: Search Qdrant Documents
@@ -344,23 +313,19 @@ async def search_qdrant_docs(query: str, limit: int = 10):
 
 QDRANT_SEARCH_QUERY = "filtering in qdrant"
 qdrant_search_results = asyncio.run(search_qdrant_docs(QDRANT_SEARCH_QUERY, limit=5))
-pp(
-    {
-        "=== QDRANT SEARCH ===": {
-            "query": QDRANT_SEARCH_QUERY,
-            "results_count": len(qdrant_search_results),
-            "results": [
-                {
-                    "rank": i + 1,
-                    "score": r.score,
-                    "doc_id": r.payload.get("doc_id", "N/A")[:30],
-                    "text_preview": r.text[:80],
-                }
-                for i, r in enumerate(qdrant_search_results)
-            ],
-        }
-    }
-)
+pp(f"=== QDRANT SEARCH: '{QDRANT_SEARCH_QUERY}' ===")
+
+table = Table(title="Search Results")
+table.add_column("Rank", style="cyan")
+table.add_column("Score", style="magenta")
+table.add_column("Doc ID", style="green")
+table.add_column("Text Preview", style="white")
+
+for i, r in enumerate(qdrant_search_results):
+    table.add_row(
+        str(i + 1), f"{r.score:.4f}", r.payload.get("doc_id", "N/A")[:30], r.text[:80]
+    )
+console.print(table)
 
 
 # %% Cell 10 - VECTOR SEARCH: Dual Retrieve with Auto-Merge
@@ -384,16 +349,17 @@ async def dual_retrieve_example(query: str):
 
 DUAL_QUERY = "vector search filtering"
 dual_result = asyncio.run(dual_retrieve_example(DUAL_QUERY))
-pp(
-    {
-        "=== DUAL RETRIEVE ===": {
-            "query": DUAL_QUERY,
-            "parent_results_count": len(dual_result["parent_results"]),
-            "file_ids": dual_result["file_ids"],
-            "merged_context_chars": len(dual_result["merged_context"]),
-            "merged_context_preview": dual_result["merged_context"][:300],
-        }
-    }
+pp(f"=== DUAL RETRIEVE: '{DUAL_QUERY}' ===")
+ic(dual_result["parent_results"][:3] if dual_result["parent_results"] else [])
+ic(dual_result["file_ids"])
+pp("Merged Context Preview:")
+console.print(
+    Syntax(
+        dual_result["merged_context"][:500],
+        "markdown",
+        theme="monokai",
+        line_numbers=True,
+    )
 )
 
 
@@ -414,19 +380,10 @@ async def search_with_doc_filter(query: str, doc_ids: set[str], limit: int = 10)
 filtered_results = asyncio.run(
     search_with_doc_filter("filter", {SINGLE_FILE_DOC_ID}, limit=5)
 )
-pp(
-    {
-        "=== FILTERED SEARCH ===": {
-            "query": "filter",
-            "doc_id": SINGLE_FILE_DOC_ID,
-            "results_count": len(filtered_results),
-            "results": [
-                {"score": r.score, "text_preview": r.text[:60]}
-                for r in filtered_results
-            ],
-        }
-    }
-)
+pp(f"=== FILTERED SEARCH IN SINGLE FILE ===")
+ic(SINGLE_FILE_DOC_ID, len(filtered_results))
+for i, r in enumerate(filtered_results):
+    ic(rank=i + 1, score=r.score, text=r.text[:60])
 
 
 # %% Cell 12 - RERANKER: Rerank Search Results
@@ -438,18 +395,9 @@ def test_reranker(query: str, chunks: list[RetrievedChunk]):
 
 RERANK_QUERY = "qdrant filtering concepts"
 reranked_results = test_reranker(RERANK_QUERY, qdrant_search_results)
-pp(
-    {
-        "=== RERANKED RESULTS ===": {
-            "query": RERANK_QUERY,
-            "results_count": len(reranked_results),
-            "results": [
-                {"rank": i + 1, "score": chunk.score, "text_preview": chunk.text[:70]}
-                for i, chunk in enumerate(reranked_results)
-            ],
-        }
-    }
-)
+pp(f"=== RERANKED RESULTS: '{RERANK_QUERY}' ===")
+for i, chunk in enumerate(reranked_results):
+    ic(i + 1, chunk.score, chunk.text[:70])
 
 
 # %% Cell 13 - AUTO-MERGE: Standalone Test
@@ -461,14 +409,9 @@ def test_auto_merge(chunks: list[RetrievedChunk]):
 
 
 merged_text = test_auto_merge(qdrant_search_results)
-pp(
-    {
-        "=== AUTO-MERGE RESULT ===": {
-            "chars": len(merged_text),
-            "content": merged_text[:500],
-        }
-    }
-)
+pp("=== AUTO-MERGE RESULT ===")
+ic(len(merged_text))
+console.print(Syntax(merged_text[:500], "markdown", theme="monokai", line_numbers=True))
 
 
 # %% Cell 14 - GRAPH: Search by Name (Full-Text)
@@ -483,23 +426,10 @@ def test_search_by_name(
 
 NAME_QUERY = "filter"
 name_results = test_search_by_name(NAME_QUERY, limit=10)
-pp(
-    {
-        "=== GRAPH SEARCH BY NAME ===": {
-            "query": NAME_QUERY,
-            "total_found": name_results.total_count,
-            "nodes": [
-                {
-                    "type": node.node_type.value,
-                    "name": node.name,
-                    "qualified_name": node.qualified_name,
-                    "file_path": node.file_path,
-                }
-                for node in name_results.nodes[:5]
-            ],
-        }
-    }
-)
+pp(f"=== GRAPH SEARCH BY NAME: '{NAME_QUERY}' ===")
+ic(name_results.total_count)
+for node in name_results.nodes[:5]:
+    ic(node.node_type.value, node.name, node.qualified_name, node.file_path)
 
 
 # %% Cell 15 - GRAPH: Get Callers
@@ -510,18 +440,10 @@ def test_get_callers(function_name: str, depth: int = 1, limit: int = 50):
 
 CALLERS_QUERY = "process"
 callers_result = test_get_callers(CALLERS_QUERY, depth=1, limit=20)
-pp(
-    {
-        "=== GET CALLERS ===": {
-            "function": CALLERS_QUERY,
-            "total_callers": callers_result.total_count,
-            "callers": [
-                {"name": node.name, "qualified_name": node.qualified_name}
-                for node in callers_result.nodes[:10]
-            ],
-        }
-    }
-)
+pp(f"=== GET CALLERS: '{CALLERS_QUERY}' ===")
+ic(callers_result.total_count)
+for node in callers_result.nodes[:10]:
+    ic(node.name, node.qualified_name)
 
 
 # %% Cell 16 - GRAPH: Get Callees
@@ -532,18 +454,10 @@ def test_get_callees(function_name: str, limit: int = 50):
 
 CALLEES_QUERY = "main"
 callees_result = test_get_callees(CALLEES_QUERY, limit=20)
-pp(
-    {
-        "=== GET CALLEES ===": {
-            "function": CALLEES_QUERY,
-            "total_callees": callees_result.total_count,
-            "callees": [
-                {"name": node.name, "qualified_name": node.qualified_name}
-                for node in callees_result.nodes[:10]
-            ],
-        }
-    }
-)
+pp(f"=== GET CALLEES: '{CALLEES_QUERY}' ===")
+ic(callees_result.total_count)
+for node in callees_result.nodes[:10]:
+    ic(node.name, node.qualified_name)
 
 
 # %% Cell 17 - GRAPH: Get Call Chain
@@ -556,17 +470,10 @@ def test_get_call_chain(function_name: str, depth: int = 5, limit: int = 50):
 
 CHAIN_QUERY = "run"
 chain_result = test_get_call_chain(CHAIN_QUERY, depth=3, limit=20)
-pp(
-    {
-        "=== GET CALL CHAIN ===": {
-            "function": CHAIN_QUERY,
-            "total_paths": chain_result.total_count,
-            "paths": [
-                " -> ".join([n.name for n in path]) for path in chain_result.paths[:3]
-            ],
-        }
-    }
-)
+pp(f"=== GET CALL CHAIN: '{CHAIN_QUERY}' ===")
+ic(chain_result.total_count)
+for i, path in enumerate(chain_result.paths[:3]):
+    ic(i + 1, " -> ".join([n.name for n in path]))
 
 
 # %% Cell 18 - GRAPH: Get File Symbols
@@ -578,18 +485,10 @@ def test_get_file_symbols(file_id: str, limit: int = 100):
 if CODEBASE_FILE_IDS:
     SAMPLE_FILE_ID = list(CODEBASE_FILE_IDS)[0]
     symbols_result = test_get_file_symbols(SAMPLE_FILE_ID, limit=50)
-    pp(
-        {
-            "=== FILE SYMBOLS ===": {
-                "file_id": SAMPLE_FILE_ID,
-                "total_symbols": symbols_result.total_count,
-                "symbols": [
-                    {"type": node.node_type.value, "name": node.name}
-                    for node in symbols_result.nodes[:10]
-                ],
-            }
-        }
-    )
+    pp(f"=== FILE SYMBOLS: {SAMPLE_FILE_ID} ===")
+    ic(symbols_result.total_count)
+    for node in symbols_result.nodes[:10]:
+        ic(node.node_type.value, node.name)
 
 
 # %% Cell 19 - GRAPH: Get Inheritance Chain
@@ -602,18 +501,10 @@ def test_get_inheritance_chain(class_name: str, depth: int = 10, limit: int = 50
 
 INHERITANCE_QUERY = "Base"
 inheritance_result = test_get_inheritance_chain(INHERITANCE_QUERY, limit=20)
-pp(
-    {
-        "=== INHERITANCE CHAIN ===": {
-            "class": INHERITANCE_QUERY,
-            "total_paths": inheritance_result.total_count,
-            "paths": [
-                " -> ".join([n.name for n in path])
-                for path in inheritance_result.paths[:3]
-            ],
-        }
-    }
-)
+pp(f"=== INHERITANCE CHAIN: '{INHERITANCE_QUERY}' ===")
+ic(inheritance_result.total_count)
+for i, path in enumerate(inheritance_result.paths[:3]):
+    ic(i + 1, " -> ".join([n.name for n in path]))
 
 
 # %% Cell 20 - GRAPH: Get File Imports
@@ -625,18 +516,10 @@ def test_get_file_imports(file_id: str, limit: int = 100):
 if CODEBASE_FILE_IDS:
     SAMPLE_FILE_ID = list(CODEBASE_FILE_IDS)[0]
     imports_result = test_get_file_imports(SAMPLE_FILE_ID, limit=20)
-    pp(
-        {
-            "=== FILE IMPORTS ===": {
-                "file_id": SAMPLE_FILE_ID,
-                "total_imports": imports_result.total_count,
-                "imports": [
-                    {"name": node.name, "file_path": node.file_path}
-                    for node in imports_result.nodes[:10]
-                ],
-            }
-        }
-    )
+    pp(f"=== FILE IMPORTS: {SAMPLE_FILE_ID} ===")
+    ic(imports_result.total_count)
+    for node in imports_result.nodes[:10]:
+        ic(node.name, node.file_path)
 
 
 # %% Cell 21 - GRAPH: Semantic Search (requires embeddings)
@@ -656,21 +539,10 @@ async def test_semantic_search(
 
 SEMANTIC_QUERY_EMBEDDING = np.random.rand(embedder_config.dense_dimensions).tolist()
 semantic_result = asyncio.run(test_semantic_search(SEMANTIC_QUERY_EMBEDDING, limit=10))
-pp(
-    {
-        "=== GRAPH SEMANTIC SEARCH ===": {
-            "total_results": semantic_result.total_count,
-            "nodes": [
-                {
-                    "type": node.node_type.value,
-                    "name": node.name,
-                    "qualified_name": node.qualified_name,
-                }
-                for node in semantic_result.nodes[:5]
-            ],
-        }
-    }
-)
+pp("=== GRAPH SEMANTIC SEARCH ===")
+ic(semantic_result.total_count)
+for node in semantic_result.nodes[:5]:
+    ic(node.node_type.value, node.name, node.qualified_name)
 
 
 # %% Cell 22 - FULL PIPELINE: Vector Search + Rerank + Auto-Merge
@@ -698,16 +570,20 @@ async def full_pipeline(query: str, top_k: int = 10):
 
 FULL_PIPELINE_QUERY = "qdrant vector filtering"
 full_pipeline_result = asyncio.run(full_pipeline(FULL_PIPELINE_QUERY))
-pp(
-    {
-        "=== FULL PIPELINE ===": {
-            "query": FULL_PIPELINE_QUERY,
-            "search_results_count": len(full_pipeline_result["search_results"]),
-            "reranked_count": len(full_pipeline_result["reranked"]),
-            "merged_context_chars": len(full_pipeline_result["merged_context"]),
-            "merged_context_preview": full_pipeline_result["merged_context"][:400],
-        }
-    }
+pp(f"=== FULL PIPELINE: '{FULL_PIPELINE_QUERY}' ===")
+ic(
+    len(full_pipeline_result["search_results"]),
+    len(full_pipeline_result["reranked"]),
+    len(full_pipeline_result["merged_context"]),
+)
+pp("Merged Context Preview:")
+console.print(
+    Syntax(
+        full_pipeline_result["merged_context"][:400],
+        "markdown",
+        theme="monokai",
+        line_numbers=True,
+    )
 )
 
 
@@ -719,7 +595,8 @@ async def count_all_collections():
 
 
 collection_counts = asyncio.run(count_all_collections())
-pp({"=== COLLECTION COUNTS ===": collection_counts})
+pp("=== COLLECTION COUNTS ===")
+ic(collection_counts)
 
 
 # %% Cell 24 - UTILITY: Benchmark Search Latency
@@ -743,7 +620,8 @@ async def benchmark_search(queries: list[str]):
 
 BENCHMARK_QUERIES = ["filtering vectors", "qdrant collections", "semantic search"]
 benchmark_results = asyncio.run(benchmark_search(BENCHMARK_QUERIES))
-pp({"=== SEARCH LATENCY BENCHMARK ===": benchmark_results})
+pp("=== SEARCH LATENCY BENCHMARK ===")
+ic(benchmark_results)
 
 pp("=== REPL Ready for Interactive Testing ===")
 pp(
