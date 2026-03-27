@@ -26,17 +26,19 @@ from backend.src.api.routes.oc.state import (
     session_diffs,
     session_todos,
 )
-from backend.src.api.schemas.api_schemas import MessageResponse
+from backend.src.api.schemas.api_schemas import ConvoUpdateRequest, MessageResponse
 from backend.src.api.schemas.tui_schemas import (
+    DEFAULT_MODEL_ID,
+    DEFAULT_PROVIDER_ID,
+    PROJECT_DIR,
     AssistantMessage,
     AssistantMessagePath,
     AssistantMessageTime,
     AssistantMessageTokens,
     AssistantMessageTokensCache,
-    DEFAULT_MODEL_ID,
-    DEFAULT_PROVIDER_ID,
-    PROJECT_DIR,
     PromptRequest,
+    ReasoningPart,
+    ReasoningPartTime,
     StepFinishPart,
     StepFinishPartTokens,
     StepFinishPartTokensCache,
@@ -86,6 +88,103 @@ _TOOL_PERMISSIONS: dict[str, str] = {
     "WriteTool": "write",
     "EditTool": "edit",
 }
+
+_TOOL_NAME_MAP: dict[str, str] = {
+    "BashTool": "bash",
+    "Bash": "bash",
+    "ReadTool": "read",
+    "Read": "read",
+    "WriteTool": "write",
+    "Write": "write",
+    "EditTool": "edit",
+    "Edit": "edit",
+    "GrepTool": "grep",
+    "Grep": "grep",
+    "GlobTool": "glob",
+    "Glob": "glob",
+    "ListTool": "list",
+    "List": "list",
+    "TaskTool": "task",
+    "Task": "task",
+    "WebFetchTool": "webfetch",
+    "WebFetch": "webfetch",
+    "WebSearchTool": "websearch",
+    "WebSearch": "websearch",
+    "CodeSearchTool": "codesearch",
+    "CodeSearch": "codesearch",
+    "TodoWrite": "todowrite",
+    "TodoWriteTool": "todowrite",
+    "QuestionTool": "question",
+    "Question": "question",
+    "ApplyPatch": "apply_patch",
+    "ApplyPatchTool": "apply_patch",
+    "SkillTool": "skill",
+    "Skill": "skill",
+}
+
+
+def _normalize_tool_name(name: str) -> str:
+    """map llm tool names to tui-expected lowercase names."""
+    return _TOOL_NAME_MAP.get(name, name.lower())
+
+
+# TODO: VERY CRUDE -- should be llm generated
+def _generate_title_from_text(text: str) -> str:
+    """Generate a simple title from user message text.
+
+    Takes the first few words of the message, cleans them up,
+    and truncates to 50 characters.
+    """
+    if not text:
+        return "New Convo"
+
+    words = text.split()
+    if not words:
+        return "New Convo"
+
+    # Take first 6 words
+    title_words = words[:6]
+    title = " ".join(title_words)
+
+    # Clean up: remove common filler words at start
+    filler = {
+        "hi",
+        "hello",
+        "hey",
+        "so",
+        "please",
+        "can",
+        "could",
+        "would",
+        "i",
+        "want",
+        "need",
+        "help",
+        "with",
+        "my",
+        "the",
+        "a",
+        "an",
+        "to",
+        "of",
+        "for",
+    }
+    first_word = title_words[0].lower().rstrip(".,!?;:")
+    if first_word in filler and len(title_words) > 1:
+        # Try to find first non-filler word
+        for i, w in enumerate(title_words):
+            if w.lower().rstrip(".,!?;:") not in filler:
+                title = " ".join(title_words[i:])
+                break
+
+    # Truncate at 50 chars
+    if len(title) > 50:
+        title = title[:47] + "..."
+
+    # Clean up trailing punctuation
+    title = title.rstrip(".,!?;:")
+
+    return title if title else "New Convo"
 
 
 def _unwrap_json_text(text: str) -> str:
@@ -355,6 +454,8 @@ async def run_agent_with_events(
             tool_call_parts: dict[str, dict[str, Any]] = {}
             handled_blocked_calls: set[str] = set()
             stream_abort = False
+            reasoning_part_id: str | None = None
+            reasoning_start_time: int | None = None
 
             logger.info("[STREAM] starting astream for session {}", session_id)
             chunk_count = 0
@@ -373,30 +474,88 @@ async def run_agent_with_events(
                     repr(getattr(msg, "content", None))[:200],
                 )
                 if isinstance(msg, AIMessageChunk):
-                    if msg.content:
+                    content_blocks = getattr(msg, "content_blocks", None)
+                    if content_blocks:
+                        for block in content_blocks:
+                            block_type = (
+                                block.get("type") if isinstance(block, dict) else None
+                            )
+                            if block_type == "reasoning":
+                                reasoning_text = block.get("reasoning", "") or ""
+                                if reasoning_text:
+                                    now_ts = int(time.time())
+                                    if reasoning_part_id is None:
+                                        reasoning_part_id = ulid_factory()
+                                        reasoning_start_time = now_ts
+                                        rp = ReasoningPart(
+                                            id=reasoning_part_id,
+                                            sessionID=session_id,
+                                            messageID=assistant_msg_id,
+                                            type="reasoning",
+                                            text="",
+                                            time=ReasoningPartTime(
+                                                start=now_ts, end=None
+                                            ),
+                                        ).model_dump()
+                                        await event_bus.publish(
+                                            {
+                                                "type": "message.part.updated",
+                                                "properties": {"part": rp},
+                                            }
+                                        )
+                                    await event_bus.publish(
+                                        {
+                                            "type": "message.part.delta",
+                                            "properties": {
+                                                "sessionID": session_id,
+                                                "messageID": assistant_msg_id,
+                                                "partID": reasoning_part_id,
+                                                "field": "text",
+                                                "delta": reasoning_text,
+                                            },
+                                        }
+                                    )
+                            elif block_type == "text":
+                                text_val = block.get("text", "") or ""
+                                if text_val:
+                                    full_text += text_val
+                                    await event_bus.publish(
+                                        {
+                                            "type": "message.part.delta",
+                                            "properties": {
+                                                "sessionID": session_id,
+                                                "messageID": assistant_msg_id,
+                                                "partID": text_part_id,
+                                                "field": "text",
+                                                "delta": text_val,
+                                            },
+                                        }
+                                    )
+                    elif msg.content:
                         text_chunk = (
                             msg.content
                             if isinstance(msg.content, str)
                             else str(msg.content)
                         )
-                        full_text += text_chunk
-                        await event_bus.publish(
-                            {
-                                "type": "message.part.delta",
-                                "properties": {
-                                    "sessionID": session_id,
-                                    "messageID": assistant_msg_id,
-                                    "partID": text_part_id,
-                                    "field": "text",
-                                    "delta": text_chunk,
-                                },
-                            }
-                        )
-                        logger.info(
-                            "[STREAM] published delta len={} subscribers={}",
-                            len(text_chunk),
-                            event_bus.subscriber_count,
-                        )
+                        if text_chunk:
+                            full_text += text_chunk
+                            await event_bus.publish(
+                                {
+                                    "type": "message.part.delta",
+                                    "properties": {
+                                        "sessionID": session_id,
+                                        "messageID": assistant_msg_id,
+                                        "partID": text_part_id,
+                                        "field": "text",
+                                        "delta": text_chunk,
+                                    },
+                                }
+                            )
+                            logger.info(
+                                "[STREAM] published delta len={} subscribers={}",
+                                len(text_chunk),
+                                event_bus.subscriber_count,
+                            )
 
                     if hasattr(msg, "tool_calls") and msg.tool_calls:
                         for tc in msg.tool_calls:
@@ -407,7 +566,8 @@ async def run_agent_with_events(
 
                             tool_call_parts[call_id] = {
                                 "part_id": part_id,
-                                "tool": tool_name,
+                                "tool": _normalize_tool_name(tool_name),
+                                "tool_args": tool_args,
                                 "start": time.time(),
                             }
 
@@ -417,11 +577,11 @@ async def run_agent_with_events(
                                 messageID=assistant_msg_id,
                                 type="tool",
                                 callID=call_id,
-                                tool=tool_name,
+                                tool=_normalize_tool_name(tool_name),
                                 state=ToolStateRunning(
                                     status="running",
                                     input=tool_args,
-                                    title=tool_name,
+                                    title=_normalize_tool_name(tool_name),
                                     time=ToolStateRunningTime(start=int(time.time())),
                                 ),
                             ).model_dump()
@@ -499,19 +659,26 @@ async def run_agent_with_events(
                         tc_info = tool_call_parts[call_id]
                         end_time = int(time.time())
 
+                        tool_name = tc_info["tool"]
+                        tool_args = tc_info.get("tool_args", {})
+                        metadata: dict[str, Any] = {}
+                        if tool_name == "todowrite":
+                            todos = _parse_todo_output(str(msg.content))
+                            metadata = {"todos": todos}
+                            session_todos[session_id] = todos
                         tool_part = ToolPart(
                             id=tc_info["part_id"],
                             sessionID=session_id,
                             messageID=assistant_msg_id,
                             type="tool",
                             callID=call_id,
-                            tool=tc_info["tool"],
+                            tool=tool_name,
                             state=ToolStateCompleted(
                                 status="completed",
-                                input={},
+                                input=tool_args,
                                 output=str(msg.content)[:2000],
-                                title=tc_info["tool"],
-                                metadata={},
+                                title=tool_name,
+                                metadata=metadata,
                                 time=ToolStateCompletedTime(
                                     start=int(tc_info["start"]),
                                     end=end_time,
@@ -525,15 +692,30 @@ async def run_agent_with_events(
                             }
                         )
 
-                        if tc_info["tool"] == "TodoWrite":
-                            todos = _parse_todo_output(str(msg.content))
-                            session_todos[session_id] = todos
+                        new_text_part_id = ulid_factory()
+                        text_part = TextPart(
+                            id=new_text_part_id,
+                            sessionID=session_id,
+                            messageID=assistant_msg_id,
+                            type="text",
+                            text="",
+                            time=TextPartTime(start=int(time.time()), end=None),
+                        ).model_dump()
+                        await event_bus.publish(
+                            {
+                                "type": "message.part.updated",
+                                "properties": {"part": text_part},
+                            }
+                        )
+                        text_part_id = new_text_part_id
+
+                        if tool_name == "todowrite":
                             await event_bus.publish(
                                 {
                                     "type": "todo.updated",
                                     "properties": {
                                         "sessionID": session_id,
-                                        "todos": todos,
+                                        "todos": metadata.get("todos", []),
                                     },
                                 }
                             )
@@ -560,6 +742,22 @@ async def run_agent_with_events(
                     "properties": {"part": text_part_final},
                 }
             )
+
+            if reasoning_part_id is not None and reasoning_start_time is not None:
+                reasoning_part_final = ReasoningPart(
+                    id=reasoning_part_id,
+                    sessionID=session_id,
+                    messageID=assistant_msg_id,
+                    type="reasoning",
+                    text="",
+                    time=ReasoningPartTime(start=reasoning_start_time, end=end_time),
+                ).model_dump()
+                await event_bus.publish(
+                    {
+                        "type": "message.part.updated",
+                        "properties": {"part": reasoning_part_final},
+                    }
+                )
 
             step_finish = StepFinishPart(
                 id=step_finish_id,
@@ -630,6 +828,29 @@ async def run_agent_with_events(
                 user_id=user_id,
                 session=db_session,
             )
+
+            # Generate title from first user message if still default
+            convo = await ConversationService.get_conversation_by_id(
+                session=db_session,
+                user_id=user_id,
+                convo_id=session_id,
+            )
+            if convo.title == "New Convo" and user_text:
+                new_title = _generate_title_from_text(user_text)
+                await ConversationService.update_conversation(
+                    session=db_session,
+                    convo_update=ConvoUpdateRequest(
+                        user_id=user_id,
+                        convo_id=session_id,
+                        title=new_title,
+                    ),
+                )
+                await event_bus.publish(
+                    {
+                        "type": "session.updated",
+                        "properties": {"info": {"id": session_id, "title": new_title}},
+                    }
+                )
 
             diffs = _compute_git_diffs(PROJECT_DIR)
             session_diffs[session_id] = diffs

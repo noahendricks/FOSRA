@@ -12,6 +12,8 @@ export const Filesystem = {
     return Buffer.from(ab)
   },
   write: async (path: string, content: string): Promise<void> => {
+    const fs = require("fs")
+    fs.mkdirSync(nodePath.dirname(path), { recursive: true })
     await Bun.write(path, content)
   },
   readJson: async <T>(path: string): Promise<T> => {
@@ -19,6 +21,8 @@ export const Filesystem = {
     return await file.json()
   },
   writeJson: async (path: string, data: unknown): Promise<void> => {
+    const fs = require("fs")
+    fs.mkdirSync(nodePath.dirname(path), { recursive: true })
     await Bun.write(path, JSON.stringify(data, null, 2))
   },
   exists: async (path: string): Promise<boolean> => {

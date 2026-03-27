@@ -4,7 +4,6 @@ from typing import Annotated, AsyncGenerator
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from taskiq import TaskiqDepends
 
 from backend.src.api.lifecycle import Infrastructure
 
@@ -13,9 +12,7 @@ DEV_USER_ID = "dev-user-001"
 DEV_USER_NAME = "Development User"
 
 
-async def get_infra(
-    request: Annotated[Request, TaskiqDepends()],
-) -> Infrastructure:
+async def get_infra(request: Request) -> Infrastructure:
     if request.app.state and hasattr(request.app.state, "infra"):
         return request.app.state.infra
     else:

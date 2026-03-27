@@ -11,14 +11,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Annotated, Any
-from uuid import uuid4
-
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from loguru import logger
 
 from backend.src.api.dependencies import get_db_session
 from backend.src.api.lifecycle import global_infra
 from backend.src.domain.enums import FileSourceType, VectorStoreType
+from backend.src.storage.models import ulid_factory
 from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
@@ -195,7 +194,7 @@ async def ingest_documents(
     for p in paths:
         content = p.read_text(encoding="utf-8", errors="replace")
         mime = _guess_mime(p)
-        doc_id = str(uuid4())
+        doc_id = ulid_factory()
 
         doc = Doc(
             id=doc_id,
@@ -384,6 +383,7 @@ def _guess_mime(path: Path) -> str:
 
     type_map = {
         ".md": "text/markdown",
+        ".mdx": "text/markdown",
         ".txt": "text/plain",
         ".rst": "text/x-rst",
         ".html": "text/html",

@@ -36,6 +36,10 @@ from backend.src.api.schemas.api_schemas import (
     ConvoUpdateRequest,
     NewConvoRequest,
 )
+from backend.src.api.schemas.provider_registry import (
+    get_config_providers_response,
+    get_provider_list_response,
+)
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_USER_ID,
     PROJECT_DIR,
@@ -45,7 +49,6 @@ from backend.src.api.schemas.tui_schemas import (
     convo_to_session,
     get_agents,
     get_default_config,
-    get_default_provider,
     message_to_tui,
 )
 from backend.src.services.conversation.conversation_service import ConversationService
@@ -178,7 +181,7 @@ async def create_session(
     return session_info
 
 
-@router.put("/session/{session_id}")
+@router.patch("/session/{session_id}")
 async def update_session(
     session_id: str,
     body: dict[str, Any],
@@ -349,12 +352,9 @@ async def get_config():
 
 
 @router.get("/config/provider")
+@router.get("/config/providers")
 async def get_config_providers():
-    provider = get_default_provider()
-    return {
-        "providers": [provider],
-        "default": {"litellm": "default"},
-    }
+    return get_config_providers_response()
 
 
 # PROVIDERS
@@ -362,12 +362,7 @@ async def get_config_providers():
 
 @router.get("/provider")
 async def list_providers():
-    provider = get_default_provider()
-    return {
-        "all": [provider],
-        "default": {"litellm": "default"},
-        "connected": ["litellm"],
-    }
+    return get_provider_list_response()
 
 
 @router.get("/provider/auth")

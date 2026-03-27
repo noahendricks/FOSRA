@@ -73,7 +73,7 @@ class DocORM(Base):
         String(64), unique=True, nullable=False, index=True
     )
 
-    name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(64), index=True)
 
     type: Mapped[SourceType] = mapped_column(String(50), nullable=False)
 

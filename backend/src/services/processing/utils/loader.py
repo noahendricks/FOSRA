@@ -18,5 +18,6 @@ text_mimes = {
     "tsv": "text/tab-separated-values",
     "md": "text/markdown",
     "markdown": "text/markdown",
+    "mdx": "text/markdown",
     "rtx": "text/richtext",
 }

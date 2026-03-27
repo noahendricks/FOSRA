@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from taskiq import AsyncTaskiqTask
@@ -62,11 +62,11 @@ async def ingest_docs(
     infra = get_infra()
     client = infra.qdrant_client
 
-    if not isinstance(client, QdrantClient):
-        raise RuntimeError("QdrantClient required for doc ingestion")
+    if not isinstance(client, AsyncQdrantClient):
+        raise RuntimeError("AsyncQdrantClient required for doc ingestion")
 
     # ensure collections exist
-    VectorService.ensure_dual_collections(client, embedder_config)
+    await VectorService.ensure_dual_collections(client, embedder_config)
 
     # step 1: register in docs table (optional)
     if session_factory:
@@ -178,15 +178,15 @@ async def reindex_docs(
     infra = get_infra()
     client = infra.qdrant_client
 
-    if not isinstance(client, QdrantClient):
-        raise RuntimeError("QdrantClient required for reindex")
+    if not isinstance(client, AsyncQdrantClient):
+        raise RuntimeError("AsyncQdrantClient required for reindex")
 
     # drop existing collections
-    VectorService.delete_collection(client, PARENTS_COLLECTION)
-    VectorService.delete_collection(client, CHUNKS_COLLECTION)
+    await VectorService.delete_collection(client, PARENTS_COLLECTION)
+    await VectorService.delete_collection(client, CHUNKS_COLLECTION)
 
     # recreate
-    VectorService.ensure_dual_collections(client, embedder_config)
+    await VectorService.ensure_dual_collections(client, embedder_config)
 
     # load all docs from postgres
     async with session_factory() as session:

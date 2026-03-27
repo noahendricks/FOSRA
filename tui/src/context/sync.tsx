@@ -209,6 +209,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("session_diff", event.properties.sessionID, event.properties.diff)
           break
 
+        case "session.created": {
+          setStore(
+            "session",
+            produce((draft: any) => {
+              const result = Binary.search(draft, event.properties.info.id, (s: any) => s.id)
+              if (!result.found) {
+                draft.splice(result.index, 0, event.properties.info)
+              }
+            }),
+          )
+          break
+        }
         case "session.deleted": {
           const result = Binary.search(store.session, event.properties.info.id, (s: any) => s.id)
           if (result.found) {

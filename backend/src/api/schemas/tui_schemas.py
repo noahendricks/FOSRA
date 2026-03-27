@@ -220,7 +220,7 @@ def get_default_provider() -> dict[str, Any]:
 def get_agents() -> list[dict[str, Any]]:
     return [
         Agent(
-            name="fosra",
+            name="FOSRA",
             description="Knowledge retrieval assistant",
             mode="primary",
             permission=PermissionRuleset(),
@@ -228,7 +228,7 @@ def get_agents() -> list[dict[str, Any]]:
             topP=None,
         ).model_dump(),
         Agent(
-            name="fosra-coding",
+            name="FOSRA CODING",
             description="Coding assistant with file access",
             mode="primary",
             color="#00ff88",

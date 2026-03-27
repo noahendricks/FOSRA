@@ -7,6 +7,7 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from falkordb import Graph
+
     from backend.src.settings import EmbedderConfig
 
 from backend.src.domain.enums import GraphNodeType
@@ -45,6 +46,7 @@ class GraphService:
         embeds function/class nodes for semantic search.
         """
         graph = self._get_graph()
+
         stats = {
             "nodes_created": 0,
             "edges_created": 0,
@@ -273,30 +275,41 @@ class GraphService:
         )
 
     def create_indexes(self) -> None:
-        """create indexes for the graph."""
+        """create indexes for the graph (idempotent)."""
         graph = self._get_graph()
 
-        graph.create_node_range_index("File", "file_id")
-        graph.create_node_range_index("File", "path")
-        graph.create_node_range_index("Function", "qualified_name")
-        graph.create_node_range_index("Function", "name")
-        graph.create_node_range_index("Class", "qualified_name")
-        graph.create_node_range_index("Class", "name")
+        for label, prop in [
+            ("File", "file_id"),
+            ("File", "path"),
+            ("Function", "qualified_name"),
+            ("Function", "name"),
+            ("Class", "qualified_name"),
+            ("Class", "name"),
+        ]:
+            try:
+                graph.create_node_range_index(label, prop)
+            except Exception as e:
+                if "already indexed" not in str(e).lower():
+                    logger.warning(f"Index creation warning for {label}.{prop}: {e}")
 
-        graph.create_node_vector_index(
-            "Function",
-            "embedding",
-            dim=768,
-            similarity_function="cosine",
-        )
-        graph.create_node_vector_index(
-            "Class",
-            "embedding",
-            dim=768,
-            similarity_function="cosine",
-        )
+        for label, prop, dim in [
+            ("Function", "embedding", 768),
+            ("Class", "embedding", 768),
+        ]:
+            try:
+                graph.create_node_vector_index(
+                    label,
+                    prop,
+                    dim=dim,
+                    similarity_function="cosine",
+                )
+            except Exception as e:
+                if "already indexed" not in str(e).lower():
+                    logger.warning(
+                        f"Vector index creation warning for {label}.{prop}: {e}"
+                    )
 
-        logger.info(f"Created indexes for graph '{self._graph_name}'")
+        logger.info(f"Ensured indexes for graph '{self._graph_name}'")
 
     async def semantic_search(
         self,

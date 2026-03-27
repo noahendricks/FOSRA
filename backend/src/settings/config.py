@@ -108,7 +108,7 @@ class NeuralChunkerConfig(_BaseModelFlex):
 
 class TokenChunkerConfig(_BaseModelFlex):
     tokenizer: str = "character"
-    chunk_size: int = 2048
+    chunk_size: int = 200
     chunk_overlap: int | float = 0
 
 
@@ -256,8 +256,8 @@ class EmbedderConfig(_BaseModelFlex):
 
     embedder_type: EmbedderType = EmbedderType.FASTEMBED
 
-    dense_model: str = "nomic-ai/nomic-embed-text-v1.5"
-    dense_dimensions: int = 768
+    dense_model: str = "BAAI/bge-small-en-v1.5"
+    dense_dimensions: int = 384
 
     sparse_enabled: bool = True
     sparse_model: str | None = "prithivida/Splade_PP_en_v1"

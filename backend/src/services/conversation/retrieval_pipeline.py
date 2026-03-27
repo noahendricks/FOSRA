@@ -164,10 +164,10 @@ def build_retrieval_pipeline(
         }
 
     async def initial_retrieve_node(state: RetrievalState) -> dict:
-        """Initial retrieval on rewritten query (dual: parents + chunks)."""
+        """Initial retrieval on rewritten query (chunks + auto-merge hierarchical upgrade)."""
         query = state["query_expansion"].rewritten_query
 
-        parent_results, chunk_results, file_ids = await VectorService.dual_retrieve(
+        parent_results, file_ids, merged_context = await VectorService.dual_retrieve(
             client=qdrant_client,
             embed_config=embedder_config,
             query=query,
@@ -175,25 +175,21 @@ def build_retrieval_pipeline(
             chunks_top_k=chunks_top_k,
         )
 
-        items: list[AccumulatedItem] = []
-        for c in parent_results:
-            items.append(_retrieved_chunk_to_item(c))
-        for c in chunk_results:
-            items.append(_retrieved_chunk_to_item(c))
-
-        context = AccumulatedContext(items=items)
-
+        # Use merged_context as primary LLM input (hierarchically merged chunks)
+        # parent_results available for fallback if needed
         logger.debug(
-            "Pipeline: initial retrieve → {} parents, {} chunks, {} unique files",
+            "Pipeline: initial retrieve → {} parent_refs, {} unique files, merged chars: {}",
             len(parent_results),
-            len(chunk_results),
             len(file_ids),
+            len(merged_context),
         )
 
         return {
-            "accumulated_context": context,
+            "accumulated_context": None,  # Will use merged_context instead
             "file_ids": file_ids,
             "iteration": 1,
+            "merged_context": merged_context,
+            "parent_results": parent_results,
         }
 
     async def agentic_loop_node(state: RetrievalState) -> dict:

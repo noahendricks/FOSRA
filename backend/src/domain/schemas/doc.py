@@ -38,6 +38,7 @@ class BaseDocumentMetadata(BaseModel):
     source: str | None = None
     mime_type: str | None = None
 
+
 class PDFMetadata(BaseDocumentMetadata):
     content_type: Literal["pdf"] = "pdf"
 
@@ -155,11 +156,11 @@ class Doc(BaseModel):
 
     @property
     def is_code(self) -> bool:
-        return self.metadata.mime_type in code_mimes
+        return self.metadata.mime_type in code_mimes.values()
 
     @property
     def is_text(self) -> bool:
-        return self.metadata.mime_type in text_mimes
+        return self.metadata.mime_type in text_mimes.values()
 
 
 class HierarchicalChunk(_BaseModelFlex):
@@ -205,7 +206,6 @@ class ChunkMetadata(_BaseModelFlex):
     sparse_embedding: Any | SparseVector = None
     late_embedding: list[float] = []
     parent: HierarchicalChunk | None = Field(default=None, validate_default=False)
-
 
 
 class Chunk(_BaseModelFlex):

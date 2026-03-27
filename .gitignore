@@ -40,7 +40,7 @@ pip-delete-this-directory.txt
 
 .opencode
 
-opencode/
+#opencode/
 
 # Unit test / coverage reports
 htmlcov/
@@ -226,3 +226,4 @@ __marimo__/
 
 # Node modules
 tui/node_modules/
+.zed/debug.json

@@ -66,23 +66,21 @@ class FlatChunkProducer:
         return flat
 
     def _flatten(self, node: HierarchicalChunk) -> list[Chunk]:
-        if node.is_leaf:
-            if node.token_count < 5 or node.text.strip() == "":
-                return []
+        result = []
 
+        if node.token_count >= 5 and node.text.strip() != "":
             meta = ChunkMetadata(
                 token_count=node.token_count,
                 start_char=node.start_char,
                 end_char=node.end_char,
                 parent=node,
             )
+            result.append(Chunk(text=node.text, metadata=meta))
 
-            return [Chunk(text=node.text, metadata=meta)]
+        if not node.is_leaf:
+            for child in node.children:
+                result.extend(self._flatten(child))
 
-        result = []
-
-        for child in node.children:
-            result.extend(self._flatten(child))
         return result
 
 

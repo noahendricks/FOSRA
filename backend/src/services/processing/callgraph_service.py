@@ -117,14 +117,8 @@ FUNCTION_QUERY_PATTERNS = {
         (function_definition
           name: (identifier) @name
           parameters: (parameters) @params
-          return_type: (type) @return_type?
+          return_type: (type)? @return_type
           body: (block) @body
-        ) @func
-        (async_statement
-          (function_definition
-            name: (identifier) @name
-            parameters: (parameters) @params
-          )
         ) @func
     """,
     "javascript": """
@@ -659,8 +653,10 @@ class CallGraphService:
 
     def _is_async(self, func_node: Any, language: str) -> bool:
         if language == "python":
-            parent = func_node.parent
-            return parent is not None and parent.type == "async_statement"
+            for child in func_node.children:
+                if child.type == "async":
+                    return True
+            return False
         if language in ("javascript", "typescript"):
             for child in func_node.children:
                 if child.type == "async":

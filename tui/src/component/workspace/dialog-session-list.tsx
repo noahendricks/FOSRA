@@ -57,7 +57,7 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
     const today = new Date().toDateString()
     return sessions()
       .filter((x) => {
-        if (x.parentID !== undefined) return false
+        if (x.parentID != null) return false
         if (props.workspaceID && listed()) return true
         if (props.workspaceID) return x.workspaceID === props.workspaceID
         if (props.localOnly) return !x.workspaceID

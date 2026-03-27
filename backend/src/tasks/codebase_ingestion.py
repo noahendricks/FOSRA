@@ -148,13 +148,14 @@ async def _process_file(
         return {"nodes_created": 0, "edges_created": 0}
 
     source_code = file_path.read_text()
-    checksum = hashlib.sha256(source_code.encode()).hexdigest()
 
     relative_path = (
         str(file_path.relative_to(base_dir))
         if file_path.is_relative_to(base_dir)
         else str(file_path)
     )
+
+    checksum = hashlib.sha256(f"{relative_path}:{source_code}".encode()).hexdigest()
 
     existing = await session.execute(
         select(DocORM).where(
@@ -176,7 +177,6 @@ async def _process_file(
     else:
         doc = DocORM(
             path=relative_path,
-            filename=file_path.name,
             language=language,
             repo=repo_name,
             source_type=FileSourceType.CODEBASE.value,
@@ -184,6 +184,8 @@ async def _process_file(
             doc_hash=checksum,
             name=file_path.name,
             type="code",
+            doc_summary="",
+            summary_embedding="",
         )
 
         session.add(doc)

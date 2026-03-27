@@ -33,4 +33,8 @@ async def shutdown(state: TaskiqState):
 
 
 def get_infra(state: TaskiqState = TaskiqDepends()) -> Infrastructure:
-    return state.infra
+    from backend.src.api.lifecycle import global_infra
+
+    if isinstance(state, TaskiqState):
+        return state.infra
+    return global_infra

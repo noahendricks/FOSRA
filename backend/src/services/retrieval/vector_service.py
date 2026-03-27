@@ -13,9 +13,9 @@ from qdrant_client.conversions.common_types import QueryResponse
 from qdrant_client.models import ScoredPoint
 
 from backend.src.domain.enums import RetrievalMode, VectorStoreType
-from backend.src.settings import EmbedderConfig, VectorStoreConfig
 from backend.src.domain.schemas.doc import Chunk
 from backend.src.services.processing.embedder_service import EmbedderService
+from backend.src.settings import EmbedderConfig, VectorStoreConfig
 
 if TYPE_CHECKING:
     pass
@@ -49,12 +49,12 @@ class RetrievedChunk(_BaseModelFlex):
 
 class VectorService:
     @staticmethod
-    def ensure_dual_collections(
-        client: QdrantClient, embedder_config: EmbedderConfig
+    async def ensure_dual_collections(
+        client: AsyncQdrantClient, embedder_config: EmbedderConfig
     ) -> None:
         for collection_name in [PARENTS_COLLECTION, CHUNKS_COLLECTION]:
-            if not client.collection_exists(collection_name):
-                client.create_collection(
+            if not await client.collection_exists(collection_name):
+                await client.create_collection(
                     collection_name=collection_name,
                     vectors_config={
                         "dense": models.VectorParams(
@@ -75,26 +75,26 @@ class VectorService:
 
     @staticmethod
     async def upsert_parents(
-        client: QdrantClient,
+        client: AsyncQdrantClient,
         chunks: list[Chunk],
         embed_config: EmbedderConfig,
     ) -> list[models.PointStruct]:
         points = await VectorService.build_parent_points(chunks, embed_config)
 
-        client.upsert(collection_name=PARENTS_COLLECTION, points=points)
+        await client.upsert(collection_name=PARENTS_COLLECTION, points=points)
 
         logger.info(f"Upserted {len(points)} parent chunks to {PARENTS_COLLECTION}")
         return points
 
     @staticmethod
     async def upsert_chunks(
-        client: QdrantClient,
+        client: AsyncQdrantClient,
         chunks: list[Chunk],
         embed_config: EmbedderConfig,
     ) -> list[models.PointStruct]:
         points = await VectorService.build_points(chunks, embed_config)
 
-        client.upsert(collection_name=CHUNKS_COLLECTION, points=points)
+        await client.upsert(collection_name=CHUNKS_COLLECTION, points=points)
 
         logger.info(f"Upserted {len(points)} leaf chunks to {CHUNKS_COLLECTION}")
         return points
@@ -105,6 +105,9 @@ class VectorService:
     ) -> list[models.PointStruct]:
         points = []
         for chunk in chunks:
+            parent = chunk.metadata.parent
+            grandparent = getattr(parent, "parent", None) if parent else None
+
             points.append(
                 models.PointStruct(
                     id=str(uuid4()),
@@ -121,7 +124,28 @@ class VectorService:
                         "token_count": chunk.metadata.token_count,
                         "start_char": chunk.metadata.start_char,
                         "end_char": chunk.metadata.end_char,
-                        "level": "parent",
+                        "level": parent.level if parent else 1,
+                        # Hierarchy for Auto-Merge
+                        "parent_text": parent.text if parent else None,
+                        "parent_token_count": parent.token_count if parent else 0,
+                        "parent_start_char": parent.start_char if parent else None,
+                        "parent_end_char": parent.end_char if parent else None,
+                        "parent_level": parent.level if parent else None,
+                        "grandparent_text": grandparent.text if grandparent else None,
+                        "grandparent_token_count": grandparent.token_count
+                        if grandparent
+                        else 0,
+                        "grandparent_start_char": grandparent.start_char
+                        if grandparent
+                        else None,
+                        "grandparent_level": grandparent.level if grandparent else None,
+                        # For grouping siblings during merge check
+                        "parent_id": f"{chunk.metadata.doc_id}:{parent.start_char}:{parent.end_char}"
+                        if parent
+                        else None,
+                        "grandparent_id": f"{chunk.metadata.doc_id}:{grandparent.start_char}:{grandparent.end_char}"
+                        if grandparent
+                        else None,
                     },
                 )
             )
@@ -227,7 +251,10 @@ class VectorService:
         filters: dict[str, Any] | None = None,
         parents_top_k: int = 20,
         chunks_top_k: int = 10,
-    ) -> tuple[list[RetrievedChunk], list[RetrievedChunk], set[str]]:
+        token_budget: int = 4096,
+        merge_threshold: float = 0.5,
+    ) -> tuple[list[RetrievedChunk], set[str], str]:
+        # Search both collections
         parent_results = await VectorService.search_collection(
             client, PARENTS_COLLECTION, embed_config, query, filters, parents_top_k
         )
@@ -237,18 +264,19 @@ class VectorService:
         )
 
         file_ids = set()
-
-        for r in parent_results:
+        for r in parent_results + chunk_results:
             doc_id = r.payload.get("doc_id")
             if doc_id:
                 file_ids.add(doc_id)
 
-        for r in chunk_results:
-            doc_id = r.payload.get("doc_id")
-            if doc_id:
-                file_ids.add(doc_id)
+        # Hierarchical auto-merge: groups chunk results and potentially upgrades to parent
+        # Returns merged text suitable for direct LLM context
+        merged_text = VectorService.auto_merge(
+            chunk_results, token_budget, merge_threshold
+        )
 
-        return parent_results, chunk_results, file_ids
+        # Return parent_results for fallback/reference, merged_context for LLM
+        return parent_results, file_ids, merged_text
 
     @staticmethod
     async def count_points(client: AsyncQdrantClient, collection_name: str) -> int:
@@ -256,9 +284,11 @@ class VectorService:
         return result.count
 
     @staticmethod
-    def delete_collection(client: QdrantClient, collection_name: str) -> bool:
-        if client.collection_exists(collection_name):
-            client.delete_collection(collection_name)
+    async def delete_collection(
+        client: AsyncQdrantClient, collection_name: str
+    ) -> bool:
+        if await client.collection_exists(collection_name):
+            await client.delete_collection(collection_name)
             logger.info(f"Deleted collection: {collection_name}")
             return True
         return False
@@ -267,7 +297,6 @@ class VectorService:
     def _get_store(
         config: VectorStoreConfig, embedder_config: EmbedderConfig
     ) -> VectorStore | QdrantClient | None:
-
         store_type: str | None = config.preferred_store
 
         match store_type:
@@ -319,8 +348,6 @@ class VectorService:
                 # pass store to action wrapper function
                 # return vector id's and success or fail
             # etc,etc,etc..
-
-    #  langchain vector stores:
 
     # action wrapper functions
     @staticmethod
@@ -384,7 +411,6 @@ class VectorService:
     async def search(
         config: VectorStoreConfig, embed_config: EmbedderConfig, query: str
     ):
-
         store: VectorStore | QdrantClient | None = VectorService._get_store(
             config, embedder_config=embed_config
         )
