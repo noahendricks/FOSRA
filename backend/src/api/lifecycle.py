@@ -128,11 +128,13 @@ class Infrastructure:
 
     async def _init_checkpointer(self):
         try:
-            from langgraph.checkpoint.postgres import AsyncPostgresSaver
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
             conn_string = settings.database.url
-            self.checkpointer = AsyncPostgresSaver.from_conn_string(conn_string)
-            await self.checkpointer.setup()
+            conn_string = conn_string.replace("+asyncpg", "").replace("+psycopg2", "")
+            async with AsyncPostgresSaver.from_conn_string(conn_string) as saver:
+                await saver.setup()
+                self.checkpointer = saver
             logger.info("LangGraph Postgres checkpointer initialized.")
         except Exception as e:
             logger.warning(
@@ -140,7 +142,7 @@ class Infrastructure:
                 "Agent will be stateless per turn.",
                 e,
             )
-        self.checkpointer: AsyncPostgresSaver | None = None
+            self.checkpointer = None
 
     async def close(self):
         if self.qdrant_client:
