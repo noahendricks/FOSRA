@@ -50,6 +50,11 @@ def create_retrieval_tool(
     token_budget: int = 4096,
     max_iterations: int = 5,
     result_store: RetrievalResultStore | None = None,
+    rrf_parent_weight: float = 3.0,
+    rrf_chunk_weight: float = 1.0,
+    feedback_a: float = 0.24,
+    feedback_b: float = 1.35,
+    feedback_c: float = 0.59,
 ):
     """Create a ``search_knowledge_base`` tool bound to the given configs.
 
@@ -61,6 +66,12 @@ def create_retrieval_tool(
         If provided, the tool writes its retrieved items into this
         store after each invocation so the caller can forward them to
         the frontend.
+    rrf_parent_weight:
+        Weight for parent results in weighted RRF fusion (default 3.0).
+    rrf_chunk_weight:
+        Weight for chunk results in weighted RRF fusion (default 1.0).
+    feedback_a, feedback_b, feedback_c:
+        Naive relevance feedback formula parameters (default 0.24, 1.35, 0.59).
     """
     from backend.src.services.conversation.retrieval_pipeline import (
         build_retrieval_pipeline,
@@ -74,6 +85,11 @@ def create_retrieval_tool(
         falkordb_client=falkordb_client,
         token_budget=token_budget,
         max_iterations=max_iterations,
+        rrf_parent_weight=rrf_parent_weight,
+        rrf_chunk_weight=rrf_chunk_weight,
+        feedback_a=feedback_a,
+        feedback_b=feedback_b,
+        feedback_c=feedback_c,
     )
 
     @tool

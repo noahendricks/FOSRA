@@ -26,6 +26,7 @@ from qdrant_client.async_qdrant_client import AsyncQdrantClient
 
 PARENTS_COLLECTION = "parents"
 CHUNKS_COLLECTION = "chunks"
+RRF_K = 60
 
 
 class _BaseModelFlex(BaseModel):
@@ -244,6 +245,44 @@ class VectorService:
             raise RuntimeError(f"Search failed on {collection_name}: {e}")
 
     @staticmethod
+    def _weighted_rrf_fuse(
+        parent_results: list[RetrievedChunk],
+        chunk_results: list[RetrievedChunk],
+        parent_weight: float = 3.0,
+        chunk_weight: float = 1.0,
+        k: int = RRF_K,
+    ) -> list[RetrievedChunk]:
+        """Fuse parent and chunk results using weighted Reciprocal Rank Fusion.
+
+        Parents are weighted higher so they rank more favorably in tiebreaker cases.
+        """
+        all_chunks: dict[str, RetrievedChunk] = {}
+        for r in parent_results:
+            chunk_id = r.payload.get("chunk_id", r.payload.get("source_id", ""))
+            if chunk_id not in all_chunks:
+                all_chunks[chunk_id] = r
+
+        for r in chunk_results:
+            chunk_id = r.payload.get("chunk_id", r.payload.get("source_id", ""))
+            if chunk_id not in all_chunks:
+                all_chunks[chunk_id] = r
+
+        ranked_parents = {
+            r.payload.get("chunk_id", ""): rank for rank, r in enumerate(parent_results)
+        }
+        ranked_chunks = {
+            r.payload.get("chunk_id", ""): rank for rank, r in enumerate(chunk_results)
+        }
+
+        for chunk_id, chunk in all_chunks.items():
+            p_rank = ranked_parents.get(chunk_id, len(parent_results))
+            c_rank = ranked_chunks.get(chunk_id, len(chunk_results))
+            fused_score = (parent_weight / (p_rank + k)) + (chunk_weight / (c_rank + k))
+            chunk.score = fused_score
+
+        return list(all_chunks.values())
+
+    @staticmethod
     async def dual_retrieve(
         client: QdrantClient,
         embed_config: EmbedderConfig,
@@ -253,8 +292,9 @@ class VectorService:
         chunks_top_k: int = 10,
         token_budget: int = 4096,
         merge_threshold: float = 0.5,
+        parent_weight: float = 3.0,
+        chunk_weight: float = 1.0,
     ) -> tuple[list[RetrievedChunk], set[str], str]:
-        # Search both collections
         parent_results = await VectorService.search_collection(
             client, PARENTS_COLLECTION, embed_config, query, filters, parents_top_k
         )
@@ -263,20 +303,19 @@ class VectorService:
             client, CHUNKS_COLLECTION, embed_config, query, filters, chunks_top_k
         )
 
-        file_ids = set()
-        for r in parent_results + chunk_results:
-            doc_id = r.payload.get("doc_id")
-            if doc_id:
-                file_ids.add(doc_id)
+        fused = VectorService._weighted_rrf_fuse(
+            parent_results, chunk_results, parent_weight, chunk_weight
+        )
 
-        # Hierarchical auto-merge: groups chunk results and potentially upgrades to parent
-        # Returns merged text suitable for direct LLM context
+        file_ids = {
+            r.payload.get("doc_id", "") for r in fused if r.payload.get("doc_id")
+        }
+
         merged_text = VectorService.auto_merge(
             chunk_results, token_budget, merge_threshold
         )
 
-        # Return parent_results for fallback/reference, merged_context for LLM
-        return parent_results, file_ids, merged_text
+        return fused, file_ids, merged_text
 
     @staticmethod
     async def count_points(client: AsyncQdrantClient, collection_name: str) -> int:
@@ -707,12 +746,14 @@ class VectorService:
 
         for sp in results:
             if sp.payload:
+                payload = dict(sp.payload)
+                payload["point_id"] = str(sp.id)
                 rc = RetrievedChunk(
                     score=sp.score,
-                    payload=sp.payload,
-                    text=sp.payload.get("text", "Text Error"),
-                    start_char=sp.payload.get("start_char", 0),
-                    token_count=sp.payload.get("token_count", 0),
+                    payload=payload,
+                    text=payload.get("text", "Text Error"),
+                    start_char=payload.get("start_char", 0),
+                    token_count=payload.get("token_count", 0),
                 )
                 retrieved_chunks.append(rc)
 

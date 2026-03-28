@@ -149,6 +149,12 @@ class RetrievalSettings(BaseSettings):
     rerank_top_n: int = Field(default=15, ge=1, le=50)
     max_iterations: int = Field(default=5, ge=1, le=10)
     checklist_size: int = Field(default=5, ge=1, le=10)
+    rrf_parent_weight: float = Field(default=3.0, ge=0.1, le=10.0)
+    rrf_chunk_weight: float = Field(default=1.0, ge=0.1, le=10.0)
+    rrf_k: int = Field(default=60, ge=1, le=200)
+    feedback_a: float = Field(default=0.24, ge=0.0, le=1.0)
+    feedback_b: float = Field(default=1.35, ge=0.0, le=5.0)
+    feedback_c: float = Field(default=0.59, ge=0.0, le=1.0)
 
 
 class AgentSettings(BaseSettings):

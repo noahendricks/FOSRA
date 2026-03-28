@@ -88,6 +88,7 @@ class AccumulatedItem(BaseModel):
     source: str = "vector"
     score: float = 0.0
     node_type: str | None = None
+    qdrant_point_id: str | None = None
 
 
 class AccumulatedContext(BaseModel):

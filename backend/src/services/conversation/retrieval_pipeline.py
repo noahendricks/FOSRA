@@ -10,12 +10,13 @@ configs captured by closures so the LangGraph state stays clean.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from falkordb import FalkorDB
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 
 from backend.src.domain.schemas.retrieval import (
     AccumulatedContext,
@@ -102,6 +103,7 @@ def _retrieved_chunk_to_item(chunk: RetrievedChunk) -> AccumulatedItem:
         content=chunk.text,
         source="vector",
         score=chunk.score,
+        qdrant_point_id=chunk.payload.get("point_id"),
     )
 
 
@@ -115,6 +117,11 @@ def build_retrieval_pipeline(
     max_iterations: int = 5,
     parents_top_k: int = 20,
     chunks_top_k: int = 10,
+    rrf_parent_weight: float = 3.0,
+    rrf_chunk_weight: float = 1.0,
+    feedback_a: float = 0.24,
+    feedback_b: float = 1.35,
+    feedback_c: float = 0.59,
 ) -> CompiledStateGraph:
     """Compile a retrieval pipeline with configs baked into closures.
 
@@ -173,6 +180,8 @@ def build_retrieval_pipeline(
             query=query,
             parents_top_k=parents_top_k,
             chunks_top_k=chunks_top_k,
+            parent_weight=rrf_parent_weight,
+            chunk_weight=rrf_chunk_weight,
         )
 
         # Use merged_context as primary LLM input (hierarchically merged chunks)
@@ -314,12 +323,111 @@ def build_retrieval_pipeline(
         iteration = state.get("iteration", 0)
 
         if all_answered:
-            return "rerank"
+            return "relevance_feedback"
 
         if iteration >= max_iterations:
-            return "rerank"
+            return "relevance_feedback"
 
         return "agentic_loop"
+
+    async def relevance_feedback_node(state: RetrievalState) -> dict:
+        """Apply Qdrant relevance feedback using accumulated items as positive examples."""
+        context = state["accumulated_context"]
+        if not context.items:
+            return {"accumulated_context": context}
+
+        feedback_items: list[AccumulatedItem] = [
+            item for item in context.items if item.qdrant_point_id and item.score > 0
+        ]
+        if len(feedback_items) < 2:
+            logger.debug(
+                "Pipeline: relevance feedback skipped ({} items)", len(feedback_items)
+            )
+            return {"accumulated_context": context}
+
+        embedder = EmbedderService()
+        try:
+            embedded = await embedder.embed_query(state["user_query"], embedder_config)
+            if not embedded or not embedded.dense:
+                return {"accumulated_context": context}
+        except Exception as e:
+            logger.warning("Pipeline: embed query failed for relevance feedback: {}", e)
+            return {"accumulated_context": context}
+
+        top_items = sorted(feedback_items, key=lambda x: x.score, reverse=True)[:20]
+        feedback = [
+            models.FeedbackItem(
+                example=str(item.qdrant_point_id),
+                score=item.score,
+            )
+            for item in top_items
+        ]
+
+        feedback_query = models.RelevanceFeedbackQuery(
+            relevance_feedback=models.RelevanceFeedbackInput(
+                target=embedded.dense,
+                feedback=feedback,
+                strategy=models.NaiveFeedbackStrategy(
+                    naive=models.NaiveFeedbackStrategyParams(
+                        a=feedback_a,
+                        b=feedback_b,
+                        c=feedback_c,
+                    )
+                ),
+            )
+        )
+
+        try:
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None,
+                lambda: qdrant_client.query_points(
+                    collection_name=CHUNKS_COLLECTION,
+                    query=feedback_query,
+                    with_payload=True,
+                    limit=15,
+                ),
+            )
+        except Exception as e:
+            logger.warning("Pipeline: relevance feedback query failed: {}", e)
+            return {"accumulated_context": context}
+
+        if not results.points:
+            return {"accumulated_context": context}
+
+        updated_items: list[AccumulatedItem] = []
+        for sp in results.points:
+            if sp.payload:
+                payload = dict(sp.payload)
+                payload["point_id"] = str(sp.id)
+                item = AccumulatedItem(
+                    file_id=payload.get("doc_id", payload.get("source_id", "")),
+                    path=payload.get("doc_title", "unknown"),
+                    line_start=payload.get("start_char", 0),
+                    line_end=payload.get(
+                        "end_char",
+                        payload.get("start_char", 0) + len(payload.get("text", "")),
+                    ),
+                    content=payload.get("text", ""),
+                    source="vector",
+                    score=sp.score,
+                    qdrant_point_id=str(sp.id),
+                )
+                updated_items.append(item)
+
+        existing_keys = {(i.file_id, i.line_start) for i in context.items}
+        unique_updates = [
+            i for i in updated_items if (i.file_id, i.line_start) not in existing_keys
+        ]
+        new_context = AccumulatedContext(items=context.items + unique_updates)
+
+        logger.debug(
+            "Pipeline: relevance feedback → {} new items (from {} feedback)",
+            len(unique_updates),
+            len(top_items),
+        )
+
+        return {"accumulated_context": new_context}
 
     async def rerank_node(state: RetrievalState) -> dict:
         """Rerank accumulated context against original query."""
@@ -378,12 +486,14 @@ def build_retrieval_pipeline(
     graph.add_node("expand_query", expand_query_node)
     graph.add_node("initial_retrieve", initial_retrieve_node)
     graph.add_node("agentic_loop", agentic_loop_node)
+    graph.add_node("relevance_feedback", relevance_feedback_node)
     graph.add_node("rerank", rerank_node)
 
     graph.add_edge(START, "expand_query")
     graph.add_edge("expand_query", "initial_retrieve")
     graph.add_edge("initial_retrieve", "agentic_loop")
     graph.add_conditional_edges("agentic_loop", should_continue_loop)
+    graph.add_edge("relevance_feedback", "rerank")
     graph.add_edge("rerank", END)
 
     return graph.compile()
