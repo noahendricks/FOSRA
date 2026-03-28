@@ -1,4 +1,4 @@
-import { createOpencodeClient, type Event } from "@fosra/sdk/v2"
+import { createFosraClient, type Event } from "@fosra/sdk/v2"
 
 export type ApiConfig = {
   baseUrl: string
@@ -8,14 +8,14 @@ export type ApiConfig = {
 }
 
 export type ApiClient = {
-  client: ReturnType<typeof createOpencodeClient>
+  fosra: ReturnType<typeof createFosraClient>
   url: string
   directory: string
   fetch: typeof globalThis.fetch
 }
 
 export function createApiClient(config: ApiConfig): ApiClient {
-  const client = createOpencodeClient({
+  const fosra = createFosraClient({
     baseUrl: config.baseUrl,
     directory: config.directory,
     fetch: config.fetch,
@@ -23,7 +23,7 @@ export function createApiClient(config: ApiConfig): ApiClient {
   })
 
   return {
-    client,
+    fosra,
     url: config.baseUrl,
     directory: config.directory,
     fetch: config.fetch ?? globalThis.fetch,

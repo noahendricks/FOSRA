@@ -1,4 +1,4 @@
-import type { Session, Message, Part, Todo } from "../external/sdk-types"
+import type { Session, Message, Part, Todo, PermissionRequest, QuestionRequest } from "../external/sdk-types"
 
 export type EntityKey = "sessions" | "messages" | "parts" | "todos"
 
@@ -7,10 +7,14 @@ export function createStoreActions(state: {
   messages: Map<string, Message[]>
   parts: Map<string, Part[]>
   todos: Map<string, Todo[]>
-  permission: Map<string, unknown[]>
-  question: Map<string, unknown[]>
+  permission: Map<string, PermissionRequest[]>
+  question: Map<string, QuestionRequest[]>
 }) {
   return {
+    get<K extends EntityKey>(collection: K, id: string) {
+      return (state[collection] as Map<string, any>).get(id)
+    },
+
     set<K extends EntityKey>(collection: K, id: string, value: any) {
       (state[collection] as Map<string, any>).set(id, value)
     },
@@ -76,17 +80,23 @@ export function createStoreActions(state: {
       )
     },
 
-    setPermission(sessionId: string, request: unknown) {
+    setPermission(sessionId: string, request: PermissionRequest) {
       const current = state.permission.get(sessionId) ?? []
-      state.permission.set(sessionId, [...current, request as any])
+      const idx = current.findIndex((r) => r.id === request.id)
+      if (idx >= 0) {
+        current[idx] = request
+        state.permission.set(sessionId, [...current])
+      } else {
+        state.permission.set(sessionId, [...current, request])
+      }
     },
 
     clearPermission(sessionId: string) {
       state.permission.delete(sessionId)
     },
 
-    setQuestion(sessionId: string, request: unknown) {
-      state.question.set(sessionId, [request as any])
+    setQuestion(sessionId: string, request: QuestionRequest) {
+      state.question.set(sessionId, [request])
     },
 
     clearQuestion(sessionId: string) {
