@@ -152,6 +152,14 @@ class EventEmitter:
     async def emit_server_instance_disposed(self, directory: str) -> None:
         await self.emit("server.instance.disposed", {"directory": directory})
 
+    async def emit_installation_update_available(
+        self, current_version: str, latest_version: str
+    ) -> None:
+        await self.emit(
+            "installation.update-available",
+            {"currentVersion": current_version, "latestVersion": latest_version},
+        )
+
     async def emit_idle(self, session_id: str) -> None:
         await self.emit("idle", {"sessionID": session_id, "status": {"type": "idle"}})
 

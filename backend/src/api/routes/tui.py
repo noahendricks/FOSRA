@@ -86,6 +86,7 @@ router.include_router(skill_router)
 async def sse_endpoint(
     request: Request,
     last_event_id: int | None = Header(None, alias="Last-Event-ID"),
+    client_version: str | None = Header(None, alias="X-Client-Version"),
 ) -> AsyncIterable[ServerSentEvent]:
     """
     Global SSE endpoint. The TUI subscribes here for all real-time events.
@@ -94,8 +95,16 @@ async def sse_endpoint(
     - 15s keep-alive pings automatically
     - Cache-Control: no-cache, X-Accel-Buffering: no
     - Last-Event-ID reconnection replay via replay_missed()
+
+    On connect, if the TUI reports a client_version that differs from
+    SERVER_VERSION, emits an installation.update-available event.
     """
     sub_id, queue = event_emitter.subscribe()
+
+    if client_version and client_version != SERVER_VERSION:
+        await event_emitter.emit_installation_update_available(
+            client_version, SERVER_VERSION
+        )
 
     async def event_generator():
         try:

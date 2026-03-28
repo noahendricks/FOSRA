@@ -193,7 +193,7 @@ async def delete_convo(
     )
 
 
-@router.post("/{convo_id}/send_message/")
+@router.post("/{convo_id}/send_message/", deprecated=True)
 async def send_message_stream(
     req: MessageRequest,
     db_session=Depends(get_db_session),

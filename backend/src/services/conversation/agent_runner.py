@@ -438,6 +438,7 @@ async def run_agent_with_events(
                 {"messages": lc_messages},
                 config=config,
                 stream_mode="messages",
+                subgraphs=True,
             ):
                 if stream_abort:
                     break
