@@ -1,7 +1,7 @@
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { createResource, createMemo } from "solid-js"
 import { useDialog } from "@tui/ui/dialog"
-import { useSDK } from "@tui/context/sdk"
+import { useApi } from "../context/api"
 
 export type DialogSkillProps = {
   onSelect: (skill: string) => void
@@ -9,11 +9,11 @@ export type DialogSkillProps = {
 
 export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
-  const sdk = useSDK()
+  const api = useApi()
   dialog.setSize("large")
 
   const [skills] = createResource(async () => {
-    const result = await sdk.client.app.skills()
+    const result = await api.fosra.app.skills()
     return result.data ?? []
   })
 

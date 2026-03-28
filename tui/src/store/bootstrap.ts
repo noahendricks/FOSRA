@@ -5,7 +5,7 @@ export async function loadInitialState(
   api: ApiClient,
   state: AppState
 ) {
-  const [providers, agents, config] = await Promise.all([
+  const [providers, providerList, agents, config] = await Promise.all([
     api.fosra.config.providers({}, { throwOnError: true }),
     api.fosra.provider.list({}, { throwOnError: true }),
     api.fosra.app.agents({}, { throwOnError: true }),
@@ -17,6 +17,7 @@ export async function loadInitialState(
   state.setConfig(config.data ?? null)
 
   loadSessions(api, state)
+  loadSystemServices(api, state)
 }
 
 async function loadSessions(api: ApiClient, state: AppState) {
@@ -24,6 +25,26 @@ async function loadSessions(api: ApiClient, state: AppState) {
   for (const session of sessions.data ?? []) {
     state.sessions.set(session.id, session)
   }
+}
+
+async function loadSystemServices(api: ApiClient, state: AppState) {
+  const [commandResult, lspResult, mcpResult, formatterResult, vcsResult, pathResult] = await Promise.all([
+    api.fosra.command.list().catch(() => ({ data: [] })),
+    api.fosra.lsp.status().catch(() => ({ data: [] })),
+    api.fosra.mcp.status().catch(() => ({ data: {} })),
+    api.fosra.formatter.status().catch(() => ({ data: [] })),
+    api.fosra.vcs.get().catch(() => ({ data: {} })),
+    api.fosra.path.get().catch(() => ({ data: { home: "", state: "", config: "", worktree: "", directory: "" } })),
+  ])
+
+  state.setCommand(commandResult.data ?? [])
+  state.setLsp(lspResult.data ?? [])
+  for (const [k, v] of Object.entries(mcpResult.data ?? {})) {
+    state.mcp.set(k, v as any)
+  }
+  state.setFormatter(formatterResult.data ?? [])
+  state.setVcs(vcsResult.data ?? undefined)
+  state.setPath(pathResult.data ?? { home: "", state: "", config: "", worktree: "", directory: "" })
 }
 
 export async function loadSession(

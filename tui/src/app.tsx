@@ -126,7 +126,10 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   });
 }
 
-import type { EventSource } from "./context/sdk";
+type EventSource = {
+  on: (handler: (event: any) => void) => () => void
+  setWorkspace?: (workspaceID?: string) => void
+}
 
 export function tui(input: {
   url: string;

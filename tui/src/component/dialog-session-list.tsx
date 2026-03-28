@@ -1,12 +1,12 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../context/compat/sync"
 import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
-import { useSDK } from "../context/sdk"
+import { useApi } from "../context/api"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
@@ -15,10 +15,10 @@ import { Spinner } from "./spinner"
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const keybind = useKeybind()
   const { theme } = useTheme()
-  const sdk = useSDK()
+  const api = useApi()
   const kv = useKV()
 
   const [toDelete, setToDelete] = createSignal<string>()
@@ -26,7 +26,7 @@ export function DialogSessionList() {
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return undefined
-    const result = await sdk.client.session.list({ search: query, limit: 30 })
+    const result = await api.fosra.session.list({ search: query, limit: 30 })
     return result.data ?? []
   })
 
@@ -86,7 +86,7 @@ export function DialogSessionList() {
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
-              sdk.client.session.delete({
+              api.fosra.session.delete({
                 sessionID: option.value,
               })
               setToDelete(undefined)

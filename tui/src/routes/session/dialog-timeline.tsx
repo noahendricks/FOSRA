@@ -1,5 +1,5 @@
 import { createMemo, onMount } from "solid-js"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../../context/compat/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
@@ -12,7 +12,7 @@ export function DialogTimeline(props: {
   onMove: (messageID: string) => void
   setPrompt?: (prompt: PromptInfo) => void
 }) {
-  const sync = useSync()
+  const sync = useSyncCompat()
   const dialog = useDialog()
 
   onMount(() => {

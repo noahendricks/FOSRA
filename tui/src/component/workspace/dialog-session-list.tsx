@@ -1,12 +1,12 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "@tui/context/compat/sync"
 import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useKeybind } from "../../context/keybind"
 import { useTheme } from "../../context/theme"
-import { useSDK } from "../../context/sdk"
+import { useApi } from "@tui/context/api"
 import { DialogSessionRename } from "../dialog-session-rename"
 import { useKV } from "../../context/kv"
 import { createDebouncedSignal } from "../../util/signal"
@@ -16,10 +16,10 @@ import { useToast } from "../../ui/toast"
 export function DialogSessionList(props: { workspaceID?: string; localOnly?: boolean } = {}) {
   const dialog = useDialog()
   const route = useRoute()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const keybind = useKeybind()
   const { theme } = useTheme()
-  const sdk = useSDK()
+  const api = useApi()
   const kv = useKV()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
@@ -29,14 +29,14 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
     () => props.workspaceID,
     async (workspaceID) => {
       if (!workspaceID) return undefined
-      const result = await sdk.client.session.list({ roots: true })
+      const result = await api.fosra.session.list({ roots: true })
       return result.data ?? []
     },
   )
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query || props.localOnly) return undefined
-    const result = await sdk.client.session.list({
+    const result = await api.fosra.session.list({
       search: query,
       limit: 30,
       ...(props.workspaceID ? { roots: true } : {}),
@@ -111,7 +111,7 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
-              const deleted = await sdk.client.session
+              const deleted = await api.fosra.session
                 .delete({
                   sessionID: option.value,
                 })
@@ -129,10 +129,6 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
                 listedActions.mutate((sessions) => sessions?.filter((session) => session.id !== option.value))
                 return
               }
-              sync.set(
-                "session",
-                sync.data.session.filter((session) => session.id !== option.value),
-              )
               return
             }
             setToDelete(option.value)

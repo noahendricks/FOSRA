@@ -1,10 +1,10 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "@tui/context/compat/sync"
 import { createEffect, createMemo, createSignal, onMount } from "solid-js"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { useSDK } from "../context/sdk"
+import { useApi } from "@tui/context/api"
 import { useToast } from "../ui/toast"
 import { useKeybind } from "../context/keybind"
 import { DialogSessionList } from "./workspace/dialog-session-list"
@@ -14,19 +14,13 @@ import { setTimeout as sleep } from "node:timers/promises"
 async function openWorkspace(input: {
   dialog: ReturnType<typeof useDialog>
   route: ReturnType<typeof useRoute>
-  sdk: ReturnType<typeof useSDK>
-  sync: ReturnType<typeof useSync>
+  sdk: ReturnType<typeof useApi>
+  sync: ReturnType<typeof useSyncCompat>
   toast: ReturnType<typeof useToast>
   workspaceID: string
   forceCreate?: boolean
 }) {
   const cacheSession = (session: Session) => {
-    input.sync.set(
-      "session",
-      [...input.sync.data.session.filter((item) => item.id !== session.id), session].toSorted((a, b) =>
-        a.id.localeCompare(b.id),
-      ),
-    )
   }
 
   const client = createOpencodeClient({
@@ -79,8 +73,8 @@ async function openWorkspace(input: {
 
 function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promise<void> }) {
   const dialog = useDialog()
-  const sync = useSync()
-  const sdk = useSDK()
+  const sync = useSyncCompat()
+  const sdk = useApi()
   const toast = useToast()
   const [creating, setCreating] = createSignal<string>()
 
@@ -112,7 +106,7 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
     if (creating()) return
     setCreating(type)
 
-    const result = await sdk.client.experimental.workspace.create({ type, branch: null }).catch((err) => {
+    const result = await sdk.fosra.experimental.workspace.create({ type, branch: null }).catch((err) => {
       console.log(err)
       return undefined
     })
@@ -147,8 +141,8 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
 export function DialogWorkspaceList() {
   const dialog = useDialog()
   const route = useRoute()
-  const sync = useSync()
-  const sdk = useSDK()
+  const sync = useSyncCompat()
+  const sdk = useApi()
   const toast = useToast()
   const keybind = useKeybind()
   const [toDelete, setToDelete] = createSignal<string>()
@@ -304,7 +298,7 @@ export function DialogWorkspaceList() {
               setToDelete(option.value)
               return
             }
-            const result = await sdk.client.experimental.workspace.remove({ id: option.value }).catch(() => undefined)
+            const result = await sdk.fosra.experimental.workspace.remove({ id: option.value }).catch(() => undefined)
             setToDelete(undefined)
             if (result?.error) {
               toast.show({

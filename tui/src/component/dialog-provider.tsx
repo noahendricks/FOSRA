@@ -1,9 +1,9 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "@tui/context/compat/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
-import { useSDK } from "../context/sdk"
+import { useApi } from "@tui/context/api"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
@@ -24,9 +24,9 @@ const PROVIDER_PRIORITY: Record<string, number> = {
 }
 
 export function createDialogProviderOptions() {
-  const sync = useSync()
+  const sync = useSyncCompat()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const api = useApi()
   const toast = useToast()
   const options = createMemo(() => {
     return pipe(
@@ -56,11 +56,11 @@ export function createDialogProviderOptions() {
                 () => (
                   <DialogSelect
                     title="Select auth method"
-                    options={methods.map((x, index) => ({
+                    options={(methods.map((x, index) => ({
                       title: x.label,
                       value: index,
-                    }))}
-                    onSelect={(option) => resolve(option.value)}
+                    })) as any)}
+                    onSelect={(option) => resolve(option.value as number)}
                   />
                 ),
                 () => resolve(null),
@@ -80,7 +80,7 @@ export function createDialogProviderOptions() {
               inputs = value
             }
 
-            const result = await sdk.client.provider.oauth.authorize({
+            const result = await api.fosra.provider.oauth.authorize({
               providerID: provider.id,
               method: index,
               inputs,
@@ -127,9 +127,9 @@ interface AutoMethodProps {
 }
 function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
-  const sdk = useSDK()
+  const api = useApi()
   const dialog = useDialog()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const toast = useToast()
 
   useKeyboard((evt) => {
@@ -142,7 +142,7 @@ function AutoMethod(props: AutoMethodProps) {
   })
 
   onMount(async () => {
-    const result = await sdk.client.provider.oauth.callback({
+    const result = await api.fosra.provider.oauth.callback({
       providerID: props.providerID,
       method: props.index,
     })
@@ -151,8 +151,7 @@ function AutoMethod(props: AutoMethodProps) {
       return
     }
     try {
-      await (sdk.client.instance.dispose as (p: any, o?: any) => Promise<any>)({})
-      await sync.bootstrap()
+      await (api.fosra.instance.dispose as (p: any, o?: any) => Promise<any>)({})
     } catch (e: unknown) {
       console.error("oauth callback error", e)
     }
@@ -189,8 +188,8 @@ interface CodeMethodProps {
 }
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
-  const sdk = useSDK()
-  const sync = useSync()
+  const api = useApi()
+  const sync = useSyncCompat()
   const dialog = useDialog()
   const [error, setError] = createSignal(false)
 
@@ -199,15 +198,14 @@ function CodeMethod(props: CodeMethodProps) {
       title={props.title}
       placeholder="Authorization code"
       onConfirm={async (value) => {
-        const { error } = await sdk.client.provider.oauth.callback({
+        const { error } = await api.fosra.provider.oauth.callback({
           providerID: props.providerID,
           method: props.index,
           code: value,
         })
         if (!error) {
           try {
-            await (sdk.client.instance.dispose as (p: any, o?: any) => Promise<any>)({})
-            await sync.bootstrap()
+            await (api.fosra.instance.dispose as (p: any, o?: any) => Promise<any>)({})
           } catch (e: unknown) {
             console.error("oauth confirm error", e)
           }
@@ -235,8 +233,8 @@ interface ApiMethodProps {
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
-  const sdk = useSDK()
-  const sync = useSync()
+  const api = useApi()
+  const sync = useSyncCompat()
   const { theme } = useTheme()
 
   return (
@@ -271,7 +269,7 @@ function ApiMethod(props: ApiMethodProps) {
       }
       onConfirm={async (value) => {
         if (!value) return
-        await sdk.client.auth.set({
+        await api.fosra.auth.set({
           providerID: props.providerID,
           auth: {
             type: "api",
@@ -279,8 +277,7 @@ function ApiMethod(props: ApiMethodProps) {
           },
         })
         try {
-          await (sdk.client.instance.dispose as (p: any, o?: any) => Promise<any>)({})
-          await sync.bootstrap()
+          await (api.fosra.instance.dispose as (p: any, o?: any) => Promise<any>)({})
         } catch (e: unknown) {
           console.error("auth set error", e)
         }

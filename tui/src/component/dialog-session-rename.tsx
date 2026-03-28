@@ -1,8 +1,8 @@
 import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { useDialog } from "@tui/ui/dialog"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../context/compat/sync"
 import { createMemo } from "solid-js"
-import { useSDK } from "../context/sdk"
+import { useApi } from "../context/api"
 
 interface DialogSessionRenameProps {
   session: string
@@ -10,8 +10,8 @@ interface DialogSessionRenameProps {
 
 export function DialogSessionRename(props: DialogSessionRenameProps) {
   const dialog = useDialog()
-  const sync = useSync()
-  const sdk = useSDK()
+  const sync = useSyncCompat()
+  const api = useApi()
   const session = createMemo(() => sync.session.get(props.session))
 
   return (
@@ -19,7 +19,7 @@ export function DialogSessionRename(props: DialogSessionRenameProps) {
       title="Rename Session"
       value={session()?.title}
       onConfirm={(value) => {
-        sdk.client.session.update({
+        api.fosra.session.update({
           sessionID: props.session,
           title: value,
         })

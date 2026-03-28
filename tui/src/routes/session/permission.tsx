@@ -5,9 +5,9 @@ import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
-import { useSDK } from "../../context/sdk"
+import { useApi } from "../../context/api"
 import { SplitBorder } from "../../component/border"
-import { useSync } from "../../context/sync"
+import { useSyncCompat } from "../../context/compat/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -127,8 +127,8 @@ function TextBody(props: { title: string; description?: string; icon?: string })
 }
 
 export function PermissionPrompt(props: { request: PermissionRequest }) {
-  const sdk = useSDK()
-  const sync = useSync()
+  const api = useApi()
+  const sync = useSyncCompat()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
@@ -181,7 +181,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            sdk.client.permission.reply({
+            api.fosra.permission.reply({
               reply: "always",
               requestID: props.request.id,
             }).catch((e: unknown) => {
@@ -193,7 +193,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       <Match when={store.stage === "reject"}>
         <RejectPrompt
           onConfirm={(message) => {
-            sdk.client.permission.reply({
+            api.fosra.permission.reply({
               reply: "reject",
               requestID: props.request.id,
               message: message || undefined,
@@ -448,13 +448,13 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     setStore("stage", "reject")
                     return
                   }
-                  sdk.client.permission.reply({
+                  api.fosra.permission.reply({
                     reply: "reject",
                     requestID: props.request.id,
                   })
                   return
                 }
-                sdk.client.permission.reply({
+                api.fosra.permission.reply({
                   reply: "once",
                   requestID: props.request.id,
                 })

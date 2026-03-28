@@ -12,9 +12,9 @@ import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
-import { useSDK } from "@tui/context/sdk"
+import { useApi } from "../../context/api"
 import { useRoute } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../../context/compat/sync"
 import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
@@ -73,9 +73,9 @@ export function Prompt(props: PromptProps) {
 
   const keybind = useKeybind()
   const local = useLocal()
-  const sdk = useSDK()
+  const api = useApi()
   const route = useRoute()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
@@ -103,18 +103,6 @@ export function Prompt(props: PromptProps) {
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
-
-  sdk.event.on(TuiEvent.PromptAppend.type as any, (evt) => {
-    if (!input || input.isDestroyed) return
-    input.insertText((evt as any).properties.text)
-    setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
-      if (!input || input.isDestroyed) return
-      input.getLayoutNode().markDirty()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
-  })
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
@@ -243,7 +231,7 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            sdk.client.session.abort({
+            api.fosra.session.abort({
               sessionID: props.sessionID,
             })
             setStore("interrupt", 0)
@@ -554,7 +542,7 @@ export function Prompt(props: PromptProps) {
 
     let sessionID = props.sessionID
     if (sessionID == null) {
-      const res = await sdk.client.session.create({
+      const res = await api.fosra.session.create({
         workspaceID: props.workspaceID,
       })
 
@@ -600,7 +588,7 @@ export function Prompt(props: PromptProps) {
     const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
-      sdk.client.session.shell({
+      api.fosra.session.shell({
         sessionID,
         agent: local.agent.current().name,
         model: {
@@ -625,7 +613,7 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      sdk.client.session.command({
+      api.fosra.session.command({
         sessionID,
         command: command.slice(1),
         arguments: args,
@@ -642,7 +630,7 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       kbLog("SENDING_PROMPT", { sessionID, agent: local.agent.current().name, modelID: selectedModel.modelID, inputLen: inputText.length })
-      sdk.client.session
+      api.fosra.session
         .prompt({
           sessionID,
           ...selectedModel,

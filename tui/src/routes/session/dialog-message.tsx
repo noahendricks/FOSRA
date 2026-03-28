@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../../context/compat/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
-import { useSDK } from "@tui/context/sdk"
+import { useApi } from "../../context/api"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
@@ -12,8 +12,8 @@ export function DialogMessage(props: {
   sessionID: string
   setPrompt?: (prompt: PromptInfo) => void
 }) {
-  const sync = useSync()
-  const sdk = useSDK()
+  const sync = useSyncCompat()
+  const api = useApi()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
 
@@ -29,7 +29,7 @@ export function DialogMessage(props: {
             const msg = message()
             if (!msg) return
 
-            sdk.client.session.revert({
+            api.fosra.session.revert({
               sessionID: props.sessionID,
               messageID: msg.id,
             })
@@ -77,7 +77,7 @@ export function DialogMessage(props: {
           value: "session.fork",
           description: "create a new session",
           onSelect: async (dialog) => {
-            const result = await sdk.client.session.fork({
+            const result = await api.fosra.session.fork({
               sessionID: props.sessionID,
               messageID: props.messageID,
             })

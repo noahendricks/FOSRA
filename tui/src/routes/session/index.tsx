@@ -15,7 +15,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "@tui/context/compat/sync"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
@@ -47,7 +47,7 @@ import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { useSDK } from "@tui/context/sdk"
+import { useApi } from "@tui/context/api"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
@@ -103,7 +103,7 @@ const context = createContext<{
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
   diffWrapMode: () => "word" | "none"
-  sync: ReturnType<typeof useSync>
+  sync: ReturnType<typeof useSyncCompat>
   tui: ReturnType<typeof useTuiConfig>
 }>()
 
@@ -116,7 +116,7 @@ function use() {
 export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const tuiConfig = useTuiConfig()
   const kv = useKV()
   const { theme } = useTheme()
@@ -191,12 +191,6 @@ export function Session() {
     return new CustomSpeedScroll(3)
   })
 
-  createEffect(() => {
-    if (session()?.workspaceID) {
-      sdk.setWorkspace(session()?.workspaceID)
-    }
-  })
-
   createEffect(async () => {
     await sync.session
       .sync(route.sessionID)
@@ -214,29 +208,12 @@ export function Session() {
   })
 
   const toast = useToast()
-  const sdk = useSDK()
+  const api = useApi()
 
   // Handle initial prompt from fork
   createEffect(() => {
     if (route.initialPrompt && prompt) {
       prompt.set(route.initialPrompt)
-    }
-  })
-
-  let lastSwitch: string | undefined = undefined
-  sdk.event.on("message.part.updated", (evt) => {
-    const part = evt.properties.part
-    if (part.type !== "tool") return
-    if (part.sessionID !== route.sessionID) return
-    if (part.state.status !== "completed") return
-    if (part.id === lastSwitch) return
-
-    if (part.tool === "plan_exit") {
-      local.agent.set("build")
-      lastSwitch = part.id
-    } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
-      lastSwitch = part.id
     }
   })
 
@@ -387,7 +364,7 @@ export function Session() {
           dialog.clear()
           return
         }
-        await sdk.client.session
+        await api.fosra.session
           .share({
             sessionID: route.sessionID,
           })
@@ -477,7 +454,7 @@ export function Session() {
           })
           return
         }
-        sdk.client.session.summarize({
+        api.fosra.session.summarize({
           sessionID: route.sessionID,
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
@@ -495,7 +472,7 @@ export function Session() {
         name: "unshare",
       },
       onSelect: async (dialog) => {
-        await sdk.client.session
+        await api.fosra.session
           .unshare({
             sessionID: route.sessionID,
           })
@@ -519,11 +496,11 @@ export function Session() {
       },
       onSelect: async (dialog) => {
         const status = sync.data.session_status?.[route.sessionID]
-        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
+        if (status?.type !== "idle") await api.fosra.session.abort({ sessionID: route.sessionID }).catch(() => {})
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        sdk.client.session
+        api.fosra.session
           .revert({
             sessionID: route.sessionID,
             messageID: message.id,
@@ -565,13 +542,13 @@ export function Session() {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          sdk.client.session.unrevert({
+          api.fosra.session.unrevert({
             sessionID: route.sessionID,
           })
           prompt.set({ input: "", parts: [] })
           return
         }
-        sdk.client.session.revert({
+        api.fosra.session.revert({
           sessionID: route.sessionID,
           messageID: message.id,
         })
@@ -1250,7 +1227,7 @@ function UserMessage(props: {
   const local = useLocal()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
-  const sync = useSync()
+  const sync = useSyncCompat()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false as any)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
@@ -1339,7 +1316,7 @@ function UserMessage(props: {
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
 
   const final = createMemo(() => {
@@ -1500,7 +1477,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const ctx = use()
-  const sync = useSync()
+  const sync = useSyncCompat()
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
@@ -1658,7 +1635,7 @@ function InlineTool(props: {
   const [margin, setMargin] = createSignal(0)
   const { theme } = useTheme()
   const ctx = use()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false as any)
 
@@ -1785,7 +1762,7 @@ function BlockTool(props: {
 
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
-  const sync = useSync()
+  const sync = useSyncCompat()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false as any)
@@ -1985,7 +1962,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const keybind = useKeybind()
   const { navigate } = useRoute()
   const local = useLocal()
-  const sync = useSync()
+  const sync = useSyncCompat()
 
   onMount(() => {
     if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)

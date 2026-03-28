@@ -2,13 +2,13 @@ import { TextAttributes } from "@opentui/core"
 import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../context/compat/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
 
 export function DialogStatus() {
-  const sync = useSync()
+  const sync = useSyncCompat()
   const { theme } = useTheme()
   const dialog = useDialog()
 

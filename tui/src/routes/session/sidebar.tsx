@@ -1,4 +1,4 @@
-import { useSync } from "@tui/context/sync";
+import { useSyncCompat } from "../../context/compat/sync";
 import { useLocal } from "@tui/context/local";
 import { createMemo, For, Show, Switch, Match } from "solid-js";
 import { createStore } from "solid-js/store";
@@ -14,7 +14,7 @@ import { useKV } from "../../context/kv";
 import { TodoItem } from "../../component/todo-item";
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
-  const sync = useSync();
+  const sync = useSyncCompat();
   const local = useLocal();
   const isCodingMode = createMemo(
     () => local.agent.current().name === "FOSRA CODING",
@@ -89,9 +89,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some(
-      (x) =>
+      (x: any) =>
         x.id !== "opencode" ||
-        Object.values(x.models).some((y) => y.cost?.input !== 0),
+        Object.values(x.models as any).some((y: any) => y.cost?.input !== 0),
     ),
   );
   const gettingStartedDismissed = createMemo(() =>

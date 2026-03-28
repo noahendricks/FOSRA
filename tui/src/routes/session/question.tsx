@@ -5,13 +5,13 @@ import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
-import { useSDK } from "../../context/sdk"
+import { useApi } from "../../context/api"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
-  const sdk = useSDK()
+  const api = useApi()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
@@ -45,7 +45,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
-    sdk.client.question.reply({
+    api.fosra.question.reply({
       requestID: props.request.id,
       answers,
     }).catch((e: unknown) => {
@@ -54,7 +54,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   }
 
   function reject() {
-    sdk.client.question.reject({
+    api.fosra.question.reject({
       requestID: props.request.id,
     }).catch((e: unknown) => {
       console.error("question reject error", e)
@@ -71,7 +71,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       setStore("custom", inputs)
     }
     if (single()) {
-      sdk.client.question.reply({
+      api.fosra.question.reply({
         requestID: props.request.id,
         answers: [[answer]],
       })

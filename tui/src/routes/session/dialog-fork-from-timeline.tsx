@@ -1,18 +1,18 @@
 import { createMemo, onMount } from "solid-js"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../../context/compat/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
-import { useSDK } from "@tui/context/sdk"
+import { useApi } from "../../context/api"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
 import type { PromptInfo } from "@tui/component/prompt/history"
 import { strip } from "@tui/component/prompt/part"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
-  const sync = useSync()
+  const sync = useSyncCompat()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const api = useApi()
   const route = useRoute()
 
   onMount(() => {
@@ -33,7 +33,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: async (dialog) => {
-          const forked = await sdk.client.session.fork({
+          const forked = await api.fosra.session.fork({
             sessionID: props.sessionID,
             messageID: message.id,
           })

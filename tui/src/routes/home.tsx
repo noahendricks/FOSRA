@@ -5,7 +5,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
 import { Tips } from "../component/tips"
 import { Locale } from "@/util/locale"
-import { useSync } from "../context/sync"
+import { useSyncCompat } from "../context/compat/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useDirectory } from "../context/directory"
@@ -20,7 +20,7 @@ import { useLocal } from "../context/local"
 let once = false
 
 export function Home() {
-  const sync = useSync()
+  const sync = useSyncCompat()
   const kv = useKV()
   const { theme } = useTheme()
   const route = useRouteData("home")

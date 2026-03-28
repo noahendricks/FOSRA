@@ -1,26 +1,26 @@
 import { createMemo, createResource } from "solid-js"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
-import { useSDK } from "@tui/context/sdk"
+import { useApi } from "../context/api"
 import { createStore } from "solid-js/store"
 
 export function DialogTag(props: { onSelect?: (value: string) => void }) {
-  const sdk = useSDK()
+  const api = useApi()
   const dialog = useDialog()
 
   const [store] = createStore({
     filter: "",
   })
 
-  const [files] = createResource(
+  const [files] = createResource<string[], string[]>(
     () => [store.filter],
     async () => {
-      const result = await sdk.client.find.files({
+      const result = await api.fosra.find.files({
         query: store.filter,
       })
       if (result.error) return []
       const sliced = (result.data ?? []).slice(0, 5)
-      return sliced
+      return sliced as string[]
     },
   )
 

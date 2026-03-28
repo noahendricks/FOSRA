@@ -1,5 +1,6 @@
 import { ReactiveMap } from "@solid-primitives/map"
 import { createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
 import type {
   Session,
   Message,
@@ -10,6 +11,12 @@ import type {
   Config,
   PermissionRequest,
   QuestionRequest,
+  McpStatus,
+  LspStatus,
+  FormatterStatus,
+  VcsInfo,
+  Command,
+  Workspace,
 } from "../external/sdk-types"
 
 export function createAppState() {
@@ -21,11 +28,31 @@ export function createAppState() {
   const permissions = new ReactiveMap<string, PermissionRequest[]>()
   const questions = new ReactiveMap<string, QuestionRequest[]>()
 
-  const [providers, setProviders] = createSignal<Provider[]>([])
-  const [agents, setAgents] = createSignal<Agent[]>([])
-  const [config, setConfig] = createSignal<Config | null>(null)
+  const mcp = new ReactiveMap<string, McpStatus>()
 
-  const [directory, setDirectory] = createSignal("")
+  const [systemState, setSystemState] = createStore<{
+    lsp: LspStatus[]
+    formatter: FormatterStatus[]
+    vcs: VcsInfo | undefined
+    path: { home: string; state: string; config: string; worktree: string; directory: string }
+    command: Command[]
+    workspaceList: Workspace[]
+    providers: Provider[]
+    agents: Agent[]
+    config: Config | null
+    directory: string
+  }>({
+    lsp: [],
+    formatter: [],
+    vcs: undefined,
+    path: { home: "", state: "", config: "", worktree: "", directory: "" },
+    command: [],
+    workspaceList: [],
+    providers: [],
+    agents: [],
+    config: null,
+    directory: "",
+  })
 
   const loadedSessions = new Set<string>()
 
@@ -37,15 +64,30 @@ export function createAppState() {
     permissions,
     questions,
 
-    providers,
-    setProviders,
-    agents,
-    setAgents,
-    config,
-    setConfig,
+    mcp,
 
-    directory,
-    setDirectory,
+    lsp: () => systemState.lsp,
+    setLsp: (data: LspStatus[]) => setSystemState("lsp", data),
+    formatter: () => systemState.formatter,
+    setFormatter: (data: FormatterStatus[]) => setSystemState("formatter", data),
+    vcs: () => systemState.vcs,
+    setVcs: (data: VcsInfo | undefined) => setSystemState("vcs", data),
+    path: () => systemState.path,
+    setPath: (data: typeof systemState.path) => setSystemState("path", data),
+    command: () => systemState.command,
+    setCommand: (data: Command[]) => setSystemState("command", data),
+    workspaceList: () => systemState.workspaceList,
+    setWorkspaceList: (data: Workspace[]) => setSystemState("workspaceList", data),
+
+    providers: () => systemState.providers,
+    setProviders: (data: Provider[]) => setSystemState("providers", data),
+    agents: () => systemState.agents,
+    setAgents: (data: Agent[]) => setSystemState("agents", data),
+    config: () => systemState.config,
+    setConfig: (data: Config | null) => setSystemState("config", data),
+
+    directory: () => systemState.directory,
+    setDirectory: (data: string) => setSystemState("directory", data),
 
     loadedSessions,
   }

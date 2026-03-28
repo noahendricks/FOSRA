@@ -41,7 +41,7 @@ const ctx = createSimpleContext({
 
     registerSessionHandlers(router.store, actions)
     registerMessageHandlers(router.store, actions)
-    registerSystemHandlers(router.store, actions, () => loadInitial(props, state))
+    registerSystemHandlers(router.store, actions, () => loadInitial(props, state), state)
 
     registerUIHandlers(router.ui, {
       toast: {

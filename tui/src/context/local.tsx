@@ -1,6 +1,7 @@
 import { createStore } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "./compat/sync"
+import { useApi } from "./api"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
 import path from "path"
@@ -10,15 +11,14 @@ import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
-import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
-    const sync = useSync()
-    const sdk = useSDK()
+    const sync = useSyncCompat()
+    const api = useApi()
     const toast = useToast()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
@@ -178,10 +178,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const provider = sync.data.provider[0]
+        const provider = sync.data.provider[0] as any
         if (!provider) return undefined
-        const defaultModel = sync.data.provider_default[provider.id]
-        const firstModel = Object.values(provider.models)[0]
+        const defaultModel = (sync.data.provider_default as any)[provider.id]
+        const firstModel = Object.values(provider.models as any)[0] as any
         const model = defaultModel ?? firstModel?.id
         if (!model) return undefined
         return {
@@ -370,10 +370,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const status = sync.data.mcp[name]
         if (status?.status === "connected") {
           // Disable: disconnect the MCP
-          await sdk.client.mcp.disconnect({ name })
+          await (api.fosra.mcp as any).disconnect({ name })
         } else {
           // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
-          await sdk.client.mcp.connect({ name })
+          await (api.fosra.mcp as any).connect({ name })
         }
       },
     }

@@ -4,8 +4,8 @@ import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useSDK } from "@tui/context/sdk"
-import { useSync } from "@tui/context/sync"
+import { useApi } from "@tui/context/api"
+import { useSyncCompat } from "@tui/context/compat/sync"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -75,8 +75,8 @@ export function Autocomplete(props: {
   agentStyleId: number
   promptPartTypeId: () => number
 }) {
-  const sdk = useSDK()
-  const sync = useSync()
+  const api = useApi()
+  const sync = useSyncCompat()
   const command = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
@@ -226,7 +226,7 @@ export function Autocomplete(props: {
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
       // Get files from SDK
-      const result = await sdk.client.find.files({
+      const result = await api.fosra.find.files({
         query: baseQuery,
       })
 

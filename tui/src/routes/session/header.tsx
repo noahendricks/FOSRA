@@ -1,6 +1,6 @@
 import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
+import { useSyncCompat } from "../../context/compat/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
@@ -43,7 +43,7 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
 
 export function Header() {
   const route = useRouteData("session")
-  const sync = useSync()
+  const sync = useSyncCompat()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
@@ -74,7 +74,7 @@ export function Header() {
   const workspace = createMemo(() => {
     const id = session()?.workspaceID
     if (!id) return "Workspace local"
-    const info = sync.workspace.get(id)
+    const info = sync.workspace.get()
     if (!info) return `Workspace ${id}`
     return `Workspace ${id} (${info.type})`
   })
