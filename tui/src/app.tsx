@@ -25,12 +25,13 @@ import {
   win32FlushInputBuffer,
   win32InstallCtrlCGuard,
 } from "./win32";
-import { Installation } from "@/installation";
+
 import { Flag } from "@/flag/flag";
+import { Installation } from "@/installation";
 import { DialogProvider, useDialog } from "@tui/ui/dialog";
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider";
-import { SDKProvider, useSDK } from "@tui/context/sdk";
-import { SyncProvider, useSync } from "@tui/context/sync";
+import { ApiProvider, useApi } from "@tui/context/api";
+import { SyncCompatProvider, useSyncCompat } from "@tui/context/compat/sync";
 import { LocalProvider, useLocal } from "@tui/context/local";
 import { DialogModel, useConnected } from "@tui/component/dialog-model";
 import { DialogMcp } from "@tui/component/dialog-mcp";
@@ -55,7 +56,7 @@ import { DialogAlert } from "./ui/dialog-alert";
 import { ToastProvider, useToast } from "./ui/toast";
 import { ExitProvider, useExit } from "./context/exit";
 import { Session as SessionApi } from "@/session";
-import { TuiEvent } from "./event";
+
 import { KVProvider, useKV } from "./context/kv";
 import { Provider } from "@/provider/provider";
 import { ArgsProvider, useArgs, type Args } from "./context/args";
@@ -171,16 +172,16 @@ export function tui(input: {
                   <ToastProvider>
                     <RouteProvider>
                       <TuiConfigProvider config={input.config}>
-                        <SDKProvider
-                          url={input.url}
-                          directory={input.directory}
-                          fetch={input.fetch}
-                          headers={
-                            input.headers as Record<string, string> | undefined
-                          }
+                        <ApiProvider
+                          config={{
+                            baseUrl: input.url,
+                            directory: input.directory ?? "",
+                            fetch: input.fetch,
+                            headers: input.headers as Record<string, string> | undefined,
+                          }}
                           events={input.events}
                         >
-                          <SyncProvider>
+                          <SyncCompatProvider>
                             <ThemeProvider mode={mode}>
                               <LocalProvider>
                                 <KeybindProvider>
@@ -200,8 +201,8 @@ export function tui(input: {
                                 </KeybindProvider>
                               </LocalProvider>
                             </ThemeProvider>
-                          </SyncProvider>
-                        </SDKProvider>
+                          </SyncCompatProvider>
+                        </ApiProvider>
                       </TuiConfigProvider>
                     </RouteProvider>
                   </ToastProvider>
@@ -242,10 +243,10 @@ function App() {
   const local = useLocal();
   const kv = useKV();
   const command = useCommandDialog();
-  const sdk = useSDK();
+  const api = useApi();
   const toast = useToast();
   const { theme, mode, setMode } = useTheme();
-  const sync = useSync();
+  const sync = useSyncCompat();
   const exit = useExit();
   const promptRef = usePromptRef();
 
@@ -361,7 +362,7 @@ function App() {
     if (match) {
       continued = true;
       if (args.fork) {
-        sdk.client.session.fork({ sessionID: match }).then((result) => {
+        api.fosra.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id });
           } else {
@@ -382,7 +383,7 @@ function App() {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork)
       return;
     forked = true;
-    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+        api.fosra.session.fork({ sessionID: args.sessionID }).then((result) => {
       if (result.data?.id) {
         route.navigate({ type: "session", sessionID: result.data.id });
       } else {
@@ -733,75 +734,6 @@ function App() {
       },
     },
   ]);
-
-  sdk.event.on(TuiEvent.CommandExecute.type as any, (evt) => {
-    command.trigger((evt as any).properties.command);
-  });
-
-  sdk.event.on(TuiEvent.ToastShow.type as any, (evt) => {
-    toast.show({
-      title: (evt as any).properties.title,
-      message: (evt as any).properties.message,
-      variant: (evt as any).properties.variant,
-      duration: (evt as any).properties.duration,
-    });
-  });
-
-  sdk.event.on(TuiEvent.SessionSelect.type as any, (evt) => {
-    route.navigate({
-      type: "session",
-      sessionID: (evt as any).properties.sessionID,
-    });
-  });
-
-  sdk.event.on(SessionApi.Event.Deleted.type as any, (evt) => {
-    if (
-      route.data.type === "session" &&
-      route.data.sessionID === (evt as any).properties.info.id
-    ) {
-      route.navigate({ type: "home" });
-      toast.show({
-        variant: "info",
-        message: "The current session was deleted",
-      });
-    }
-  });
-
-  sdk.event.on(SessionApi.Event.Error.type as any, (evt) => {
-    const error = (evt as any).properties.error;
-    if (
-      error &&
-      typeof error === "object" &&
-      error.name === "MessageAbortedError"
-    )
-      return;
-    const message = (() => {
-      if (!error) return "An error occurred";
-
-      if (typeof error === "object") {
-        const data = error.data;
-        if ("message" in data && typeof data.message === "string") {
-          return data.message;
-        }
-      }
-      return String(error);
-    })();
-
-    toast.show({
-      variant: "error",
-      message,
-      duration: 5000,
-    });
-  });
-
-  sdk.event.on(Installation.Event.UpdateAvailable.type as any, (evt) => {
-    toast.show({
-      variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${(evt as any).properties.version} is available. Run 'opencode upgrade' to update manually.`,
-      duration: 10000,
-    });
-  });
 
   return (
     <box

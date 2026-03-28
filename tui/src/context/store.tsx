@@ -66,10 +66,36 @@ const ctx = createSimpleContext({
       },
     })
 
+    router.ui.on("session.deleted" as any, (props: any) => {
+      if (route.data.type === "session" && route.data.sessionID === props.info.id) {
+        route.navigate({ type: "home" })
+        toast.show({ variant: "info", message: "The current session was deleted" })
+      }
+    })
+
+    router.ui.on("session.error" as any, (props: any) => {
+      const error = props.error
+      if (!error || typeof error !== "object") return
+      if (error.name === "MessageAbortedError") return
+      const data = (error as any).data
+      const message = data?.message ?? String(error)
+      toast.show({ variant: "error", message, duration: 5000 })
+    })
+
+    router.ui.on("installation.update-available" as any, (props: any) => {
+      toast.show({
+        variant: "info",
+        title: "Update Available",
+        message: `OpenCode v${props.version} is available. Run 'opencode upgrade' to update manually.`,
+        duration: 10000,
+      })
+    })
+
     return {
       state,
       actions,
       router,
+      fosra: props.fosra,
       dispose() {
         router.dispose()
       },
