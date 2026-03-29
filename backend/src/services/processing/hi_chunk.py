@@ -52,8 +52,9 @@ class _BaseModelFlex(BaseModel):
 
 class FlatChunkProducer:
     """
-    takes the hierarchical tree and produces fixed-size leaf FlatChunks while preserving the parent pointer for Auto-Merge.
-    HC200 step: apply a TokenChunker of size 200 on top of each leaf HierarchicalChunk to normalise semantic granularity.
+    Recursively traverses the hierarchical tree and yields only leaf chunks (L3).
+    Each leaf chunk retains a parent pointer to its immediate parent (L2) for Auto-Merge.
+    Intermediate nodes (L1/L2) are NOT yielded — they serve only as structural parents.
     """
 
     def __init__(self, config: ChunkerConfig):
@@ -68,6 +69,11 @@ class FlatChunkProducer:
     def _flatten(self, node: HierarchicalChunk) -> list[Chunk]:
         result = []
 
+        if not node.is_leaf:
+            for child in node.children:
+                result.extend(self._flatten(child))
+            return result
+
         if node.token_count >= 5 and node.text.strip() != "":
             meta = ChunkMetadata(
                 token_count=node.token_count,
@@ -76,10 +82,6 @@ class FlatChunkProducer:
                 parent=node,
             )
             result.append(Chunk(text=node.text, metadata=meta))
-
-        if not node.is_leaf:
-            for child in node.children:
-                result.extend(self._flatten(child))
 
         return result
 

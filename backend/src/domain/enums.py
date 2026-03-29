@@ -24,6 +24,7 @@ class EmbedderType(StrEnum):
     """Types of embedders available."""
 
     FASTEMBED = "FASTEMBED"
+    FLAG = "FLAG"
     OLLAMA = "OLLAMA"
     HUGGINGFACE = "HUGGINGFACE"
     PINECONE = "PINECONE"
@@ -243,7 +244,6 @@ class RetrievalMode(StrEnum):
 
     STANDARD = "STANDARD"
     HYBRID = "HYBRID"
-    LATE = "LATE"
 
 
 class SearchStrategy(StrEnum):

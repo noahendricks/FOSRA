@@ -131,12 +131,8 @@ class ChunkerService:
     @staticmethod
     async def _chunk_text(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
         """Handle text file chunking."""
-        chunker_type = config.preferred_strategy
-
-        structurer = HiChunkStructurer(config=ChunkerConfig())
-
+        structurer = HiChunkStructurer(config=config)
         chunks = HiChunk.index(document=doc, structurer=structurer)
-
         return chunks
 
     # NOTE: ADD PDF CHUNKING LATER

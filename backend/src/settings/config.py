@@ -83,9 +83,10 @@ class RecursiveChunkerConfig(_BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     tokenizer: Any = "character"
-    chunk_size: int = 2048
+    chunk_size: int = 512
     rules: RecursiveRules = RecursiveRules()
     min_characters_per_chunk: int = 24
+    chunk_overlap: int = 50
 
 
 class CodeChunkerConfig(_BaseModelFlex):
@@ -128,7 +129,7 @@ class ChunkerConfig(_BaseModelFlex):
 
     chunk_size: int = 2048
     max_inference_tokens: int = 8192
-    max_levels: int = 3
+    max_levels: int = 2
     fixed_chunk_size: int = 250
     tokenizer: str = "auto"
 
@@ -197,7 +198,7 @@ class QdrantConfig(_BaseModelFlex):
     data_path: str | None = Field(
         default=None, description="Local path for embedded Qdrant persistence"
     )
-    vector_size: int = 384
+    vector_size: int = 1024
     top_k: int = 10
     min_score: float = 0.0
     include_vectors: bool = False
@@ -251,20 +252,16 @@ class EmbedderConfig(_BaseModelFlex):
     max_concurrent: int = 3
     normalize: bool = True
     truncate: bool = True
-    max_length: int = 512
+    max_length: int = 8192
     cache_dir: Path = set_model_cache_dir()
 
     embedder_type: EmbedderType = EmbedderType.FASTEMBED
 
-    dense_model: str = "BAAI/bge-small-en-v1.5"
-    dense_dimensions: int = 384
+    dense_model: str = "BAAI/bge-m3"
+    dense_dimensions: int = 1024
 
     sparse_enabled: bool = True
-    sparse_model: str | None = "prithivida/Splade_PP_en_v1"
-
-    late_enabled: bool = True
-    late_model: str | None = "colbert-ir/colbertv2.0"
-    late_dimensions: int = 128
+    sparse_model: str | None = "BAAI/bge-m3"
 
     cuda_enabled: bool = False
 
@@ -303,8 +300,9 @@ class RerankerConfig(_BaseModelFlex):
     config_id: str = ""
     config_name: str = "New Reranker Config"
     api_key: SecretStr | None = None
-    RerankProvider: RerankerType = RerankerType.FLASHRANK
+    rerank_provider: RerankerType = RerankerType.BGE
     model: str | None = "ms-marco-MiniLM-L-12-v2"
+    bge_model: str = "BAAI/bge-reranker-v2-m3"
     top_k: int = 10
     score_threshold: float | None = None
     return_scores: bool = True
