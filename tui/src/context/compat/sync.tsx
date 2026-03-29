@@ -1,7 +1,12 @@
+import { createEffect, on, onMount } from "solid-js"
 import { createSimpleContext } from "../helper"
 import { useStore } from "../store"
 import { useApi } from "../api"
 import { createStore } from "solid-js/store"
+import { useToast } from "../../ui/toast"
+import { useCommandDialog } from "../../component/dialog-command"
+import { useRoute } from "../route"
+import { usePromptRef } from "../prompt"
 
 const ctx = createSimpleContext({
   name: "SyncCompat",
@@ -144,3 +149,66 @@ const ctx = createSimpleContext({
 })
 
 export const { provider: SyncCompatProvider, use: useSyncCompat } = ctx
+
+function UIHandlers() {
+  const store = useStore()
+  const toast = useToast()
+  const command = useCommandDialog()
+  const route = useRoute()
+  const promptRef = usePromptRef()
+
+  createEffect(() => {
+    const router = store.router
+
+    router.ui.on("session.deleted" as any, (props: any) => {
+      if (route.data.type === "session" && route.data.sessionID === props.info.id) {
+        route.navigate({ type: "home" })
+        toast.show({ variant: "info", message: "The current session was deleted" })
+      }
+    })
+
+    router.ui.on("session.error" as any, (props: any) => {
+      const error = props.error
+      if (!error || typeof error !== "object") return
+      if (error.name === "MessageAbortedError") return
+      const data = (error as any).data
+      const message = data?.message ?? String(error)
+      toast.show({ variant: "error", message, duration: 5000 })
+    })
+
+    router.ui.on("installation.update-available" as any, (props: any) => {
+      toast.show({
+        variant: "info",
+        title: "Update Available",
+        message: `OpenCode v${props.version} is available. Run 'opencode upgrade' to update manually.`,
+        duration: 10000,
+      })
+    })
+
+    router.ui.on("tui.toast.show" as any, (props: any) => {
+      toast.show({ variant: props.variant ?? "info", title: props.title, message: props.message, duration: props.duration })
+    })
+
+    router.ui.on("tui.command.execute" as any, (props: any) => {
+      command.trigger(props.command)
+    })
+
+    router.ui.on("tui.prompt.append" as any, (props: any) => {
+      const ref = promptRef.current
+      if (ref?.current) {
+        ref.set({
+          ...ref.current,
+          input: (ref.current.input ?? "") + props.text,
+        })
+      }
+    })
+
+    router.ui.on("tui.session.select" as any, (props: any) => {
+      route.navigate({ type: "session", sessionID: props.sessionID })
+    })
+  })
+
+  return null
+}
+
+export { UIHandlers }

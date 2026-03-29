@@ -1,4 +1,4 @@
-import type { Session, Message, Part, Todo, PermissionRequest, QuestionRequest } from "../external/sdk-types"
+import type { Session, Message, Part, Todo, PermissionRequest, QuestionRequest } from "../fosra/sdk-types"
 
 export type EntityKey = "sessions" | "messages" | "parts" | "todos"
 

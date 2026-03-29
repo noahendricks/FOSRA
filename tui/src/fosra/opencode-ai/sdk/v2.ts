@@ -1,10 +1,10 @@
-import type { Event, Session, Message, Part, ProviderAuthAuthorization, ProviderListResponse } from "../../../sdk-types"
-export * from "../../../sdk-types"
+import type { Event, Session, Message, Part, ProviderAuthAuthorization, ProviderListResponse } from "../../sdk-types"
+export * from "../../sdk-types"
 
 type Result<T> = { data?: T; error?: { code: string; message: string }; response?: Response }
 type StreamResult<T> = { stream: AsyncIterable<T>; error?: { code: string; message: string }; response?: Response }
 
-export const createOpencodeClient = (options: {
+export const createFosraClient = (options: {
   baseUrl?: string
   signal?: AbortSignal
   directory?: string

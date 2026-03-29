@@ -17,7 +17,7 @@ import type {
   VcsInfo,
   Command,
   Workspace,
-} from "../external/sdk-types"
+} from "../fosra/sdk-types"
 
 export function createAppState() {
   const sessions = new ReactiveMap<string, Session>()

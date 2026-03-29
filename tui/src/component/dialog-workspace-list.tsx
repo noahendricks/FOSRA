@@ -3,12 +3,12 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSyncCompat } from "@tui/context/compat/sync"
 import { createEffect, createMemo, createSignal, onMount } from "solid-js"
-import type { Session } from "@opencode-ai/sdk/v2"
+import type { Session } from "@fosra/sdk/v2"
 import { useApi } from "@tui/context/api"
 import { useToast } from "../ui/toast"
 import { useKeybind } from "../context/keybind"
 import { DialogSessionList } from "./workspace/dialog-session-list"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { createFosraClient } from "@fosra/sdk/v2"
 import { setTimeout as sleep } from "node:timers/promises"
 
 async function openWorkspace(input: {
@@ -23,7 +23,7 @@ async function openWorkspace(input: {
   const cacheSession = (session: Session) => {
   }
 
-  const client = createOpencodeClient({
+  const client = createFosraClient({
     baseUrl: input.sdk.url,
     fetch: input.sdk.fetch,
     directory: input.sync.data.path.directory || input.sdk.directory,
@@ -181,7 +181,7 @@ export function DialogWorkspaceList() {
       await open(workspaceID)
       return
     }
-    const client = createOpencodeClient({
+    const client = createFosraClient({
       baseUrl: sdk.url,
       fetch: sdk.fetch,
       directory: sync.data.path.directory || sdk.directory,
@@ -217,7 +217,7 @@ export function DialogWorkspaceList() {
     setCounts(Object.fromEntries(workspaces.map((workspace) => [workspace.id, undefined])))
     void Promise.all(
       workspaces.map(async (workspace) => {
-        const client = createOpencodeClient({
+        const client = createFosraClient({
           baseUrl: sdk.url,
           fetch: sdk.fetch,
           directory: sync.data.path.directory || sdk.directory,

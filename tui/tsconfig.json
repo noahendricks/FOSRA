@@ -16,11 +16,9 @@
     "isolatedModules": true,
     "noUncheckedIndexedAccess": false,
     "paths": {
-      "@/*": ["./src/external/stubs/*"],
+      "@/*": ["./src/fosra/*"],
       "@tui/*": ["./src/*"],
-      "@opencode-ai/sdk/v2": ["./src/external/stubs/opencode-ai/sdk/v2"],
-      "@opencode-ai/sdk": ["./src/external/stubs/opencode-ai/sdk"],
-      "@opencode-ai/util/binary": ["./src/external/stubs/opencode-ai/util/binary"]
+      "@fosra/sdk/v2": ["./src/fosra/opencode-ai/sdk/v2"]
     }
   },
   "include": ["src/**/*"],

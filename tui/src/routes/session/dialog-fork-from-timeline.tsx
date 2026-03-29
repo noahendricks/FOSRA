@@ -1,7 +1,7 @@
 import { createMemo, onMount } from "solid-js"
 import { useSyncCompat } from "../../context/compat/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import type { TextPart } from "@opencode-ai/sdk/v2"
+import type { TextPart } from "@fosra/sdk/v2"
 import { Locale } from "@/util/locale"
 import { useApi } from "../../context/api"
 import { useRoute } from "@tui/context/route"

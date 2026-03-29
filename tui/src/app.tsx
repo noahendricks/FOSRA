@@ -31,7 +31,8 @@ import { Installation } from "@/installation";
 import { DialogProvider, useDialog } from "@tui/ui/dialog";
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider";
 import { ApiProvider, useApi } from "@tui/context/api";
-import { SyncCompatProvider, useSyncCompat } from "@tui/context/compat/sync";
+import { StoreProvider } from "@tui/context/store";
+import { SyncCompatProvider, useSyncCompat, UIHandlers } from "@tui/context/compat/sync";
 import { LocalProvider, useLocal } from "@tui/context/local";
 import { DialogModel, useConnected } from "@tui/component/dialog-model";
 import { DialogMcp } from "@tui/component/dialog-mcp";
@@ -184,7 +185,8 @@ export function tui(input: {
                           }}
                           events={input.events}
                         >
-                          <SyncCompatProvider>
+                          <StoreProvider>
+                            <SyncCompatProvider>
                             <ThemeProvider mode={mode}>
                               <LocalProvider>
                                 <KeybindProvider>
@@ -194,6 +196,7 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
+                                              <UIHandlers />
                                               <App />
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
@@ -204,7 +207,8 @@ export function tui(input: {
                                 </KeybindProvider>
                               </LocalProvider>
                             </ThemeProvider>
-                          </SyncCompatProvider>
+                            </SyncCompatProvider>
+                          </StoreProvider>
                         </ApiProvider>
                       </TuiConfigProvider>
                     </RouteProvider>

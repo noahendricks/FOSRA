@@ -1,31 +1,17 @@
-import { onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
-import { useToast } from "../ui/toast"
-import { useCommandDialog } from "../component/dialog-command"
-import { useRoute } from "./route"
-import { usePromptRef } from "./prompt"
+import { useApi } from "./api"
 import { createAppState } from "../store/state"
 import { createStoreActions } from "../store/actions"
 import { createEventRouter } from "../events/router"
 import { registerSessionHandlers } from "../events/handlers/session"
 import { registerMessageHandlers } from "../events/handlers/message"
 import { registerSystemHandlers } from "../events/handlers/system"
-import { registerUIHandlers } from "../events/handlers/ui"
 import type { EventChannel } from "../events/channel"
 
 const ctx = createSimpleContext({
   name: "Store",
-  init: (props: {
-    channel: EventChannel
-    fosra: any
-    url: string
-    directory: string
-    fetch: typeof fetch
-  }) => {
-    const route = useRoute()
-    const toast = useToast()
-    const command = useCommandDialog()
-    const promptRef = usePromptRef()
+  init: () => {
+    const api = useApi()
 
     const state = createAppState()
     const actions = createStoreActions({
@@ -37,65 +23,19 @@ const ctx = createSimpleContext({
       question: state.questions,
     })
 
-    const router = createEventRouter(props.channel)
+    const router = createEventRouter(api.channel)
 
     registerSessionHandlers(router.store, actions)
     registerMessageHandlers(router.store, actions)
-    registerSystemHandlers(router.store, actions, () => loadInitial(props, state), state)
+    registerSystemHandlers(router.store, actions, () => loadInitial(api, state), state)
 
-    registerUIHandlers(router.ui, {
-      toast: {
-        show: (opts) => toast.show(opts as any),
-      },
-      commands: {
-        trigger: (cmd) => command.trigger(cmd),
-      },
-      prompt: {
-        append: (text) => {
-          const ref = promptRef.current
-          if (ref?.current) {
-            ref.set({
-              ...ref.current,
-              input: (ref.current.input ?? "") + text,
-            })
-          }
-        },
-      },
-      navigate: (sessionID) => {
-        route.navigate({ type: "session", sessionID })
-      },
-    })
-
-    router.ui.on("session.deleted" as any, (props: any) => {
-      if (route.data.type === "session" && route.data.sessionID === props.info.id) {
-        route.navigate({ type: "home" })
-        toast.show({ variant: "info", message: "The current session was deleted" })
-      }
-    })
-
-    router.ui.on("session.error" as any, (props: any) => {
-      const error = props.error
-      if (!error || typeof error !== "object") return
-      if (error.name === "MessageAbortedError") return
-      const data = (error as any).data
-      const message = data?.message ?? String(error)
-      toast.show({ variant: "error", message, duration: 5000 })
-    })
-
-    router.ui.on("installation.update-available" as any, (props: any) => {
-      toast.show({
-        variant: "info",
-        title: "Update Available",
-        message: `OpenCode v${props.version} is available. Run 'opencode upgrade' to update manually.`,
-        duration: 10000,
-      })
-    })
+    loadInitial(api, state)
 
     return {
       state,
       actions,
       router,
-      fosra: props.fosra,
+      fosra: api.fosra,
       dispose() {
         router.dispose()
       },
@@ -121,6 +61,24 @@ async function loadInitial(
   for (const session of sessions.data ?? []) {
     state.sessions.set(session.id, session)
   }
+
+  const [commandResult, lspResult, mcpResult, formatterResult, vcsResult, pathResult] = await Promise.all([
+    api.fosra.command.list().catch(() => ({ data: [] })),
+    api.fosra.lsp.status().catch(() => ({ data: [] })),
+    api.fosra.mcp.status().catch(() => ({ data: {} })),
+    api.fosra.formatter.status().catch(() => ({ data: [] })),
+    api.fosra.vcs.get().catch(() => ({ data: {} })),
+    api.fosra.path.get().catch(() => ({ data: { home: "", state: "", config: "", worktree: "", directory: "" } })),
+  ])
+
+  state.setCommand(commandResult.data ?? [])
+  state.setLsp(lspResult.data ?? [])
+  for (const [k, v] of Object.entries(mcpResult.data ?? {})) {
+    state.mcp.set(k, v as any)
+  }
+  state.setFormatter(formatterResult.data ?? [])
+  state.setVcs(vcsResult.data ?? undefined)
+  state.setPath(pathResult.data ?? { home: "", state: "", config: "", worktree: "", directory: "" })
 }
 
 export const StoreProvider = ctx.provider
