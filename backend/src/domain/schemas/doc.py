@@ -5,22 +5,12 @@ from typing import Any, Literal, Self
 
 from chonkie.types import Chunk as ChonkieChunk
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from pydantic.v1.utils import to_camel
+from pydantic.alias_generators import to_camel
 from qdrant_client.models import SparseVector
 
+from backend.src.api.schemas.base import _BaseModelFlex
 from backend.src.services.processing.utils.loader import code_mimes, text_mimes
 from backend.src.storage.utils.converters import DomainStruct
-
-
-class _BaseModelFlex(BaseModel):
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-
-    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
 
 
 class MDNFile(DomainStruct):
@@ -204,7 +194,6 @@ class ChunkMetadata(_BaseModelFlex):
     end_char: int | None = None
     dense_embedding: list[float] = []
     sparse_embedding: Any | SparseVector = None
-    late_embedding: list[float] = []
     parent: HierarchicalChunk | None = Field(default=None, validate_default=False)
 
 

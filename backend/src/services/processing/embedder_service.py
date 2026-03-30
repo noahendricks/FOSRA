@@ -5,10 +5,9 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Protocol
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict
-from pydantic.v1.utils import to_camel
 from qdrant_client.models import SparseVector
 
+from backend.src.api.schemas.base import _BaseModelFlex
 from backend.src.domain.schemas.doc import Chunk
 
 if TYPE_CHECKING:
@@ -22,17 +21,6 @@ class EmbedderProvider(Protocol):
     async def embed_query(
         self, query: str, config: EmbedderConfig
     ) -> EmbeddedQueries | None: ...
-
-
-class _BaseModelFlex(BaseModel):
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-
-    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
 
 
 class EmbeddedQueries(_BaseModelFlex):
@@ -335,28 +323,100 @@ class HuggingFaceProvider:
 
 
 # =============================================================================
+# NomicCode Provider (nomic-ai/nomic-embed-code: 768d, Qwen2.5-Coder base)
+# Requires prompt prefixes: "Represent this query..." for queries,
+# " passage: " for code passages.
+# =============================================================================
+class NomicCodeProvider:
+    _cache: dict[str, SentenceTransformer] = {}
+
+    QUERY_PROMPT = "Represent this query for searching relevant code: "
+    PASSAGE_PROMPT = " passage: "
+
+    def _get_model(self, config: EmbedderConfig) -> SentenceTransformer:
+        model_name = config.dense_model
+        if model_name not in self._cache:
+            logger.info(f"Initializing NomicCode model: {model_name}")
+            self._cache[model_name] = SentenceTransformer(
+                model_name,
+                cache_folder=config.cache_dir.as_posix(),
+            )
+        return self._cache[model_name]
+
+    async def embed_chunks(
+        self, chunks: list[Chunk], config: EmbedderConfig
+    ) -> list[Chunk]:
+        if not chunks:
+            return chunks
+
+        texts = [chunk.text for chunk in chunks]
+        model = self._get_model(config)
+
+        def _encode():
+            return model.encode(
+                texts,
+                batch_size=config.batch_size,
+                prompt_name=None,
+                prompt=self.PASSAGE_PROMPT,
+                normalize_embeddings=True,
+            )
+
+        embeddings = await asyncio.to_thread(_encode)
+
+        for chunk, embedding in zip(chunks, embeddings):
+            chunk.metadata.dense_embedding = embedding.tolist()
+
+        return chunks
+
+    async def embed_query(
+        self, query: str, config: EmbedderConfig
+    ) -> EmbeddedQueries | None:
+        model = self._get_model(config)
+
+        def _encode():
+            emb = model.encode(
+                [query],
+                prompt_name=None,
+                prompt=self.QUERY_PROMPT,
+                normalize_embeddings=True,
+            )
+            return emb[0].tolist()
+
+        dense = await asyncio.to_thread(_encode)
+
+        result = EmbeddedQueries()
+        result.dense = dense
+        return result
+
+
+# =============================================================================
 # Provider Registry
 # =============================================================================
 _PROVIDERS: dict[str, type[EmbedderProvider]] = {
     "fastembed": FastEmbedProvider,
     "flag": FlagProvider,
     "huggingface": HuggingFaceProvider,
+    "nomic_code": NomicCodeProvider,
 }
 
 
 def _resolve_provider(config: EmbedderConfig) -> EmbedderProvider:
-    embedder_type = config.embedder_type.value.lower()
-    if embedder_type == "flag":
-        provider_cls = _PROVIDERS.get("flag", FlagProvider)
-    elif embedder_type == "huggingface":
-        provider_cls = _PROVIDERS.get("huggingface", HuggingFaceProvider)
-    elif embedder_type == "fastembed":
-        provider_cls = _PROVIDERS.get("fastembed", FastEmbedProvider)
-    else:
-        provider_cls = _PROVIDERS.get("fastembed", FastEmbedProvider)
-        logger.warning(
-            f"Unknown embedder type '{embedder_type}', defaulting to FastEmbedProvider"
-        )
+    from backend.src.domain.enums import EmbedderType
+
+    match config.embedder_type:
+        case EmbedderType.FLAG:
+            provider_cls = _PROVIDERS.get("flag", FlagProvider)
+        case EmbedderType.HUGGINGFACE:
+            provider_cls = _PROVIDERS.get("huggingface", HuggingFaceProvider)
+        case EmbedderType.NOMIC_CODE:
+            provider_cls = _PROVIDERS.get("nomic_code", NomicCodeProvider)
+        case EmbedderType.FASTEMBED:
+            provider_cls = _PROVIDERS.get("fastembed", FastEmbedProvider)
+        case _:
+            provider_cls = _PROVIDERS.get("fastembed", FastEmbedProvider)
+            logger.warning(
+                f"Unknown embedder type '{config.embedder_type}', defaulting to FastEmbedProvider"
+            )
 
     return provider_cls()
 
@@ -394,3 +454,20 @@ class EmbedderService:
         except Exception as e:
             logger.error(f"Query embedding failed: {e}")
             return None
+
+
+# =============================================================================
+# Code-specific embedder config factory
+# =============================================================================
+def nomic_code_embedder_config() -> "EmbedderConfig":
+    """Return an EmbedderConfig configured for Nomic Embed Code (768d)."""
+    from backend.src.settings import get_settings
+
+    settings = get_settings()
+    return EmbedderConfig(
+        embedder_type=EmbedderType.NOMIC_CODE,
+        dense_model="nomic-ai/nomic-embed-code",
+        dense_dimensions=768,
+        batch_size=settings.embedding.batch_size,
+        normalize=True,
+    )

@@ -29,7 +29,7 @@ LANGUAGE_EXTENSIONS = {
 }
 
 
-@broker.task
+@broker.task(max_execution_time=600)
 async def ingest_codebase(
     directory_path: str,
     repo_name: str | None,
@@ -95,7 +95,7 @@ async def ingest_codebase(
     return stats
 
 
-@broker.task
+@broker.task(max_execution_time=120)
 async def ingest_single_file(
     file_path: str,
     repo_name: str | None,
@@ -240,7 +240,7 @@ def _collect_code_files(directory: Path, recursive: bool) -> list[Path]:
     return sorted(files)
 
 
-@broker.task
+@broker.task(max_execution_time=900)
 async def reindex_codebase(
     directory_path: str,
     repo_name: str | None,

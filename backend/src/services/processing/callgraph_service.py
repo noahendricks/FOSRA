@@ -29,6 +29,7 @@ from backend.src.domain.schemas.graph import (
     CodeNode,
     GraphResult,
     InheritanceEdge,
+    MethodEdge,
     Parameter,
     ResolvedImport,
     Signature,
@@ -296,82 +297,25 @@ class CallGraphService:
 
         chunk_map = {c.name: c for c in parse_result.chunks if c.name}
 
-        func_query = Query(lang, FUNCTION_QUERY_PATTERNS.get(language, ""))
-
-        cursor = QueryCursor(func_query)
-
-        # walk tree root and parse method and functions nodes based on their language pattern & append to nodes list
-        for pattern_idx, captures in cursor.matches(root):
-            if "name" in captures:
-                # captures are every returned node that matches pattern
-                name_nodes = captures["name"]
-                for name_node in name_nodes:
-                    func_node = name_node.parent
-                    # next iter if capture is orphaned (no parent)
-                    if not func_node:
-                        continue
-
-                    # func / method name retrieved using byte-offset slice on exact name location in source code
-                    name = source_code[name_node.start_byte : name_node.end_byte]
-
-                    # func / method block starting line determined by using the retrieved name node
-                    line_start = name_node.start_point[0] + 1
-                    # func / method block end line determined using the end of returned func node
-                    line_end = func_node.end_point[0] + 1
-
-                    # get chunk from initial source code chunks via name
-                    chunk = chunk_map.get(name)
-
-                    # extract signature from outer function node
-                    signature = self._extract_signature(
-                        func_node, source_code, language
-                    )
-
-                    # deduce if it is method using func node and passed language
-                    is_method = self._is_method(func_node, language)
-
-                    node_type = (
-                        GraphNodeType.METHOD if is_method else GraphNodeType.FUNCTION
-                    )
-
-                    nodes.append(
-                        CodeNode(
-                            node_type=node_type,
-                            name=name,
-                            qualified_name=f"{file_path}:{name}",
-                            file_id=file_id,
-                            file_path=file_path,
-                            line_start=line_start,
-                            line_end=line_end,
-                            signature=signature,
-                            docstring=self._extract_docstring(
-                                func_node, source_code, language
-                            ),
-                            source_code=source_code[
-                                func_node.start_byte : func_node.end_byte
-                            ]
-                            if chunk
-                            else None,
-                        )
-                    )
-
+        # Extract classes FIRST to build class membership map before function extraction
+        class_info: dict[
+            int, tuple[str, int, int]
+        ] = {}  # line_start -> (name, line_start, line_end)
         class_query = Query(lang, CLASS_QUERY_PATTERNS.get(language, ""))
         class_cursor = QueryCursor(class_query)
-        # walk tree root and parse and append class nodes
+
         for pattern_idx, captures in class_cursor.matches(root):
             if "name" in captures:
                 for name_node in captures["name"]:
                     class_node = name_node.parent
                     if not class_node:
-                        # next iter if orphaned capture (no parent)
                         continue
 
-                    # extract class name using byte-offset slice on source code bytes
                     name = source_code[name_node.start_byte : name_node.end_byte]
-
                     line_start = name_node.start_point[0] + 1
                     line_end = class_node.end_point[0] + 1
 
+                    class_info[line_start] = (name, line_start, line_end)
                     nodes.append(
                         CodeNode(
                             node_type=GraphNodeType.CLASS,
@@ -384,6 +328,73 @@ class CallGraphService:
                             source_code=source_code[
                                 class_node.start_byte : class_node.end_byte
                             ],
+                        )
+                    )
+
+        # Find containing class for a given line number
+        def find_enclosing_class(line: int) -> str | None:
+            # class_info keys are sorted class starting lines
+            for cls_line in sorted(class_info.keys(), reverse=True):
+                if line >= cls_line:
+                    cls_name, cls_start, cls_end = class_info[cls_line]
+                    if cls_start <= line <= cls_end:
+                        return cls_name
+                    break
+            return None
+
+        # Extract functions and methods
+        func_query = Query(lang, FUNCTION_QUERY_PATTERNS.get(language, ""))
+        func_cursor = QueryCursor(func_query)
+
+        for pattern_idx, captures in func_cursor.matches(root):
+            if "name" in captures:
+                name_nodes = captures["name"]
+                for name_node in name_nodes:
+                    func_node = name_node.parent
+                    if not func_node:
+                        continue
+
+                    name = source_code[name_node.start_byte : name_node.end_byte]
+                    line_start = name_node.start_point[0] + 1
+                    line_end = func_node.end_point[0] + 1
+
+                    is_method = self._is_method(func_node, language)
+                    containing_class = (
+                        find_enclosing_class(line_start) if is_method else None
+                    )
+
+                    node_type = (
+                        GraphNodeType.METHOD if is_method else GraphNodeType.FUNCTION
+                    )
+
+                    if containing_class:
+                        qualified_name = f"{file_path}:{containing_class}.{name}"
+                    else:
+                        qualified_name = f"{file_path}:{name}"
+
+                    signature = self._extract_signature(
+                        func_node, source_code, language
+                    )
+
+                    nodes.append(
+                        CodeNode(
+                            node_type=node_type,
+                            name=name,
+                            qualified_name=qualified_name,
+                            file_id=file_id,
+                            file_path=file_path,
+                            line_start=line_start,
+                            line_end=line_end,
+                            signature=signature,
+                            docstring=self._extract_docstring(
+                                func_node, source_code, language
+                            ),
+                            source_code=source_code[
+                                func_node.start_byte : func_node.end_byte
+                            ],
+                            metadata={"containing_class": containing_class}
+                            if containing_class
+                            else {},
                         )
                     )
 

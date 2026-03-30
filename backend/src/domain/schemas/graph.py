@@ -2,24 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict
-from pydantic.v1.utils import to_camel
-
+from backend.src.api.schemas.base import _BaseModelFlex
 from backend.src.domain.enums import GraphNodeType
 from backend.src.storage.utils.converters import DomainStruct
 
 if TYPE_CHECKING:
     from backend.src.domain.schemas.retrieval import AccumulatedItem
-
-
-class _BaseModelFlex(BaseModel):
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
 
 
 class Signature(_BaseModelFlex):
@@ -69,6 +57,17 @@ class InheritanceEdge(_BaseModelFlex):
     parent_file_id: str | None = None
     inheritance_type: str = "extends"
     is_cross_file: bool = False
+
+
+class MethodEdge(_BaseModelFlex):
+    """represents a class defining/containing a method."""
+
+    class_name: str
+    class_qualified: str
+    class_file_id: str
+    method_name: str
+    method_qualified: str
+    method_file_id: str
 
 
 class ResolvedImport(_BaseModelFlex):
@@ -170,9 +169,10 @@ class GraphResult(_BaseModelFlex):
     file_path: str
     language: str
     nodes: list[CodeNode]
-    call_edges: list[CallEdge]
-    inheritance_edges: list[InheritanceEdge]
-    imports: list[ResolvedImport]
+    call_edges: list[CallEdge] = field(default_factory=list)
+    inheritance_edges: list[InheritanceEdge] = field(default_factory=list)
+    method_edges: list[MethodEdge] = field(default_factory=list)
+    imports: list[ResolvedImport] = field(default_factory=list)
 
     @property
     def functions(self) -> list[CodeNode]:
