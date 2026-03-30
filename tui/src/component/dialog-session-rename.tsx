@@ -1,6 +1,6 @@
 import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { useDialog } from "@tui/ui/dialog"
-import { useSyncCompat } from "../context/compat/sync"
+import { useStore } from "../context/store"
 import { createMemo } from "solid-js"
 import { useApi } from "../context/api"
 
@@ -10,9 +10,9 @@ interface DialogSessionRenameProps {
 
 export function DialogSessionRename(props: DialogSessionRenameProps) {
   const dialog = useDialog()
-  const sync = useSyncCompat()
+  const store = useStore()
   const api = useApi()
-  const session = createMemo(() => sync.session.get(props.session))
+  const session = createMemo(() => store.state.sessions.get(props.session))
 
   return (
     <DialogPrompt

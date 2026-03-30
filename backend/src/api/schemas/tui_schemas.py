@@ -176,7 +176,6 @@ from backend.src.api.schemas.tui_control_schemas import (  # noqa: F401,F811
     SubtaskPartModel,
     SymbolSource,
     TextPartInput,
-    TextPartTime,
     Todo,
 )
 from backend.src.api.schemas.source_schemas import (  # noqa: F401,F811
@@ -188,12 +187,6 @@ from backend.src.api.schemas.source_schemas import (  # noqa: F401,F811
     FormatterStatus,
     LspStatus,
     McpResource,
-    SymbolLocation,
-    SymbolSource,
-    RangeStart,
-    RangeEnd,
-    Range,
-    FilePartSourceText,
     ToolIds,
     ToolList,
     ToolListItem,
@@ -304,7 +297,6 @@ from backend.src.api.schemas.workspace_schemas import (  # noqa: F401,F811
     Range,
     RangeEnd,
     RangeStart,
-    FilePartSourceText,
     WellKnownAuth,
     Worktree,
     WorktreeCreateInput,
@@ -312,9 +304,11 @@ from backend.src.api.schemas.workspace_schemas import (  # noqa: F401,F811
     WorktreeResetInput,
     Workspace,
 )
-from backend.src.api.schemas.api_schemas import (  # noqa: F401
+from backend.src.api.schemas.convo_api_schemas import (  # noqa: F401
     ConvoListItemResponse,
     ConvoFullResponse,
+)
+from backend.src.api.schemas.api_schemas import (  # noqa: F401
     MessageResponse,
 )
 
@@ -323,27 +317,24 @@ from backend.src.api.schemas.api_schemas import (  # noqa: F401
 # =============================================================================
 
 
-def _ts(dt: datetime | None) -> float:
-    return dt.timestamp() if dt else 0.0
+def _ts(dt: datetime | None) -> int:
+    return int(dt.timestamp()) if dt else 0
 
 
 def convo_to_session(
     item: ConvoListItemResponse,
 ) -> Session:
     return Session(
-        id=item.id or "",
-        slug=item.slug or "",
-        projectID=item.project_id or "",
-        workspaceID=item.workspace_id,
-        directory=item.directory or "",
-        parentID=item.parent_id,
+        id=item.convo_id,
+        slug="",
+        projectID="",
+        workspaceID="default",
+        directory=PROJECT_DIR,
         title=item.title or "",
-        version=item.version or "",
+        version="",
         time=SessionTime(
             created=_ts(item.created_at),
             updated=_ts(item.updated_at),
-            compacting=_ts(item.compacted_at) if item.compacted_at else None,
-            archived=_ts(item.archived_at) if item.archived_at else None,
         ),
     )
 
@@ -354,14 +345,13 @@ def convo_list_item_to_session(item: ConvoListItemResponse) -> Session:
 
 def convo_full_to_session(convo: ConvoFullResponse) -> Session:
     return Session(
-        id=convo.id or "",
-        slug=convo.slug or "",
-        projectID=convo.project_id or "",
-        workspaceID=convo.workspace_id,
-        directory=convo.directory or "",
-        parentID=convo.parent_id,
+        id=convo.convo_id,
+        slug="",
+        projectID="",
+        workspaceID="default",
+        directory=PROJECT_DIR,
         title=convo.title or "",
-        version=convo.version or "",
+        version="",
         time=SessionTime(
             created=_ts(convo.created_at),
             updated=_ts(convo.updated_at),
@@ -370,7 +360,60 @@ def convo_full_to_session(convo: ConvoFullResponse) -> Session:
 
 
 def message_to_tui(msg: MessageResponse, session_id: str) -> dict[str, Any]:
-    return msg.model_dump(mode="json") if hasattr(msg, "model_dump") else {}
+    """convert a db MessageResponse into the {info: Message, parts: Part[]} shape the tui expects."""
+    if not hasattr(msg, "model_dump"):
+        return {}
+
+    ts = int(msg.timestamp.timestamp()) if msg.timestamp else 0
+    msg_id = msg.message_id or ""
+    role_val = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
+
+    if role_val == "user":
+        info = UserMessage(
+            id=msg_id,
+            sessionID=session_id,
+            role="user",
+            time=UserMessageTime(created=ts),
+            agent="default",
+            model=UserMessageModel(
+                providerID=DEFAULT_PROVIDER_ID,
+                modelID=DEFAULT_MODEL_ID,
+            ),
+        )
+    else:
+        info = AssistantMessage(
+            id=msg_id,
+            sessionID=session_id,
+            role="assistant",
+            time=AssistantMessageTime(created=ts, completed=ts),
+            parentID=msg.parent_id or "",
+            modelID=DEFAULT_MODEL_ID,
+            providerID=DEFAULT_PROVIDER_ID,
+            mode="default",
+            agent="default",
+            path=AssistantMessagePath(cwd=PROJECT_DIR, root=PROJECT_DIR),
+            cost=0,
+            tokens=AssistantMessageTokens(
+                input=0,
+                output=0,
+                reasoning=0,
+                cache=AssistantMessageTokensCache(read=0, write=0),
+            ),
+        )
+
+    parts: list[dict[str, Any]] = []
+    if msg.text:
+        parts.append(
+            TextPart(
+                id=f"{msg_id}-text",
+                sessionID=session_id,
+                messageID=msg_id,
+                type="text",
+                text=msg.text,
+            ).model_dump(mode="json")
+        )
+
+    return {"info": info.model_dump(mode="json"), "parts": parts}
 
 
 def get_default_provider() -> dict[str, Any]:

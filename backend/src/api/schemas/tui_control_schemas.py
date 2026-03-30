@@ -6,6 +6,39 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from backend.src.api.schemas.base import _BaseModelFlex
+
+
+# ---- LEGACY WORKSPACE MESSAGE TYPES ----
+
+
+class TextPart(_BaseModelFlex):
+    type: str
+    text: str
+
+
+class FilePart(_BaseModelFlex):
+    type: str
+    name: str
+    size: int
+    filename: str
+    bytes: bytes
+    media_type: str
+    url: str | None = None
+
+
+UIMessagePart = TextPart | FilePart
+
+
+class UIMessage(_BaseModelFlex):
+    id: str
+    role: str
+    parts: list[UIMessagePart]
+    message_metadata: dict[str, Any] | None = None
+
+
+# ---- FILE DIFF ----
+
 
 class FileDiff(BaseModel):
     file: str

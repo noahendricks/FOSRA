@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.v1.utils import to_camel
+from pydantic import Field
 
+from backend.src.api.schemas.base import _BaseModelFlex
 from backend.src.domain.enums import DocType, FileType, SourceType
 from backend.src.storage.utils.converters import utc_now
 
@@ -11,19 +11,6 @@ from backend.src.storage.utils.converters import utc_now
 # File
 # API INPUT SCHEMAS (Request DTOs)
 # ============================================================================
-
-
-class _BaseModelFlex(BaseModel):
-    """_BaseModelFlex with flexible config for attribute-based initialization."""
-
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-
-    model_config = _FLEXIBLE_CONFIG
 
 
 # ============================================================================

@@ -1,23 +1,15 @@
+from datetime import datetime
 from typing import Any
 
-from pydantic.v1.utils import to_camel
-
-from backend.src.domain.enums import ConversationStreamType
-
-from pydantic import BaseModel, Field, SecretStr, ConfigDict
-
-
-class _BaseModelFlex(BaseModel):
-    """_BaseModelFlex with flexible config for attribute-based initialization."""
-
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-
-    model_config = _FLEXIBLE_CONFIG
+from backend.src.api.schemas.api_schemas import MessageResponse
+from backend.src.api.schemas.base import _BaseModelFlex
+from backend.src.api.schemas.source_api_schemas import (
+    SourceResponseDeep,
+    SourceResponseShallow,
+)
+from backend.src.domain.enums import ConversationStreamType, MessageRole
+from backend.src.storage.utils.converters import utc_now
+from pydantic import Field
 
 
 class ConversationStreamRequest(_BaseModelFlex):
@@ -88,3 +80,72 @@ class ConversationStreamResponseModel(_BaseModelFlex):
     error_message: str | None = Field(
         None, description="Error message if streaming failed"
     )
+
+
+# =============================================================================
+# CONVERSATION CRUD SCHEMAS (moved from api_schemas.py)
+# =============================================================================
+
+
+class MessageAPI(_BaseModelFlex):
+    text: str
+    convo_id: str
+    role: MessageRole
+    user_id: str | None = None
+    message_id: str | None = None
+    message_metadata: dict[str, Any] | None = None
+
+
+class ConvoRequestBase(_BaseModelFlex):
+    user_id: str
+
+
+class ConvoRequest(ConvoRequestBase):
+    convo_id: str
+
+
+class NewConvoRequest(ConvoRequestBase):
+    title: str | None = "New Convo"
+    workspace_id: str = "default"
+
+
+class ConvoDeleteRequest(ConvoRequestBase):
+    convo_id: str
+    convo_list: list[str] | None = None
+
+
+class ConvoUpdateRequest(ConvoRequestBase):
+    title: str | None = "New Convo"
+    convo_id: str
+    convo_metadata: dict[str, Any] | None = None
+    messages: list[MessageAPI] | None = None
+    data: dict[str, Any] | None = None
+
+
+class ConvoListItemResponse(ConvoRequestBase):
+    title: str
+    convo_id: str
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    message_count: int = Field(default=0)
+
+
+class NewConvoResponse(ConvoRequestBase):
+    convo_id: str
+    title: str | None = "New Convo"
+    convo_metadata: dict[str, Any] | None = None
+
+
+class ConvoFullResponse(ConvoRequestBase):
+    convo_id: str
+    title: str | None = "New Convo"
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    message_count: int = 0
+
+    knowledge_sources: list[SourceResponseDeep | SourceResponseShallow] = Field(
+        default_factory=list,
+        description="All sources for this chat",
+    )
+
+    messages: list[MessageResponse] = Field(default_factory=list)

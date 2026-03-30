@@ -85,23 +85,18 @@ async def ingest_docs(
     logger.info(f"Chunking {len(docs)} documents")
     chunks_per_doc = await ChunkerService.chunk_documents(docs, chunker_config)
 
-    # step 3: flatten and separate by level
+    # step 3: flatten
+    # FlatChunkProducer._flatten only yields L3 leaves (max_levels=2 means only L1/L2 produced)
+    # All chunks from HiChunk are leaves; code_chunker produces standalone chunks
+    # For small-to-big: only index leaves, parent context added post-retrieval
     all_chunks: list[Chunk] = []
     for doc_chunks in chunks_per_doc:
         all_chunks.extend(doc_chunks)
 
+    # All chunks go to leaf_chunks for retrieval (small-to-big)
+    # parent_chunks remains for any L1/L2 structural nodes (not currently produced)
     parent_chunks: list[Chunk] = []
-    leaf_chunks: list[Chunk] = []
-
-    for chunk in all_chunks:
-        level = getattr(chunk.metadata, "level", 3)
-        if hasattr(chunk.metadata, "parent") and chunk.metadata.parent:
-            level = chunk.metadata.parent.level
-
-        if level in (1, 2):
-            parent_chunks.append(chunk)
-        else:
-            leaf_chunks.append(chunk)
+    leaf_chunks: list[Chunk] = all_chunks
 
     logger.info(
         f"Separated {len(parent_chunks)} parent chunks, {len(leaf_chunks)} leaf chunks"

@@ -20,10 +20,12 @@ from backend.src.api.schemas import (
     NewConvoRequest,
     SourceResponseDeep,
 )
-from backend.src.api.schemas.api_schemas import (
+from backend.src.api.schemas.convo_api_schemas import (
     ConvoDeleteRequest,
     ConvoListItemResponse,
     NewConvoResponse,
+)
+from backend.src.api.schemas.tui_control_schemas import (
     TextPart,
     UIMessagePart,
 )
@@ -228,8 +230,14 @@ async def send_message_stream(
                 lc_messages = ui_messages_to_lc_messages(req.messages or [])
 
                 def emit_chunk(chunk: dict[str, Any]) -> str:
+                    logger.debug(
+                        f"[SSE EMIT] type={chunk.get('type')}, id={chunk.get('id', 'N/A')}, delta_len={len(str(chunk.get('delta', '')))}"
+                    )
                     return f"data: {json.dumps(chunk)}\n\n"
 
+                logger.info(
+                    f"[SSE START] convo_id={req.convo_id}, message_id={message_id}, text_part_id={text_part_id}"
+                )
                 yield emit_chunk({"type": "start", "messageId": message_id})
                 yield emit_chunk({"type": "text-start", "id": text_part_id})
 
@@ -246,6 +254,9 @@ async def send_message_stream(
                             else str(msg.content)
                         )
                         full_text += text_chunk
+                        logger.debug(
+                            f"[SSE DELTA] text_part_id={text_part_id}, delta='{text_chunk[:50]}...' ({len(text_chunk)} chars)"
+                        )
                         yield emit_chunk(
                             {
                                 "type": "text-delta",
@@ -254,6 +265,9 @@ async def send_message_stream(
                             }
                         )
 
+                logger.info(
+                    f"[SSE TEXT END] text_part_id={text_part_id}, full_text_len={len(full_text)}"
+                )
                 yield emit_chunk({"type": "text-end", "id": text_part_id})
 
                 source_groups = _chunks_to_source_groups(
@@ -264,6 +278,9 @@ async def send_message_stream(
                 ]
 
                 for src in sources_as_dicts:
+                    logger.debug(
+                        f"[SSE RAG SOURCE] text_part_id={text_part_id}, source_keys={list(src.keys())}"
+                    )
                     yield emit_chunk({"type": "rag-source", "source": src})
 
                 _ = await ConversationService().save_message(

@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from langchain_litellm import ChatLiteLLM
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from pydantic.v1.utils import to_camel
+from pydantic import Field, SecretStr
 
+from backend.src.api.schemas.base import _BaseModelFlexLower as _BaseModelFlex
 from backend.src.domain.enums import (
     EmbedderType,
     EmbeddingMode,
@@ -19,20 +19,6 @@ from backend.src.domain.enums import (
 
 if TYPE_CHECKING:
     pass
-
-
-class _BaseModelFlex(BaseModel):
-    """_BaseModelFlex with flexible config for attribute-based initialization."""
-
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-        str_to_lower=True,
-    )
-
-    model_config = _FLEXIBLE_CONFIG
 
 
 # =============================================================================
@@ -58,7 +44,7 @@ class LLMConfigRequest(BaseServiceConfig):
 
     provider: str = "openrouter"
     custom_provider: str | None = None
-    model: str = "openai/gpt-3.5-turbo"
+    model: str = "ollama/gpt-3.5-turbo"
     language: str = "English"
     litellm_params: dict[str, Any] = {}
 

@@ -1,13 +1,13 @@
 from backend.src.api.schemas.api_schemas import (
-    CompletionResponse,
-    ConvoFullResponse,
-    ConvoRequest,
-    ConvoUpdateRequest,
     MessageRequest,
     MessageResponse,
     MessageUpdateRequest,
+)
+from backend.src.api.schemas.convo_api_schemas import (
+    ConvoFullResponse,
+    ConvoRequest,
+    ConvoUpdateRequest,
     NewConvoRequest,
-    StreamChunkResponse,
 )
 from backend.src.api.schemas.config_api_schemas import (
     EmbedderConfigRequest,
@@ -30,8 +30,6 @@ __all__ = [
     "NewConvoRequest",
     "ConvoUpdateRequest",
     "ConvoFullResponse",
-    "CompletionResponse",
-    "StreamChunkResponse",
     "LLMConfigRequest",
     "VectorStoreConfigRequest",
     "EmbedderConfigRequest",

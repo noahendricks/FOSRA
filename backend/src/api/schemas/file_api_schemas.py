@@ -1,21 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, SecretStr, ConfigDict
-from pydantic.v1.utils import to_camel
-
-
-class _BaseModelFlex(BaseModel):
-    """_BaseModelFlex with flexible config for attribute-based initialization."""
-
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-
-    model_config = _FLEXIBLE_CONFIG
+from backend.src.api.schemas.base import _BaseModelFlex
 
 
 class FileRequest(_BaseModelFlex):

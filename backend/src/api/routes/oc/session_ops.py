@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.src.api.dependencies import get_current_user_id, get_db_session
 from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.routes.oc.state import session_status
-from backend.src.api.schemas.api_schemas import (
+from backend.src.api.schemas.convo_api_schemas import (
     ConvoUpdateRequest,
     NewConvoRequest,
 )
@@ -340,7 +340,7 @@ async def revert_session(
     ]
     _set_snapshot(session_id, snapshot)
 
-    from backend.src.api.schemas.api_schemas import ConvoDeleteRequest
+    from backend.src.api.schemas.convo_api_schemas import ConvoDeleteRequest
 
     for msg in reversed(list(convo.messages)):
         msg_id = getattr(msg, "message_id", None)
