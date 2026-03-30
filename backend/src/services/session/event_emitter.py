@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from loguru import logger
 from backend.src.api.events import BusEvent, EventBus, event_bus
 from backend.src.api.schemas.tui_event_schemas import TUIEvent
 
@@ -57,6 +58,9 @@ class EventEmitter:
     async def emit_message_part_delta(
         self, session_id: str, message_id: str, part_id: str, field: str, delta: str
     ) -> None:
+        logger.debug(
+            f"[EVENT EMITTER] emit_message_part_delta: session_id={session_id}, message_id={message_id}, part_id={part_id}, field={field}, delta_len={len(delta)}, delta_preview='{delta[:50] if delta else ''}'"
+        )
         await self.emit(
             "message.part.delta",
             {

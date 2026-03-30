@@ -6,6 +6,7 @@ uses asyncio queues — no external dependencies.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from uuid import uuid4
 from loguru import logger
 from dataclasses import dataclass
@@ -28,7 +29,8 @@ class EventBus:
     def __init__(self) -> None:
         self._subscribers: dict[str, asyncio.Queue[BusEvent]] = {}
         self._sequence: int = 0
-        self._recent: list[BusEvent] = []
+        self._recent: deque[BusEvent] = deque(maxlen=MAX_RECENT_EVENTS)
+        self._dropped_count: int = 0
         self._lock = asyncio.Lock()
 
     def subscribe(self) -> tuple[str, asyncio.Queue[BusEvent]]:
@@ -50,16 +52,16 @@ class EventBus:
             sequence_nr=seq,
         )
         self._recent.append(bus_event)
-        if len(self._recent) > MAX_RECENT_EVENTS:
-            self._recent.pop(0)
         for queue in self._subscribers.values():
             try:
                 queue.put_nowait(bus_event)
             except asyncio.QueueFull:
+                self._dropped_count += 1
                 logger.warning(
                     "Slow consumer: dropping event "
                     f"{event.get('type', 'unknown')} "
-                    f"(subscriber queue full, maxsize={MAX_QUEUE_SIZE})"
+                    f"(subscriber queue full, maxsize={MAX_QUEUE_SIZE}, "
+                    f"total_dropped={self._dropped_count})"
                 )
 
     def replay_missed(self, after_id: int) -> list[BusEvent]:

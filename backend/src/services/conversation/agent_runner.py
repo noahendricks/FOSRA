@@ -14,10 +14,10 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Any
 
+from loguru import logger as log
 from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
-from loguru import logger
+from langgraph.graph.state import RunnableConfig
 
-from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.lifecycle import global_infra
 from backend.src.api.routes.oc.state import (
     ask_permission,
@@ -27,7 +27,8 @@ from backend.src.api.routes.oc.state import (
     session_diffs,
     session_todos,
 )
-from backend.src.api.schemas.api_schemas import ConvoUpdateRequest, MessageResponse
+from backend.src.api.schemas.convo_api_schemas import ConvoUpdateRequest
+from backend.src.api.schemas.api_schemas import MessageResponse
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_MODEL_ID,
     DEFAULT_PROVIDER_ID,
@@ -60,6 +61,7 @@ from backend.src.api.schemas.tui_schemas import (
 from backend.src.domain.enums import MessageRole
 from backend.src.services.conversation.agent_service import create_fosra_agent
 from backend.src.services.conversation.conversation_service import ConversationService
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.storage.utils.converters import ulid_factory
 
 if TYPE_CHECKING:
@@ -299,7 +301,7 @@ async def run_agent_with_events(
     started by the /oc/session/{id}/prompt endpoint.
     """
     now = int(time.time())
-    user_msg_id = prompt_request.messageID or ulid_factory()
+    user_msg_id = ulid_factory()
     assistant_msg_id = ulid_factory()
     text_part_id = ulid_factory()
     step_start_id = ulid_factory()
@@ -319,11 +321,14 @@ async def run_agent_with_events(
             if text_val:
                 user_text += text_val
 
+    slog = log.bind(session_id=session_id, user_id=user_id, agent=agent_name)
+
     if not user_text:
-        logger.warning("Empty prompt received for session {}", session_id)
+        slog.warning("empty_prompt")
         return
 
     try:
+        slog.info("session_start", user_text_len=len(user_text))
         await event_emitter.emit_busy(session_id)
 
         user_msg = UserMessage(
@@ -338,6 +343,7 @@ async def run_agent_with_events(
             ),
         ).model_dump()
         await event_emitter.emit_message_updated(user_msg)
+        slog.debug("user_message_emitted", message_id=user_msg_id)
 
         user_text_part = TextPart(
             id=ulid_factory(),
@@ -348,6 +354,7 @@ async def run_agent_with_events(
             time=TextPartTime(start=now, end=now),
         ).model_dump()
         await event_emitter.emit_message_part_updated(user_text_part)
+        slog.debug("user_text_part_emitted")
 
         assistant_msg = AssistantMessage(
             id=assistant_msg_id,
@@ -369,6 +376,7 @@ async def run_agent_with_events(
             ),
         ).model_dump()
         await event_emitter.emit_message_updated(assistant_msg)
+        slog.debug("assistant_message_emitted", message_id=assistant_msg_id)
 
         step_start = StepStartPart(
             id=step_start_id,
@@ -377,6 +385,7 @@ async def run_agent_with_events(
             type="step-start",
         ).model_dump()
         await event_emitter.emit_message_part_updated(step_start)
+        slog.debug("step_start_emitted")
 
         text_part = TextPart(
             id=text_part_id,
@@ -387,6 +396,7 @@ async def run_agent_with_events(
             time=TextPartTime(start=now, end=None),
         ).model_dump()
         await event_emitter.emit_message_part_updated(text_part)
+        slog.debug("streaming_text_part_created")
 
         async with session_factory() as db_session:
             from backend.src.api.request_context import RequestContext
@@ -410,6 +420,7 @@ async def run_agent_with_events(
                 user_id=user_id,
                 session=db_session,
             )
+            slog.debug("user_message_saved_to_db", message_id=user_msg_id)
 
             backend = None
             if agent_name == "fosra-coding":
@@ -431,229 +442,367 @@ async def run_agent_with_events(
             reasoning_part_id: str | None = None
             reasoning_start_time: int | None = None
 
-            logger.info("[STREAM] starting astream for session {}", session_id)
+            slog.info("astream_started")
             chunk_count = 0
-            config = {"configurable": {"thread_id": session_id}}
-            async for msg, _metadata in agent.astream(
-                {"messages": lc_messages},
-                config=config,
-                stream_mode="messages",
-                subgraphs=True,
-            ):
-                if stream_abort:
-                    break
-                chunk_count += 1
-                logger.info(
-                    "[STREAM] chunk #{} type={} content_type={} content_repr={}",
-                    chunk_count,
-                    type(msg).__name__,
-                    type(getattr(msg, "content", None)).__name__,
-                    repr(getattr(msg, "content", None))[:200],
+            cf = RunnableConfig(configurable={"thread_id": session_id})
+            try:
+                slog.debug(
+                    "about_to_call_agent_astream", messages_count=len(lc_messages)
                 )
-                if isinstance(msg, AIMessageChunk):
-                    content_blocks = getattr(msg, "content_blocks", None)
-                    if content_blocks:
-                        for block in content_blocks:
-                            block_type = (
-                                block.get("type") if isinstance(block, dict) else None
-                            )
-                            if block_type == "reasoning":
-                                reasoning_text = block.get("reasoning", "") or ""
-                                if reasoning_text:
-                                    now_ts = int(time.time())
-                                    if reasoning_part_id is None:
-                                        reasoning_part_id = ulid_factory()
-                                        reasoning_start_time = now_ts
-                                        rp = ReasoningPart(
-                                            id=reasoning_part_id,
-                                            sessionID=session_id,
-                                            messageID=assistant_msg_id,
-                                            type="reasoning",
-                                            text="",
-                                            time=ReasoningPartTime(
-                                                start=now_ts, end=None
-                                            ),
-                                        ).model_dump()
-                                        await event_emitter.emit_message_part_updated(
-                                            rp
+                astream_iterator = agent.astream(
+                    {"messages": lc_messages},
+                    config=cf,
+                    stream_mode="messages",
+                    subgraphs=True,
+                )
+                slog.debug("astream_iterator_created")
+                async for msg, _metadata in astream_iterator:
+                    try:
+                        if stream_abort:
+                            break
+                        chunk_count += 1
+                        slog.debug(
+                            "chunk_received",
+                            chunk_count=chunk_count,
+                            msg_type=type(msg).__name__,
+                            content_type=type(getattr(msg, "content", None)).__name__,
+                        )
+                        if isinstance(msg, AIMessageChunk):
+                            content_blocks = getattr(msg, "content_blocks", None)
+                            if content_blocks:
+                                for block in content_blocks:
+                                    block_type = None
+                                    try:
+                                        block_type = (
+                                            block.get("type")
+                                            if isinstance(block, dict)
+                                            else None
                                         )
-                                    await event_emitter.emit_message_part_delta(
-                                        session_id,
-                                        assistant_msg_id,
-                                        reasoning_part_id,
-                                        "text",
-                                        reasoning_text,
+                                        if block_type == "reasoning":
+                                            reasoning_text = (
+                                                block.get("reasoning", "") or ""
+                                            )
+                                            if reasoning_text:
+                                                now_ts = int(time.time())
+                                                if reasoning_part_id is None:
+                                                    reasoning_part_id = ulid_factory()
+                                                    reasoning_start_time = now_ts
+                                                    slog.debug(
+                                                        "reasoning_started",
+                                                        reasoning_part_id=reasoning_part_id,
+                                                    )
+                                                    rp = ReasoningPart(
+                                                        id=reasoning_part_id,
+                                                        sessionID=session_id,
+                                                        messageID=assistant_msg_id,
+                                                        type="reasoning",
+                                                        text="",
+                                                        time=ReasoningPartTime(
+                                                            start=now_ts, end=None
+                                                        ),
+                                                    ).model_dump()
+                                                    await event_emitter.emit_message_part_updated(
+                                                        rp
+                                                    )
+                                                slog.debug(
+                                                    "about_to_emit_reasoning_delta"
+                                                )
+                                                await event_emitter.emit_message_part_delta(
+                                                    session_id,
+                                                    assistant_msg_id,
+                                                    reasoning_part_id,
+                                                    "text",
+                                                    reasoning_text,
+                                                )
+                                        elif block_type == "text":
+                                            text_val = block.get("text", "") or ""
+                                            if text_val:
+                                                log.info(
+                                                    f"[AGENT RUNNER] text block delta: len={len(text_val)}, preview='{text_val[:50]}'"
+                                                )
+                                                full_text += text_val
+                                                await event_emitter.emit_message_part_delta(
+                                                    session_id,
+                                                    assistant_msg_id,
+                                                    text_part_id,
+                                                    "text",
+                                                    text_val,
+                                                )
+                                    except Exception as e:
+                                        slog.error(
+                                            "error_processing_content_block",
+                                            block_type=block_type,
+                                            error=str(e),
+                                            error_type=type(e).__name__,
+                                        )
+                                        raise
+                            elif msg.content:
+                                text_chunk = (
+                                    msg.content
+                                    if isinstance(msg.content, str)
+                                    else str(msg.content)
+                                )
+                                if text_chunk:
+                                    log.info(
+                                        f"[AGENT RUNNER] AIMessageChunk text delta: len={len(text_chunk)}, preview='{text_chunk[:50]}'"
                                     )
-                            elif block_type == "text":
-                                text_val = block.get("text", "") or ""
-                                if text_val:
-                                    full_text += text_val
+                                    full_text += text_chunk
                                     await event_emitter.emit_message_part_delta(
                                         session_id,
                                         assistant_msg_id,
                                         text_part_id,
                                         "text",
-                                        text_val,
+                                        text_chunk,
                                     )
-                    elif msg.content:
-                        text_chunk = (
-                            msg.content
-                            if isinstance(msg.content, str)
-                            else str(msg.content)
+                                    slog.debug(
+                                        "text_delta_published",
+                                        delta_len=len(text_chunk),
+                                        subscriber_count=event_emitter._bus.subscriber_count,
+                                    )
+
+                            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    call_id = None
+                                    tool_name = None
+                                    try:
+                                        call_id = (
+                                            str(tc.get("id", "")) or ulid_factory()
+                                        )
+                                        tool_name = tc.get("name", "unknown")
+                                        tool_args = tc.get("args", {})
+                                        part_id = ulid_factory()
+
+                                        tool_call_parts[call_id] = {
+                                            "part_id": part_id,
+                                            "tool": _normalize_tool_name(tool_name),
+                                            "tool_args": tool_args,
+                                            "start": time.time(),
+                                        }
+
+                                        tool_part = ToolPart(
+                                            id=part_id,
+                                            sessionID=session_id,
+                                            messageID=assistant_msg_id,
+                                            type="tool",
+                                            callID=call_id,
+                                            tool=_normalize_tool_name(tool_name),
+                                            state=ToolStateRunning(
+                                                status="running",
+                                                input=tool_args,
+                                                title=_normalize_tool_name(tool_name),
+                                                time=ToolStateRunningTime(
+                                                    start=int(time.time())
+                                                ),
+                                            ),
+                                        ).model_dump()
+                                        await event_emitter.emit_message_part_updated(
+                                            tool_part
+                                        )
+                                        slog.info(
+                                            "tool_call_started",
+                                            call_id=call_id,
+                                            tool_name=_normalize_tool_name(tool_name),
+                                        )
+
+                                        tool_permission = _TOOL_PERMISSIONS.get(
+                                            tool_name
+                                        )
+                                        if tool_permission:
+                                            request_id, future, request = (
+                                                ask_permission(
+                                                    session_id=session_id,
+                                                    permission=tool_permission,
+                                                    patterns=[
+                                                        str(tool_args.get("path", ""))
+                                                    ]
+                                                    if tool_args.get("path")
+                                                    else [""],
+                                                    metadata={
+                                                        "tool": tool_name,
+                                                        "args": tool_args,
+                                                        "messageID": assistant_msg_id,
+                                                    },
+                                                    always=[],
+                                                    tool={
+                                                        "messageID": assistant_msg_id,
+                                                        "callID": call_id,
+                                                    },
+                                                )
+                                            )
+                                            await event_emitter.emit_permission_asked(
+                                                request
+                                            )
+                                            slog.info(
+                                                "permission_requested",
+                                                call_id=call_id,
+                                                permission=tool_permission,
+                                            )
+                                            handled_blocked_calls.add(call_id)
+                                            reply = await future
+                                            slog.info(
+                                                "permission_reply_received",
+                                                call_id=call_id,
+                                                reply=reply,
+                                            )
+                                            if reply == "reject":
+                                                await event_emitter.emit_session_status(
+                                                    session_id, {"type": "idle"}
+                                                )
+                                                stream_abort = True
+                                                break
+                                        elif tool_name == "Question":
+                                            request_id, future, request = ask_question(
+                                                session_id=session_id,
+                                                questions=tool_args.get(
+                                                    "questions", []
+                                                ),
+                                                tool={
+                                                    "messageID": assistant_msg_id,
+                                                    "callID": call_id,
+                                                },
+                                            )
+                                            await event_emitter.emit_question_asked(
+                                                request
+                                            )
+                                            slog.info(
+                                                "question_asked",
+                                                call_id=call_id,
+                                                questions_count=len(
+                                                    tool_args.get("questions", [])
+                                                ),
+                                            )
+                                            handled_blocked_calls.add(call_id)
+                                            reply = await future
+                                            slog.info(
+                                                "question_reply_received",
+                                                call_id=call_id,
+                                                reply=reply,
+                                            )
+                                            if reply == "reject":
+                                                await event_emitter.emit_session_status(
+                                                    session_id, {"type": "idle"}
+                                                )
+                                                stream_abort = True
+                                                break
+                                    except Exception as e:
+                                        slog.error(
+                                            "error_processing_tool_call",
+                                            call_id=call_id
+                                            if "call_id" in dir()
+                                            else None,
+                                            tool_name=tool_name
+                                            if "tool_name" in dir()
+                                            else None,
+                                            error=str(e),
+                                            error_type=type(e).__name__,
+                                        )
+                                        raise
+
+                        elif isinstance(msg, ToolMessage):
+                            call_id = None
+                            try:
+                                call_id = getattr(msg, "tool_call_id", None)
+                                if (
+                                    call_id
+                                    and call_id in tool_call_parts
+                                    and call_id not in handled_blocked_calls
+                                ):
+                                    tc_info = tool_call_parts[call_id]
+                                    end_time = int(time.time())
+
+                                    tool_name = tc_info["tool"]
+                                    tool_args = tc_info.get("tool_args", {})
+                                    metadata: dict[str, Any] = {}
+                                    if tool_name == "todowrite":
+                                        todos = _parse_todo_output(str(msg.content))
+                                        metadata = {"todos": todos}
+                                        session_todos[session_id] = todos
+                                    tool_part = ToolPart(
+                                        id=tc_info["part_id"],
+                                        sessionID=session_id,
+                                        messageID=assistant_msg_id,
+                                        type="tool",
+                                        callID=call_id,
+                                        tool=tool_name,
+                                        state=ToolStateCompleted(
+                                            status="completed",
+                                            input=tool_args,
+                                            output=str(msg.content)[:2000],
+                                            title=tool_name,
+                                            metadata=metadata,
+                                            time=ToolStateCompletedTime(
+                                                start=int(tc_info["start"]),
+                                                end=end_time,
+                                            ),
+                                        ),
+                                    ).model_dump()
+                                    await event_emitter.emit_message_part_updated(
+                                        tool_part
+                                    )
+                                    slog.info(
+                                        "tool_call_completed",
+                                        call_id=call_id,
+                                        tool_name=tool_name,
+                                        duration_secs=round(
+                                            end_time - int(tc_info["start"]), 2
+                                        ),
+                                    )
+
+                                    new_text_part_id = ulid_factory()
+                                    text_part = TextPart(
+                                        id=new_text_part_id,
+                                        sessionID=session_id,
+                                        messageID=assistant_msg_id,
+                                        type="text",
+                                        text="",
+                                        time=TextPartTime(
+                                            start=int(time.time()), end=None
+                                        ),
+                                    ).model_dump()
+                                    await event_emitter.emit_message_part_updated(
+                                        text_part
+                                    )
+                                    text_part_id = new_text_part_id
+
+                                    if tool_name == "todowrite":
+                                        await event_emitter.emit_todo_updated(
+                                            session_id, metadata.get("todos", [])
+                                        )
+                                        slog.debug(
+                                            "todos_updated",
+                                            session_id=session_id,
+                                            todos_count=len(metadata.get("todos", [])),
+                                        )
+                            except Exception as e:
+                                slog.error(
+                                    "error_processing_tool_message",
+                                    call_id=call_id if "call_id" in dir() else None,
+                                    error=str(e),
+                                    error_type=type(e).__name__,
+                                )
+                                raise
+                    except Exception as e:
+                        slog.error(
+                            "error_in_stream_loop_chunk",
+                            chunk_count=chunk_count,
+                            msg_type=type(msg).__name__ if "msg" in dir() else None,
+                            error=str(e),
+                            error_type=type(e).__name__,
                         )
-                        if text_chunk:
-                            full_text += text_chunk
-                            await event_emitter.emit_message_part_delta(
-                                session_id,
-                                assistant_msg_id,
-                                text_part_id,
-                                "text",
-                                text_chunk,
-                            )
-                            logger.info(
-                                "[STREAM] published delta len={} subscribers={}",
-                                len(text_chunk),
-                                event_emitter._bus.subscriber_count,
-                            )
+                        raise
+            except Exception as e:
+                slog.error(
+                    "error_in_astream",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+                raise
 
-                    if hasattr(msg, "tool_calls") and msg.tool_calls:
-                        for tc in msg.tool_calls:
-                            call_id = str(tc.get("id", "")) or ulid_factory()
-                            tool_name = tc.get("name", "unknown")
-                            tool_args = tc.get("args", {})
-                            part_id = ulid_factory()
-
-                            tool_call_parts[call_id] = {
-                                "part_id": part_id,
-                                "tool": _normalize_tool_name(tool_name),
-                                "tool_args": tool_args,
-                                "start": time.time(),
-                            }
-
-                            tool_part = ToolPart(
-                                id=part_id,
-                                sessionID=session_id,
-                                messageID=assistant_msg_id,
-                                type="tool",
-                                callID=call_id,
-                                tool=_normalize_tool_name(tool_name),
-                                state=ToolStateRunning(
-                                    status="running",
-                                    input=tool_args,
-                                    title=_normalize_tool_name(tool_name),
-                                    time=ToolStateRunningTime(start=int(time.time())),
-                                ),
-                            ).model_dump()
-                            await event_emitter.emit_message_part_updated(tool_part)
-
-                            tool_permission = _TOOL_PERMISSIONS.get(tool_name)
-                            if tool_permission:
-                                request_id, future, request = ask_permission(
-                                    session_id=session_id,
-                                    permission=tool_permission,
-                                    patterns=[
-                                        str(tool_args.get("path", ""))
-                                        if tool_args.get("path")
-                                        else []
-                                    ],
-                                    metadata={
-                                        "tool": tool_name,
-                                        "args": tool_args,
-                                        "messageID": assistant_msg_id,
-                                    },
-                                    always=[],
-                                    tool={
-                                        "messageID": assistant_msg_id,
-                                        "callID": call_id,
-                                    },
-                                )
-                                await event_emitter.emit_permission_asked(request)
-                                handled_blocked_calls.add(call_id)
-                                reply = await future
-                                if reply == "reject":
-                                    await event_emitter.emit_session_status(
-                                        session_id, {"type": "idle"}
-                                    )
-                                    stream_abort = True
-                                    break
-                            elif tool_name == "Question":
-                                request_id, future, request = ask_question(
-                                    session_id=session_id,
-                                    questions=tool_args.get("questions", []),
-                                    tool={
-                                        "messageID": assistant_msg_id,
-                                        "callID": call_id,
-                                    },
-                                )
-                                await event_emitter.emit_question_asked(request)
-                                handled_blocked_calls.add(call_id)
-                                reply = await future
-                                if reply == "reject":
-                                    await event_emitter.emit_session_status(
-                                        session_id, {"type": "idle"}
-                                    )
-                                    stream_abort = True
-                                    break
-
-                elif isinstance(msg, ToolMessage):
-                    call_id = getattr(msg, "tool_call_id", None)
-                    if (
-                        call_id
-                        and call_id in tool_call_parts
-                        and call_id not in handled_blocked_calls
-                    ):
-                        tc_info = tool_call_parts[call_id]
-                        end_time = int(time.time())
-
-                        tool_name = tc_info["tool"]
-                        tool_args = tc_info.get("tool_args", {})
-                        metadata: dict[str, Any] = {}
-                        if tool_name == "todowrite":
-                            todos = _parse_todo_output(str(msg.content))
-                            metadata = {"todos": todos}
-                            session_todos[session_id] = todos
-                        tool_part = ToolPart(
-                            id=tc_info["part_id"],
-                            sessionID=session_id,
-                            messageID=assistant_msg_id,
-                            type="tool",
-                            callID=call_id,
-                            tool=tool_name,
-                            state=ToolStateCompleted(
-                                status="completed",
-                                input=tool_args,
-                                output=str(msg.content)[:2000],
-                                title=tool_name,
-                                metadata=metadata,
-                                time=ToolStateCompletedTime(
-                                    start=int(tc_info["start"]),
-                                    end=end_time,
-                                ),
-                            ),
-                        ).model_dump()
-                        await event_emitter.emit_message_part_updated(tool_part)
-
-                        new_text_part_id = ulid_factory()
-                        text_part = TextPart(
-                            id=new_text_part_id,
-                            sessionID=session_id,
-                            messageID=assistant_msg_id,
-                            type="text",
-                            text="",
-                            time=TextPartTime(start=int(time.time()), end=None),
-                        ).model_dump()
-                        await event_emitter.emit_message_part_updated(text_part)
-                        text_part_id = new_text_part_id
-
-                        if tool_name == "todowrite":
-                            await event_emitter.emit_todo_updated(
-                                session_id, metadata.get("todos", [])
-                            )
-
-            logger.info(
-                "[STREAM] loop finished. chunks={} full_text_len={}",
-                chunk_count,
-                len(full_text),
+            slog.info(
+                "stream_completed",
+                chunk_count=chunk_count,
+                full_text_len=len(full_text),
+                tool_calls_count=len(tool_call_parts),
             )
             end_time = int(time.time())
             full_text = _unwrap_json_text(full_text)
@@ -667,6 +816,11 @@ async def run_agent_with_events(
                 time=TextPartTime(start=now, end=end_time),
             ).model_dump()
             await event_emitter.emit_message_part_updated(text_part_final)
+            slog.debug(
+                "text_part_final_emitted",
+                part_id=text_part_id,
+                text_len=len(full_text),
+            )
 
             if reasoning_part_id is not None and reasoning_start_time is not None:
                 reasoning_part_final = ReasoningPart(
@@ -678,6 +832,11 @@ async def run_agent_with_events(
                     time=ReasoningPartTime(start=reasoning_start_time, end=end_time),
                 ).model_dump()
                 await event_emitter.emit_message_part_updated(reasoning_part_final)
+                slog.debug(
+                    "reasoning_part_final_emitted",
+                    reasoning_part_id=reasoning_part_id,
+                    duration_secs=end_time - reasoning_start_time,
+                )
 
             step_finish = StepFinishPart(
                 id=step_finish_id,
@@ -694,6 +853,7 @@ async def run_agent_with_events(
                 ),
             ).model_dump()
             await event_emitter.emit_message_part_updated(step_finish)
+            slog.debug("step_finish_emitted", reason="stop")
 
             assistant_msg_final = AssistantMessage(
                 id=assistant_msg_id,
@@ -716,6 +876,10 @@ async def run_agent_with_events(
                 finish="stop",
             ).model_dump()
             await event_emitter.emit_message_updated(assistant_msg_final)
+            slog.debug(
+                "assistant_message_final_emitted",
+                message_id=assistant_msg_id,
+            )
 
             sources_as_dicts = []
             if result_store.items:
@@ -738,6 +902,11 @@ async def run_agent_with_events(
                 user_id=user_id,
                 session=db_session,
             )
+            slog.debug(
+                "assistant_message_saved_to_db",
+                message_id=assistant_msg_id,
+                sources_count=len(sources_as_dicts),
+            )
 
             # Generate title from first user message if still default
             convo = await ConversationService.get_conversation_by_id(
@@ -758,18 +927,20 @@ async def run_agent_with_events(
                 await event_emitter.emit_session_updated(
                     {"id": session_id, "title": new_title}
                 )
+                slog.info("title_generated", old_title=convo.title, new_title=new_title)
 
-            diffs = _compute_git_diffs(PROJECT_DIR)
-            session_diffs[session_id] = diffs
-            await event_emitter.emit_session_diff(session_id, diffs)
+            # NOTE: diffs not really a concern right now so bug can be deferred
+            # diffs = _compute_git_diffs(PROJECT_DIR)
+            # session_diffs[session_id] = diffs
+            # await event_emitter.emit_session_diff(session_id, diffs)
 
     except asyncio.CancelledError:
-        logger.info("Agent task cancelled for session {}", session_id)
+        slog.info("task_cancelled")
         await event_emitter.emit_session_status(session_id, {"type": "idle"})
         return
 
     except Exception as e:
-        logger.error("Agent error for session {}: {}", session_id, e)
+        slog.error("agent_error", error=str(e), error_type=type(e).__name__)
 
         error_msg = AssistantMessage(
             id=assistant_msg_id,
@@ -796,6 +967,8 @@ async def run_agent_with_events(
         ).model_dump()
         await event_emitter.emit_message_updated(error_msg)
         await event_emitter.emit_session_error(session_id, error_msg["error"])
+        slog.debug("error_message_emitted", error_name=error_msg["error"]["name"])
 
     finally:
+        slog.debug("session_idle")
         await event_emitter.emit_session_status(session_id, {"type": "idle"})

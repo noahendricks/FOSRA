@@ -8,9 +8,9 @@ existing /workspaces routes are preserved for backward compatibility.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import subprocess
+from datetime import datetime, timezone
 from typing import Annotated, Any, AsyncIterable
 
 from fastapi import (
@@ -38,7 +38,7 @@ from backend.src.api.routes.oc.state import (
     session_todos,
 )
 from backend.src.api.schemas import MessageResponse
-from backend.src.api.schemas.api_schemas import (
+from backend.src.api.schemas.convo_api_schemas import (
     ConvoDeleteRequest,
     ConvoUpdateRequest,
     NewConvoRequest,
@@ -51,9 +51,10 @@ from backend.src.api.schemas.tui_schemas import (
     DEFAULT_USER_ID,
     PROJECT_DIR,
     PromptRequest,
+    Session,
+    SessionTime,
     convo_full_to_session,
     convo_list_item_to_session,
-    convo_to_session,
     get_agents,
     get_default_config,
     message_to_tui,
@@ -88,17 +89,7 @@ async def sse_endpoint(
     last_event_id: int | None = Header(None, alias="Last-Event-ID"),
     client_version: str | None = Header(None, alias="X-Client-Version"),
 ) -> AsyncIterable[ServerSentEvent]:
-    """
-    Global SSE endpoint. The TUI subscribes here for all real-time events.
-
-    FastAPI SSE provides:
-    - 15s keep-alive pings automatically
-    - Cache-Control: no-cache, X-Accel-Buffering: no
-    - Last-Event-ID reconnection replay via replay_missed()
-
-    On connect, if the TUI reports a client_version that differs from
-    SERVER_VERSION, emits an installation.update-available event.
-    """
+    """global sse endpoint. the tui subscribes here for all real-time events."""
     sub_id, queue = event_emitter.subscribe()
 
     if client_version and client_version != SERVER_VERSION:
@@ -106,42 +97,34 @@ async def sse_endpoint(
             client_version, SERVER_VERSION
         )
 
-    async def event_generator():
-        try:
-            for missed in event_emitter.replay_missed(last_event_id or 0):
-                yield ServerSentEvent(
-                    data=json.dumps(
-                        {"type": missed.type, "properties": missed.properties}
-                    ),
-                    event=missed.type,
-                    id=str(missed.sequence_nr),
-                    retry=5000,
-                )
-
+    try:
+        for missed in event_emitter.replay_missed(last_event_id or 0):
             yield ServerSentEvent(
-                data=json.dumps({"type": "server.connected", "properties": {}}),
-                event="server.connected",
-                id="0",
+                data={"type": missed.type, "properties": missed.properties},
+                event=missed.type,
+                id=str(missed.sequence_nr),
                 retry=5000,
             )
 
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    ev = await asyncio.wait_for(queue.get(), timeout=5.0)
-                    yield ServerSentEvent(
-                        data=json.dumps({"type": ev.type, "properties": ev.properties}),
-                        event=ev.type,
-                        id=str(ev.sequence_nr),
-                        retry=5000,
-                    )
-                except asyncio.TimeoutError:
-                    pass
-        finally:
-            event_emitter.unsubscribe(sub_id)
+        yield ServerSentEvent(
+            data={"type": "server.connected", "properties": {}},
+            event="server.connected",
+            id="0",
+            retry=5000,
+        )
 
-    return event_generator()
+        while True:
+            ev = await queue.get()
+            yield ServerSentEvent(
+                data={"type": ev.type, "properties": ev.properties},
+                event=ev.type,
+                id=str(ev.sequence_nr),
+                retry=5000,
+            )
+    except asyncio.CancelledError:
+        pass
+    finally:
+        event_emitter.unsubscribe(sub_id)
 
 
 # SESSION CRUD
@@ -187,10 +170,16 @@ async def create_session(
         session=session,
         new_convo=new_convo,
     )
-    session_info = convo_to_session(
-        convo_id=result.convo_id,
-        user_id=user_id,
-        title=result.title,
+    now = int(datetime.now(timezone.utc).timestamp())
+    session_info = Session(
+        id=result.convo_id,
+        slug="",
+        projectID="",
+        workspaceID="default",
+        directory=PROJECT_DIR,
+        title=result.title or "New Convo",
+        version="",
+        time=SessionTime(created=now, updated=now),
     )
 
     await event_emitter.emit_session_created(session_info.model_dump())
@@ -231,7 +220,16 @@ async def delete_session(
     )
     if deleted:
         await cleanup_session(session_id)
-        session_info = convo_to_session(convo_id=session_id, user_id=user_id)
+        session_info = Session(
+            id=session_id,
+            slug="",
+            projectID="",
+            workspaceID="default",
+            directory=PROJECT_DIR,
+            title="",
+            version="",
+            time=SessionTime(created=0, updated=0),
+        )
         await event_emitter.emit_session_deleted(session_info.model_dump())
     return deleted
 
