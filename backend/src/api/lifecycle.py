@@ -106,6 +106,19 @@ class Infrastructure:
 
         await self._init_session_state_manager()
         await self._init_checkpointer()
+        await self._init_models_dev()
+
+    async def _init_models_dev(self) -> None:
+        """Initialize models.dev data fetching and caching."""
+        try:
+            from backend.src.api.schemas.provider_registry import _init_models_dev
+
+            await _init_models_dev()
+            logger.info("models.dev initialized")
+        except Exception as e:
+            logger.warning(
+                "models.dev initialization failed: {}. Continuing without.", e
+            )
 
     async def _init_session_state_manager(self):
         try:
@@ -132,9 +145,9 @@ class Infrastructure:
 
             conn_string = settings.database.url
             conn_string = conn_string.replace("+asyncpg", "").replace("+psycopg2", "")
-            async with AsyncPostgresSaver.from_conn_string(conn_string) as saver:
-                await saver.setup()
-                self.checkpointer = saver
+            saver = AsyncPostgresSaver.from_conn_string(conn_string)
+            await saver.setup()
+            self.checkpointer = saver
             logger.info("LangGraph Postgres checkpointer initialized.")
         except Exception as e:
             logger.warning(

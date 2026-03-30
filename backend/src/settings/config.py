@@ -8,9 +8,9 @@ from chonkie.genie import BaseGenie, OpenAIGenie
 from langchain_litellm import ChatLiteLLM
 from langchain_qdrant import RetrievalMode
 from msgspec import field
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from pydantic.v1.utils import to_camel
+from pydantic import Field, SecretStr
 
+from backend.src.api.schemas.base import _BaseModelFlexLower as _BaseModelFlex
 from backend.src.domain.enums import (
     ChunkerType,
     EmbedderType,
@@ -19,20 +19,6 @@ from backend.src.domain.enums import (
     RerankerType,
     VectorStoreType,
 )
-
-
-class _BaseModelFlex(BaseModel):
-    """_BaseModelFlex with flexible config for attribute-based initialization."""
-
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-        str_to_lower=True,
-    )
-
-    model_config = _FLEXIBLE_CONFIG
 
 
 if TYPE_CHECKING:
@@ -144,6 +130,7 @@ class ChunkerConfig(_BaseModelFlex):
     sentence_config: SentenceChunkerConfig = SentenceChunkerConfig()
     code_config: CodeChunkerConfig = CodeChunkerConfig()
     token_config: TokenChunkerConfig = TokenChunkerConfig()
+    recursive_config: RecursiveChunkerConfig = RecursiveChunkerConfig()
     token_budget: int = 4096
     batch_size: int = 32
 

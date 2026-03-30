@@ -50,8 +50,8 @@ def create_retrieval_tool(
     token_budget: int = 4096,
     max_iterations: int = 5,
     result_store: RetrievalResultStore | None = None,
-    rrf_parent_weight: float = 3.0,
-    rrf_chunk_weight: float = 1.0,
+    dense_weight: float = 1.0,
+    sparse_weight: float = 1.0,
     feedback_a: float = 0.24,
     feedback_b: float = 1.35,
     feedback_c: float = 0.59,
@@ -85,8 +85,8 @@ def create_retrieval_tool(
         falkordb_client=falkordb_client,
         token_budget=token_budget,
         max_iterations=max_iterations,
-        rrf_parent_weight=rrf_parent_weight,
-        rrf_chunk_weight=rrf_chunk_weight,
+        dense_weight=dense_weight,
+        sparse_weight=sparse_weight,
         feedback_a=feedback_a,
         feedback_b=feedback_b,
         feedback_c=feedback_c,
@@ -154,8 +154,8 @@ def create_graph_tool(
         embedder_config: Embedder config for semantic graph search
         result_store: Optional store for retrieved items
     """
-    from backend.src.services.retrieval.graph_service import GraphService
     from backend.src.services.retrieval.graph_retriever import GraphRetriever
+    from backend.src.services.retrieval.graph_service import GraphService
 
     graph_service = GraphService(falkordb_client)
     retriever = GraphRetriever(graph_service)

@@ -14,7 +14,7 @@ from langchain_core.messages import (
 )
 from loguru import logger
 
-from backend.src.api.schemas.api_schemas import (
+from backend.src.api.schemas.tui_control_schemas import (
     FilePart,
     TextPart,
     UIMessage,

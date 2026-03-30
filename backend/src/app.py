@@ -29,7 +29,7 @@ from backend.src.tasks.broker import broker
 # )
 #
 
-taskiq_fastapi.init(broker, "backend.src.main:app")
+taskiq_fastapi.init(broker, "backend.src.app:app")
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="litellm")
 warnings.filterwarnings("ignore", category=ResourceWarning)
@@ -46,6 +46,10 @@ async def lifespan(app: FastAPI):
 
         await global_infra.init_models()
 
+        from backend.src.api.schemas.provider_registry import _init_models_dev
+
+        await _init_models_dev()
+
         app.state.infra = global_infra
 
         if not broker.is_worker_process:
@@ -56,7 +60,6 @@ async def lifespan(app: FastAPI):
 
         import litellm
 
-        litellm.set_verbose = False
         litellm.suppress_debug_info = True
 
         yield
@@ -92,6 +95,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+taskiq_fastapi.populate_dependency_context(broker, app)
 
 register_exception_handlers(app=app)
 

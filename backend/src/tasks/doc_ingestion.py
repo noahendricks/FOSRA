@@ -21,7 +21,6 @@ from backend.src.services.processing.chunker_service import ChunkerService
 from backend.src.services.processing.embedder_service import EmbedderService
 from backend.src.services.retrieval.vector_service import (
     CHUNKS_COLLECTION,
-    PARENTS_COLLECTION,
     VectorService,
 )
 from backend.src.storage.models import DocORM
@@ -29,7 +28,7 @@ from backend.src.storage.models import DocORM
 from .broker import broker, get_infra
 
 
-@broker.task
+@broker.task(max_execution_time=300)
 async def ingest_docs(
     docs: list[Doc],
     chunker_config: ChunkerConfig,
@@ -37,15 +36,13 @@ async def ingest_docs(
     vector_config: VectorStoreConfig,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> dict[str, Any]:
-    """Ingest documents into Qdrant with dual collections (parents + chunks).
+    """Ingest documents into Qdrant.
 
     Flow:
     1. Register docs in PostgreSQL (optional, if session_factory provided)
-    2. Chunk via HiChunk (L1/L2/L3)
-    3. Separate by level
-    4. Embed all chunks
-    5. Upsert parents → parents collection
-    6. Upsert leaf chunks → chunks collection
+    2. Chunk via HiChunk (L1/L2)
+    3. Embed all chunks
+    4. Upsert to single collection
 
     Args:
         docs: List of Doc objects with page_content and metadata
@@ -55,7 +52,7 @@ async def ingest_docs(
         session_factory: Optional async session factory for PostgreSQL registration
 
     Returns:
-        dict with counts: {parents_upserted, chunks_upserted, docs_processed}
+        dict with counts: {chunks_upserted, docs_processed}
     """
     from backend.src.api.lifecycle import Infrastructure
 
@@ -65,8 +62,8 @@ async def ingest_docs(
     if not isinstance(client, AsyncQdrantClient):
         raise RuntimeError("AsyncQdrantClient required for doc ingestion")
 
-    # ensure collections exist
-    await VectorService.ensure_dual_collections(client, embedder_config)
+    # ensure collection exists
+    await VectorService.ensure_collection(client, embedder_config)
 
     # step 1: register in docs table (optional)
     if session_factory:
@@ -86,60 +83,31 @@ async def ingest_docs(
     chunks_per_doc = await ChunkerService.chunk_documents(docs, chunker_config)
 
     # step 3: flatten
-    # FlatChunkProducer._flatten only yields L3 leaves (max_levels=2 means only L1/L2 produced)
-    # All chunks from HiChunk are leaves; code_chunker produces standalone chunks
-    # For small-to-big: only index leaves, parent context added post-retrieval
     all_chunks: list[Chunk] = []
     for doc_chunks in chunks_per_doc:
         all_chunks.extend(doc_chunks)
 
-    # All chunks go to leaf_chunks for retrieval (small-to-big)
-    # parent_chunks remains for any L1/L2 structural nodes (not currently produced)
-    parent_chunks: list[Chunk] = []
-    leaf_chunks: list[Chunk] = all_chunks
-
-    logger.info(
-        f"Separated {len(parent_chunks)} parent chunks, {len(leaf_chunks)} leaf chunks"
-    )
+    logger.info(f"Chunked {len(docs)} docs into {len(all_chunks)} chunks")
 
     # step 4: embed all chunks
     embedder = EmbedderService()
+    await embedder.embed_chunks(all_chunks, embedder_config)
 
-    if parent_chunks:
-        logger.info(f"Embedding {len(parent_chunks)} parent chunks")
-        await embedder.embed_chunks(parent_chunks, embedder_config)
-
-    if leaf_chunks:
-        logger.info(f"Embedding {len(leaf_chunks)} leaf chunks")
-        await embedder.embed_chunks(leaf_chunks, embedder_config)
-
-    # step 5: upsert to collections
-    parents_upserted = 0
+    # step 5: upsert to single collection
     chunks_upserted = 0
-
-    if parent_chunks:
-        points = await VectorService.upsert_parents(
-            client, parent_chunks, embedder_config
-        )
-        parents_upserted = len(points)
-
-    if leaf_chunks:
-        points = await VectorService.upsert_chunks(client, leaf_chunks, embedder_config)
+    if all_chunks:
+        points = await VectorService.upsert_chunks(client, all_chunks, embedder_config)
         chunks_upserted = len(points)
 
-    logger.info(
-        f"Doc ingestion complete: {len(docs)} docs, "
-        f"{parents_upserted} parents, {chunks_upserted} chunks"
-    )
+    logger.info(f"Doc ingestion complete: {len(docs)} docs, {chunks_upserted} chunks")
 
     return {
         "docs_processed": len(docs),
-        "parents_upserted": parents_upserted,
         "chunks_upserted": chunks_upserted,
     }
 
 
-@broker.task
+@broker.task(max_execution_time=120)
 async def ingest_single_doc(
     doc: Doc,
     chunker_config: ChunkerConfig,
@@ -147,7 +115,7 @@ async def ingest_single_doc(
     vector_config: VectorStoreConfig,
 ) -> AsyncTaskiqTask[dict[str, Any]]:
     """Ingest a single document into Qdrant."""
-    return await ingest_docs.kiq(
+    return ingest_docs.kiq(
         [doc],
         chunker_config,
         embedder_config,
@@ -156,7 +124,7 @@ async def ingest_single_doc(
     )
 
 
-@broker.task
+@broker.task(max_execution_time=600)
 async def reindex_docs(
     chunker_config: ChunkerConfig,
     embedder_config: EmbedderConfig,
@@ -176,12 +144,11 @@ async def reindex_docs(
     if not isinstance(client, AsyncQdrantClient):
         raise RuntimeError("AsyncQdrantClient required for reindex")
 
-    # drop existing collections
-    await VectorService.delete_collection(client, PARENTS_COLLECTION)
+    # drop existing collection
     await VectorService.delete_collection(client, CHUNKS_COLLECTION)
 
     # recreate
-    await VectorService.ensure_dual_collections(client, embedder_config)
+    await VectorService.ensure_collection(client, embedder_config)
 
     # load all docs from postgres
     async with session_factory() as session:
@@ -192,7 +159,7 @@ async def reindex_docs(
 
         if not doc_orms:
             logger.info("No docs found in database to reindex")
-            return {"docs_processed": 0, "parents_upserted": 0, "chunks_upserted": 0}
+            return {"docs_processed": 0, "chunks_upserted": 0}
 
         docs = [_doc_orm_to_domain(d) for d in doc_orms]
 

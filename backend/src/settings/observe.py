@@ -1,6 +1,9 @@
 import os
 import logging
 import sys
+
+os.environ.setdefault("LITELLM_LOG", "ERROR")
+
 from loguru import logger
 from opentelemetry import _logs
 from opentelemetry.sdk._logs import LoggerProvider
@@ -45,10 +48,24 @@ def setup_telemetry():
     except Exception:
         pass
 
+    def formatter(record):
+        extra = record.get("extra", {})
+        extra_str = ""
+        if extra:
+            parts = [f"{k}={v!r}" for k, v in extra.items()]
+            extra_str = " | " + " ".join(parts)
+
+        return (
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+            "<level>{message}</level>" + extra_str + "\n"
+        )
+
     logger.add(
         sys.stderr,
         level="TRACE",
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        format=formatter,
     )
 
     patched_logger = logger.patch(patch_fosra_errors)
@@ -62,6 +79,18 @@ def setup_telemetry():
     for name in ["uvicorn", "uvicorn.access", "fastapi"]:
         _log = logging.getLogger(name)
         _log.handlers = [InterceptHandler()]
+        _log.propagate = False
+
+    for name in ["litellm", "LiteLLM"]:
+        _log = logging.getLogger(name)
+        _log.setLevel(logging.WARNING)
+        _log.handlers = []
+        _log.propagate = False
+
+    for name in ["httpcore", "httpx", "aiohttp"]:
+        _log = logging.getLogger(name)
+        _log.setLevel(logging.WARNING)
+        _log.handlers = []
         _log.propagate = False
 
     # 5. Instrumentation

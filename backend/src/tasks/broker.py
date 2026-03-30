@@ -1,9 +1,34 @@
 from loguru import logger
 from taskiq import InMemoryBroker, TaskiqEvents, TaskiqState, TaskiqDepends
+from taskiq.middlewares import SmartRetryMiddleware
 from backend.src.settings import settings
 from backend.src.api.lifecycle import Infrastructure
 
 broker = InMemoryBroker()
+
+broker.add_middleware(
+    SmartRetryMiddleware(
+        default_retry_count=5,
+        default_delay=10,
+        use_jitter=True,
+        use_delay_exponent=True,
+        max_delay_exponent=120,
+    )
+)
+
+
+class TaskiqObserverMiddleware:
+    async def pre_execute(self, receiver, task) -> None:
+        logger.debug(f"[taskiq] task queued: {task.task_name}")
+
+    async def on_error(self, receiver, task, error) -> None:
+        logger.error(f"[taskiq] task failed: {task.task_name} | error: {error}")
+
+    async def post_execute(self, receiver, task) -> None:
+        logger.debug(f"[taskiq] task completed: {task.task_name}")
+
+
+broker.add_middleware(TaskiqObserverMiddleware())
 
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
