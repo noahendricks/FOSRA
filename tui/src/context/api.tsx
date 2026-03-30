@@ -1,27 +1,44 @@
 import { createSimpleContext } from "./helper"
-import { createApiClient, type ApiConfig } from "../api/client"
+import { createFosraClient } from "@fosra/api/v2"
 import { createEventChannel, type ExternalEvents } from "../events/channel"
 
-export type { ApiClient } from "../api/client"
+export type ApiConfig = {
+  baseUrl: string
+  directory: string
+  fetch?: typeof globalThis.fetch
+  headers?: Record<string, string>
+}
+
+export type ApiClient = {
+  fosra: ReturnType<typeof createFosraClient>
+  url: string
+  directory: string
+  fetch: typeof globalThis.fetch
+}
 
 const ctx = createSimpleContext({
   name: "Api",
   init: (props: { config: ApiConfig; events?: ExternalEvents }) => {
-    const api = createApiClient(props.config)
+    const fosra = createFosraClient({
+      baseUrl: props.config.baseUrl,
+      directory: props.config.directory,
+      fetch: props.config.fetch,
+      headers: props.config.headers,
+    })
 
     const channel = createEventChannel(
       props.events
         ? { mode: "external", source: props.events }
-        : { mode: "sse", client: api }
+        : { mode: "sse", client: { fosra, url: props.config.baseUrl, directory: props.config.directory, fetch: props.config.fetch ?? globalThis.fetch } }
     )
 
     channel.start()
 
     return {
-      fosra: api.fosra,
-      url: api.url,
-      directory: api.directory,
-      fetch: api.fetch,
+      fosra,
+      url: props.config.baseUrl,
+      directory: props.config.directory,
+      fetch: props.config.fetch ?? globalThis.fetch,
       channel,
       dispose() {
         channel.stop()
