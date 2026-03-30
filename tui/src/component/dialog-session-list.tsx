@@ -1,7 +1,7 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
-import { useSyncCompat } from "../context/compat/sync"
+import { useStore } from "../context/store"
 import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useKeybind } from "../context/keybind"
@@ -15,7 +15,7 @@ import { Spinner } from "./spinner"
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
-  const sync = useSyncCompat()
+  const store = useStore()
   const keybind = useKeybind()
   const { theme } = useTheme()
   const api = useApi()
@@ -32,7 +32,7 @@ export function DialogSessionList() {
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const sessions = createMemo(() => searchResults() ?? store.state.sessionsArray())
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
@@ -46,8 +46,8 @@ export function DialogSessionList() {
           category = "Today"
         }
         const isDeleting = toDelete() === x.id
-        const status = sync.data.session_status?.[x.id]
-        const isWorking = status?.type === "busy"
+        const sessionStatus = store.session.status(x.id)
+        const isWorking = sessionStatus === "working"
         return {
           title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,

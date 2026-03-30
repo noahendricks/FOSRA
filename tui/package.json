@@ -6,22 +6,26 @@
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "build": "bun build ./src/index.tsx --compile --target=bun-linux-x64 --outfile=dist/fosra-tui",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "dev:test": "bun run --watch src/dev.tsx"
   },
   "dependencies": {
     "@opentui/core": "0.1.87",
     "@opentui/solid": "0.1.87",
-    "solid-js": "^1.9.0",
     "@solid-primitives/event-bus": "^1.1.2",
     "@solid-primitives/map": "^0.7.3",
     "@solid-primitives/scheduled": "^1.5.2",
-    "open": "^10.1.2",
     "clipboardy": "^4.0.0",
-    "fuzzysort": "^3.1.0",
-    "opentui-spinner": "^0.0.6",
     "diff": "^7.0.0",
-    "strip-ansi": "^7.1.2",
+    "fuzzysort": "^3.1.0",
+    "open": "^10.1.2",
+    "opentui-spinner": "^0.0.6",
     "remeda": "^2.0.0",
+    "solid-js": "^1.9.0",
+    "strip-ansi": "^7.1.2",
+    "tslog": "^4.10.2",
     "zod": "^3.24.0"
   },
   "devDependencies": {

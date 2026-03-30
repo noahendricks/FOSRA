@@ -28,11 +28,11 @@ import {
 
 import { Flag } from "@/flag/flag";
 import { Installation } from "@/installation";
+import { Log } from "@/util/log";
 import { DialogProvider, useDialog } from "@tui/ui/dialog";
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider";
 import { ApiProvider, useApi } from "@tui/context/api";
-import { StoreProvider } from "@tui/context/store";
-import { SyncCompatProvider, useSyncCompat, UIHandlers } from "@tui/context/compat/sync";
+import { StoreProvider, useStore, UIHandlers } from "@tui/context/store";
 import { LocalProvider, useLocal } from "@tui/context/local";
 import { DialogModel, useConnected } from "@tui/component/dialog-model";
 import { DialogMcp } from "@tui/component/dialog-mcp";
@@ -186,7 +186,6 @@ export function tui(input: {
                           events={input.events}
                         >
                           <StoreProvider>
-                            <SyncCompatProvider>
                             <ThemeProvider mode={mode}>
                               <LocalProvider>
                                 <KeybindProvider>
@@ -207,7 +206,6 @@ export function tui(input: {
                                 </KeybindProvider>
                               </LocalProvider>
                             </ThemeProvider>
-                            </SyncCompatProvider>
                           </StoreProvider>
                         </ApiProvider>
                       </TuiConfigProvider>
@@ -253,13 +251,13 @@ function App() {
   const api = useApi();
   const toast = useToast();
   const { theme, mode, setMode } = useTheme();
-  const sync = useSyncCompat();
+  const store = useStore();
   const exit = useExit();
   const promptRef = usePromptRef();
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      console.log("CTRL_C_DETECTED", { selection: !!renderer.getSelection() });
+      Log.Default.debug("CTRL_C_DETECTED", { selection: !!renderer.getSelection() });
       if (
         Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT &&
         renderer.getSelection()
@@ -269,7 +267,7 @@ function App() {
           return;
         }
       } else {
-        console.log("EXITING VIA CTRL_C");
+        Log.Default.debug("EXITING VIA CTRL_C");
         exit();
       }
       evt.preventDefault();
@@ -307,7 +305,7 @@ function App() {
   );
 
   createEffect(() => {
-    console.log(JSON.stringify(route.data));
+    Log.Default.debug("route data", route.data);
   });
 
   // Update terminal window title based on current route and session
@@ -320,7 +318,7 @@ function App() {
     }
 
     if (route.data.type === "session") {
-      const session = sync.session.get(route.data.sessionID);
+      const session = store.state.sessions.get(route.data.sessionID);
       if (!session || SessionApi.isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode");
         return;
@@ -362,8 +360,8 @@ function App() {
   let continued = false;
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
-    if (continued || sync.status === "loading" || !args.continue) return;
-    const match = sync.data.session
+    if (continued || store.state.providers().length === 0 || !args.continue) return;
+    const match = store.state.sessionsArray()
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id;
     if (match) {
@@ -387,7 +385,7 @@ function App() {
   // to avoid a race where reconcile overwrites the newly forked session)
   let forked = false;
   createEffect(() => {
-    if (forked || sync.status !== "complete" || !args.sessionID || !args.fork)
+    if (forked || store.state.providers().length === 0 || !args.sessionID || !args.fork)
       return;
     forked = true;
         api.fosra.session.fork({ sessionID: args.sessionID }).then((result) => {
@@ -401,7 +399,7 @@ function App() {
 
   createEffect(
     on(
-      () => sync.status === "complete" && sync.data.provider.length === 0,
+      () => store.state.providers().length > 0 && store.state.providers().length === 0,
       (isEmpty, wasEmpty) => {
         // only trigger when we transition into an empty-provider state
         if (!isEmpty || wasEmpty) return;
@@ -417,7 +415,7 @@ function App() {
       value: "session.list",
       keybind: "session_list",
       category: "Session",
-      suggested: sync.data.session.length > 0,
+      suggested: store.state.sessionsArray().length > 0,
       slash: {
         name: "sessions",
         aliases: ["resume", "continue"],
@@ -460,7 +458,7 @@ function App() {
           : undefined;
         const workspaceID =
           route.data.type === "session"
-            ? sync.session.get(route.data.sessionID)?.workspaceID
+            ? store.state.sessions.get(route.data.sessionID)?.workspaceID
             : undefined;
         route.navigate({
           type: "home",

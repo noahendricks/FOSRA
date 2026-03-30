@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
-import { useSyncCompat } from "@tui/context/compat/sync"
+import { useStore } from "@tui/context/store"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@fosra/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@fosra/api/v2"
 import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
@@ -24,13 +24,13 @@ const PROVIDER_PRIORITY: Record<string, number> = {
 }
 
 export function createDialogProviderOptions() {
-  const sync = useSyncCompat()
+  const store = useStore()
   const dialog = useDialog()
   const api = useApi()
   const toast = useToast()
   const options = createMemo(() => {
     return pipe(
-      sync.data.provider_next.all,
+      store.state.providers(),
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => ({
         title: provider.name,
@@ -43,7 +43,7 @@ export function createDialogProviderOptions() {
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
-          const methods = sync.data.provider_auth[provider.id] ?? [
+          const methods: { type: "api" | "oauth"; label: string; prompts?: NonNullable<ProviderAuthMethod["prompts"]>[number][] }[] = [
             {
               type: "api",
               label: "API key",
@@ -129,7 +129,7 @@ function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
   const api = useApi()
   const dialog = useDialog()
-  const sync = useSyncCompat()
+  const store = useStore()
   const toast = useToast()
 
   useKeyboard((evt) => {
@@ -189,7 +189,7 @@ interface CodeMethodProps {
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
   const api = useApi()
-  const sync = useSyncCompat()
+  const store = useStore()
   const dialog = useDialog()
   const [error, setError] = createSignal(false)
 
@@ -234,7 +234,7 @@ interface ApiMethodProps {
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
   const api = useApi()
-  const sync = useSyncCompat()
+  const store = useStore()
   const { theme } = useTheme()
 
   return (

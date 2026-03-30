@@ -1,11 +1,11 @@
-import { useSyncCompat } from "../../context/compat/sync";
+import { useStore } from "../../context/store";
 import { useLocal } from "@tui/context/local";
 import { createMemo, For, Show, Switch, Match } from "solid-js";
 import { createStore } from "solid-js/store";
 import { useTheme } from "../../context/theme";
 import { Locale } from "@/util/locale";
 import path from "path";
-import type { AssistantMessage } from "@fosra/sdk/v2";
+import type { AssistantMessage } from "@fosra/api/v2";
 import { Global } from "@/global";
 import { Installation } from "@/installation";
 import { useKeybind } from "../../context/keybind";
@@ -14,16 +14,16 @@ import { useKV } from "../../context/kv";
 import { TodoItem } from "../../component/todo-item";
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
-  const sync = useSyncCompat();
+  const store = useStore();
   const local = useLocal();
   const isCodingMode = createMemo(
     () => local.agent.current().name === "FOSRA CODING",
   );
   const { theme } = useTheme();
-  const session = createMemo(() => sync.session.get(props.sessionID)!);
-  const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? []);
-  const todo = createMemo(() => sync.data.todo[props.sessionID] ?? []);
-  const messages = createMemo(() => sync.data.message[props.sessionID] ?? []);
+  const session = createMemo(() => store.state.sessions.get(props.sessionID)!);
+  const diff = createMemo(() => []);
+  const todo = createMemo(() => store.state.todos.get(props.sessionID) ?? []);
+  const messages = createMemo(() => store.state.messages.get(props.sessionID) ?? []);
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -34,7 +34,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() =>
-    Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)),
+    Object.entries(Object.fromEntries([...store.state.mcp.entries()])).sort(([a], [b]) => a.localeCompare(b)),
   );
 
   // Count connected and error MCP servers for collapsed header display
@@ -74,7 +74,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       last.tokens.reasoning +
       last.tokens.cache.read +
       last.tokens.cache.write;
-    const model = sync.data.provider.find((x) => x.id === last.providerID)
+    const model = store.state.providers().find((x) => x.id === last.providerID)
       ?.models[last.modelID];
     return {
       tokens: total.toLocaleString(),
@@ -88,7 +88,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const kv = useKV();
 
   const hasProviders = createMemo(() =>
-    sync.data.provider.some(
+    store.state.providers().some(
       (x: any) =>
         x.id !== "opencode" ||
         Object.values(x.models as any).some((y: any) => y.cost?.input !== 0),
@@ -223,52 +223,29 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   </Show>
                 </box>
               </Show>
-              <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() =>
-                    sync.data.lsp.length > 2 &&
-                    setExpanded("lsp", !expanded.lsp)
-                  }
-                >
-                  <Show when={sync.data.lsp.length > 2}>
-                    <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
-                  </Show>
-                  <text fg={theme.text}>
-                    <b>LSP</b>
-                  </text>
-                </box>
-                <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
-                  <Show when={sync.data.lsp.length === 0}>
+              <Show when={false}>
+                <box>
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    onMouseDown={() =>
+                      setExpanded("lsp", !expanded.lsp)
+                    }
+                  >
+                    <Show when={expanded.lsp}>
+                      <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
+                    </Show>
+                    <text fg={theme.text}>
+                      <b>LSP</b>
+                    </text>
+                  </box>
+                  <Show when={expanded.lsp}>
                     <text fg={theme.textMuted}>
-                      {sync.data.config.lsp === false
-                        ? "LSPs have been disabled in settings"
-                        : "LSPs will activate as files are read"}
+                      LSP status not available
                     </text>
                   </Show>
-                  <For each={sync.data.lsp}>
-                    {(item) => (
-                      <box flexDirection="row" gap={1}>
-                        <text
-                          flexShrink={0}
-                          style={{
-                            fg: {
-                              connected: theme.success,
-                              error: theme.error,
-                            }[item.status],
-                          }}
-                        >
-                          •
-                        </text>
-                        <text fg={theme.textMuted}>
-                          {item.id} {item.root}
-                        </text>
-                      </box>
-                    )}
-                  </For>
-                </Show>
-              </box>
+                </box>
+              </Show>
               <Show
                 when={
                   todo().length > 0 &&

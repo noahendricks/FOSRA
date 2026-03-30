@@ -1,10 +1,10 @@
 import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
-import { useSyncCompat } from "../../context/compat/sync"
+import { useStore } from "../../context/store"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import type { AssistantMessage, Session } from "@fosra/sdk/v2"
+import type { AssistantMessage, Session } from "@fosra/api/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Flag } from "@/flag/flag"
@@ -43,9 +43,9 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
 
 export function Header() {
   const route = useRouteData("session")
-  const sync = useSyncCompat()
-  const session = createMemo(() => sync.session.get(route.sessionID)!)
-  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const store = useStore()
+  const session = createMemo(() => store.state.sessions.get(route.sessionID)!)
+  const messages = createMemo(() => store.state.messages.get(route.sessionID) ?? [])
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -63,7 +63,7 @@ export function Header() {
     if (!last) return
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    const model = store.state.providers().find((x) => x.id === last.providerID)?.models[last.modelID]
     let result = total.toLocaleString()
     if (model?.limit.context) {
       result += "  " + Math.round((total / model.limit.context) * 100) + "%"
@@ -74,9 +74,7 @@ export function Header() {
   const workspace = createMemo(() => {
     const id = session()?.workspaceID
     if (!id) return "Workspace local"
-    const info = sync.workspace.get()
-    if (!info) return `Workspace ${id}`
-    return `Workspace ${id} (${info.type})`
+    return `Workspace ${id}`
   })
 
   const { theme } = useTheme()

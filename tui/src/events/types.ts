@@ -1,4 +1,4 @@
-import type { Event } from "@fosra/sdk/v2"
+import type { Event } from "@fosra/api/v2"
 
 type EventOfType<T extends Event["type"]> = Extract<Event, { type: T }>
 

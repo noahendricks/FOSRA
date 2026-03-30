@@ -18,7 +18,7 @@
     "paths": {
       "@/*": ["./src/fosra/*"],
       "@tui/*": ["./src/*"],
-      "@fosra/sdk/v2": ["./src/fosra/opencode-ai/sdk/v2"]
+      "@fosra/api/v2": ["./src/fosra/client/v2"]
     }
   },
   "include": ["src/**/*"],

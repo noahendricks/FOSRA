@@ -1,6 +1,7 @@
 import { batch } from "solid-js"
-import type { Event } from "@fosra/sdk/v2"
-import type { ApiClient } from "../api/client"
+import type { Event } from "@fosra/api/v2"
+import type { ApiClient } from "../context/api"
+import { Log } from "@/util/log"
 
 export type ExternalEvents = {
   on: (handler: (event: Event) => void) => () => void
@@ -58,12 +59,14 @@ async function connectSSE(
     try {
       const subscription = await client.fosra.event.subscribe({}, { signal })
       backoff = 1000
+      Log.Default.debug("[SSE CHANNEL] Connected to SSE stream")
       for await (const event of subscription.stream) {
+        Log.Default.debug("[SSE CHANNEL] Received event:", JSON.stringify(event))
         onEvent(event)
       }
     } catch (err) {
       if (signal.aborted) return
-      console.warn(`sse disconnected, reconnecting in ${backoff}ms`, err)
+      Log.Default.warn(`sse disconnected, reconnecting in ${backoff}ms`, err)
       await new Promise((r) => setTimeout(r, backoff))
       backoff = Math.min(backoff * 2, 30_000)
     }

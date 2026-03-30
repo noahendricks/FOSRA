@@ -1,7 +1,7 @@
 import { createMemo, onMount } from "solid-js"
-import { useSyncCompat } from "../../context/compat/sync"
+import { useStore } from "../../context/store"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import type { TextPart } from "@fosra/sdk/v2"
+import type { TextPart } from "@fosra/api/v2"
 import { Locale } from "@/util/locale"
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
@@ -12,7 +12,7 @@ export function DialogTimeline(props: {
   onMove: (messageID: string) => void
   setPrompt?: (prompt: PromptInfo) => void
 }) {
-  const sync = useSyncCompat()
+  const store = useStore()
   const dialog = useDialog()
 
   onMount(() => {
@@ -20,11 +20,11 @@ export function DialogTimeline(props: {
   })
 
   const options = createMemo((): DialogSelectOption<string>[] => {
-    const messages = sync.data.message[props.sessionID] ?? []
+    const messages = store.state.messages.get(props.sessionID) ?? []
     const result = [] as DialogSelectOption<string>[]
     for (const message of messages) {
       if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
+      const part = (store.state.parts.get(message.id) ?? []).find(
         (x) => x.type === "text" && !x.synthetic && !x.ignored,
       ) as TextPart
       if (!part) continue

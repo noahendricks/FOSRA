@@ -1,7 +1,7 @@
 import { createMemo, onMount } from "solid-js"
-import { useSyncCompat } from "../../context/compat/sync"
+import { useStore } from "../../context/store"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import type { TextPart } from "@fosra/sdk/v2"
+import type { TextPart } from "@fosra/api/v2"
 import { Locale } from "@/util/locale"
 import { useApi } from "../../context/api"
 import { useRoute } from "@tui/context/route"
@@ -10,7 +10,7 @@ import type { PromptInfo } from "@tui/component/prompt/history"
 import { strip } from "@tui/component/prompt/part"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
-  const sync = useSyncCompat()
+  const store = useStore()
   const dialog = useDialog()
   const api = useApi()
   const route = useRoute()
@@ -20,11 +20,11 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
   })
 
   const options = createMemo((): DialogSelectOption<string>[] => {
-    const messages = sync.data.message[props.sessionID] ?? []
+    const messages = store.state.messages.get(props.sessionID) ?? []
     const result = [] as DialogSelectOption<string>[]
     for (const message of messages) {
       if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
+      const part = (store.state.parts.get(message.id) ?? []).find(
         (x) => x.type === "text" && !x.synthetic && !x.ignored,
       ) as TextPart
       if (!part) continue
@@ -37,7 +37,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             sessionID: props.sessionID,
             messageID: message.id,
           })
-          const parts = sync.data.part[message.id] ?? []
+          const parts = store.state.parts.get(message.id) ?? []
           const initialPrompt = parts.reduce(
             (agg, part) => {
               if (part.type === "text") {

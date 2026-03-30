@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
-import { useSyncCompat } from "./compat/sync"
+import { useStore } from "./store"
 import { useApi } from "./api"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -17,12 +17,12 @@ import { Filesystem } from "@/util/filesystem"
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
-    const sync = useSyncCompat()
+    const store = useStore()
     const api = useApi()
     const toast = useToast()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
-      const provider = sync.data.provider.find((x) => x.id === model.providerID)
+      const provider = store.state.providers().find((x) => x.id === model.providerID)
       return !!provider?.models[model.modelID]
     }
 
@@ -38,8 +38,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const EMPTY_AGENT = { name: "", mode: "", hidden: false } as any
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
-      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
+      const agents = createMemo(() => store.state.agents().filter((x) => x.mode !== "subagent" && !x.hidden))
+      const visibleAgents = createMemo(() => store.state.agents().filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
@@ -73,11 +73,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         move(direction: 1 | -1) {
           batch(() => {
-            let next = agents().findIndex((x) => x.name === agentStore.current) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
-            setAgentStore("current", value.name)
+            const list = agents()
+            if (!list.length) return
+            let next = list.findIndex((x) => x.name === agentStore.current) + direction
+            if (next < 0) next = list.length - 1
+            if (next >= list.length) next = 0
+            setAgentStore("current", list[next].name)
           })
         },
         color(name: string) {
@@ -137,7 +138,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         Filesystem.writeJson(filePath, {
           recent: modelStore.recent,
           favorite: modelStore.favorite,
-          variant: modelStore.variant,
+          variant: modelStore.variant ?? {},
         })
       }
 
@@ -145,7 +146,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((x: any) => {
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
-          if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+          if (typeof x.variant === "object") setModelStore("variant", x.variant ?? {})
         })
         .catch(() => {})
         .finally(() => {
@@ -165,8 +166,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        if (sync.data.config.model) {
-          const { providerID, modelID } = Provider.parseModel(sync.data.config.model)
+        if (store.state.config()?.model) {
+          const { providerID, modelID } = Provider.parseModel(store.state.config()!.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
@@ -181,9 +182,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const provider = sync.data.provider[0] as any
+        const provider = store.state.providers()[0] as any
         if (!provider) return undefined
-        const defaultModel = (sync.data.provider_default as any)[provider.id]
+        const defaultModel = store.state.providerDefault()[provider.id]
         const firstModel = Object.values(provider.models as any)[0] as any
         const model = defaultModel ?? firstModel?.id
         if (!model) return undefined
@@ -224,7 +225,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               reasoning: false,
             }
           }
-          const provider = sync.data.provider.find((x) => x.id === value.providerID)
+          const provider = store.state.providers().find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
           return {
             provider: provider?.name ?? value.providerID,
@@ -334,12 +335,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const m = currentModel()
             if (!m) return undefined
             const key = `${m.providerID}/${m.modelID}`
+            if (!modelStore.variant) return undefined
             return modelStore.variant[key]
           },
           list() {
             const m = currentModel()
             if (!m) return []
-            const provider = sync.data.provider.find((x) => x.id === m.providerID)
+            const provider = store.state.providers().find((x) => x.id === m.providerID)
             const info = provider?.models[m.modelID]
             if (!info?.variants) return []
             return Object.keys(info.variants)
@@ -372,11 +374,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const mcp = {
       isEnabled(name: string) {
-        const status = sync.data.mcp[name]
+        const status = store.state.mcp.get(name)
         return status?.status === "connected"
       },
       async toggle(name: string) {
-        const status = sync.data.mcp[name]
+        const status = store.state.mcp.get(name)
         if (status?.status === "connected") {
           // Disable: disconnect the MCP
           await (api.fosra.mcp as any).disconnect({ name })

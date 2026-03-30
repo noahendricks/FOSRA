@@ -4,10 +4,10 @@ import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } fro
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
-import type { PermissionRequest } from "@fosra/sdk/v2"
+import type { PermissionRequest } from "@fosra/api/v2"
 import { useApi } from "../../context/api"
 import { SplitBorder } from "../../component/border"
-import { useSyncCompat } from "../../context/compat/sync"
+import { useStore } from "../../context/store"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -128,17 +128,17 @@ function TextBody(props: { title: string; description?: string; icon?: string })
 
 export function PermissionPrompt(props: { request: PermissionRequest }) {
   const api = useApi()
-  const sync = useSyncCompat()
-  const [store, setStore] = createStore({
+  const appStore = useStore()
+  const [permissionStore, setPermissionStore] = createStore({
     stage: "permission" as PermissionStage,
   })
 
-  const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
+  const session = createMemo(() => appStore.state.sessionsArray().find((s) => s.id === props.request.sessionID))
 
   const input = createMemo(() => {
     const tool = props.request.tool
     if (!tool) return {}
-    const parts = sync.data.part[tool.messageID] ?? []
+    const parts = appStore.state.parts.get(tool.messageID) ?? []
     for (const part of parts) {
       if (part.type === "tool" && part.callID === tool.callID && part.state.status !== "pending") {
         return part.state.input ?? {}
@@ -151,7 +151,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
   return (
     <Switch>
-      <Match when={store.stage === "always"}>
+      <Match when={permissionStore.stage === "always"}>
         <Prompt
           title="Always allow"
           body={
@@ -179,7 +179,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           options={{ confirm: "Confirm", cancel: "Cancel" }}
           escapeKey="cancel"
           onSelect={(option) => {
-            setStore("stage", "permission")
+            setPermissionStore("stage", "permission")
             if (option === "cancel") return
             api.fosra.permission.reply({
               reply: "always",
@@ -190,7 +190,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           }}
         />
       </Match>
-      <Match when={store.stage === "reject"}>
+      <Match when={permissionStore.stage === "reject"}>
         <RejectPrompt
           onConfirm={(message) => {
             api.fosra.permission.reply({
@@ -202,11 +202,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             })
           }}
           onCancel={() => {
-            setStore("stage", "permission")
+            setPermissionStore("stage", "permission")
           }}
         />
       </Match>
-      <Match when={store.stage === "permission"}>
+      <Match when={permissionStore.stage === "permission"}>
         {(() => {
           const info = () => {
             const permission = props.request.permission
@@ -440,12 +440,12 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               fullscreen
               onSelect={(option) => {
                 if (option === "always") {
-                  setStore("stage", "always")
+                  setPermissionStore("stage", "always")
                   return
                 }
                 if (option === "reject") {
                   if (session()?.parentID) {
-                    setStore("stage", "reject")
+                    setPermissionStore("stage", "reject")
                     return
                   }
                   api.fosra.permission.reply({
@@ -554,7 +554,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const keybind = useKeybind()
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
-  const [store, setStore] = createStore({
+  const [store, setPermissionStore] = createStore({
     selected: keys[0],
     expanded: false,
   })
@@ -569,14 +569,14 @@ function Prompt<const T extends Record<string, string>>(props: {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)
       const next = keys[(idx - 1 + keys.length) % keys.length]
-      setStore("selected", next)
+      setPermissionStore("selected", next)
     }
 
     if (evt.name === "right" || evt.name == "l") {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)
       const next = keys[(idx + 1) % keys.length]
-      setStore("selected", next)
+      setPermissionStore("selected", next)
     }
 
     if (evt.name === "return") {
@@ -592,7 +592,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     if (props.fullscreen && diffKey && Keybind.match(diffKey, keybind.parse(evt))) {
       evt.preventDefault()
       evt.stopPropagation()
-      setStore("expanded", (v) => !v)
+      setPermissionStore("expanded", (v) => !v)
     }
   })
 
@@ -651,9 +651,9 @@ function Prompt<const T extends Record<string, string>>(props: {
                 paddingLeft={1}
                 paddingRight={1}
                 backgroundColor={option === store.selected ? theme.warning : theme.backgroundMenu}
-                onMouseOver={() => setStore("selected", option)}
+                onMouseOver={() => setPermissionStore("selected", option)}
                 onMouseUp={() => {
-                  setStore("selected", option)
+                  setPermissionStore("selected", option)
                   props.onSelect(option)
                 }}
               >

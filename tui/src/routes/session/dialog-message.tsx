@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js"
-import { useSyncCompat } from "../../context/compat/sync"
+import { useStore } from "../../context/store"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useApi } from "../../context/api"
 import { useRoute } from "@tui/context/route"
@@ -12,9 +12,9 @@ export function DialogMessage(props: {
   sessionID: string
   setPrompt?: (prompt: PromptInfo) => void
 }) {
-  const sync = useSyncCompat()
+  const store = useStore()
   const api = useApi()
-  const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
+  const message = createMemo(() => store.state.messages.get(props.sessionID)?.find((x) => x.id === props.messageID))
   const route = useRoute()
 
   return (
@@ -35,7 +35,7 @@ export function DialogMessage(props: {
             })
 
             if (props.setPrompt) {
-              const parts = sync.data.part[msg.id]
+              const parts = store.state.parts.get(msg.id) ?? []
               const promptInfo = parts.reduce(
                 (agg, part) => {
                   if (part.type === "text") {
@@ -60,7 +60,7 @@ export function DialogMessage(props: {
             const msg = message()
             if (!msg) return
 
-            const parts = sync.data.part[msg.id]
+            const parts = store.state.parts.get(msg.id) ?? []
             const text = parts.reduce((agg, part) => {
               if (part.type === "text" && !part.synthetic) {
                 agg += part.text
@@ -84,7 +84,7 @@ export function DialogMessage(props: {
             const initialPrompt = (() => {
               const msg = message()
               if (!msg) return undefined
-              const parts = sync.data.part[msg.id]
+              const parts = store.state.parts.get(msg.id) ?? []
               return parts.reduce(
                 (agg, part) => {
                   if (part.type === "text") {

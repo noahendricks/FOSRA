@@ -1,6 +1,6 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
-import { useSyncCompat } from "../context/compat/sync"
+import { useStore } from "../context/store"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
@@ -9,15 +9,15 @@ import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
 
 export function useConnected() {
-  const sync = useSyncCompat()
+  const store = useStore()
   return createMemo(() =>
-    (sync.data.provider as any).some((x: any) => x.id !== "opencode" || Object.values(x.models as any).some((y: any) => y.cost?.input !== 0)),
+    (store.state.providers() as any).some((x: any) => x.id !== "opencode" || Object.values(x.models as any).some((y: any) => y.cost?.input !== 0)),
   )
 }
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
-  const sync = useSyncCompat()
+  const store = useStore()
   const dialog = useDialog()
   const keybind = useKeybind()
   const [query, setQuery] = createSignal("")
@@ -36,7 +36,7 @@ export function DialogModel(props: { providerID?: string }) {
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
       return items.flatMap((item) => {
-        const provider = sync.data.provider.find((x) => x.id === item.providerID)
+        const provider = store.state.providers().find((x) => x.id === item.providerID)
         if (!provider) return []
         const model = provider.models[item.modelID]
         if (!model) return []
@@ -67,7 +67,7 @@ export function DialogModel(props: { providerID?: string }) {
     )
 
     const providerOptions = pipe(
-      sync.data.provider,
+      store.state.providers(),
       sortBy(
         (provider) => provider.id !== "opencode",
         (provider) => provider.name,
@@ -130,7 +130,7 @@ export function DialogModel(props: { providerID?: string }) {
   })
 
   const provider = createMemo(() =>
-    props.providerID ? sync.data.provider.find((x) => x.id === props.providerID) : null,
+    props.providerID ? store.state.providers().find((x) => x.id === props.providerID) : null,
   )
 
   const title = createMemo(() => provider()?.name ?? "Select model")

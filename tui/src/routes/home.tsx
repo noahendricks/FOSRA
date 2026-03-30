@@ -5,7 +5,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
 import { Tips } from "../component/tips"
 import { Locale } from "@/util/locale"
-import { useSyncCompat } from "../context/compat/sync"
+import { useStore } from "../context/store"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useDirectory } from "../context/directory"
@@ -20,22 +20,23 @@ import { useLocal } from "../context/local"
 let once = false
 
 export function Home() {
-  const sync = useSyncCompat()
+  const store = useStore()
   const kv = useKV()
   const { theme } = useTheme()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const command = useCommandDialog()
-  const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
+  const mcpEntries = createMemo(() => Object.entries(Object.fromEntries([...store.state.mcp.entries()])))
+  const mcp = createMemo(() => mcpEntries().length > 0)
   const mcpError = createMemo(() => {
-    return Object.values(sync.data.mcp).some((x) => x.status === "failed")
+    return mcpEntries().some(([_, x]) => x.status === "failed")
   })
 
   const connectedMcpCount = createMemo(() => {
-    return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
+    return mcpEntries().filter(([_, x]) => x.status === "connected").length
   })
 
-  const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
+  const isFirstTimeUser = createMemo(() => store.state.sessionsArray().length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
     // Don't show tips for first-time users
@@ -89,11 +90,11 @@ export function Home() {
     }
   })
 
-  // Wait for sync and model store to be ready before auto-submitting --prompt
+  // Wait for model store to be ready before auto-submitting --prompt
   let submitted = false
   createEffect(
     on(
-      () => sync.ready && local.model.ready,
+      () => local.model.ready,
       (ready) => {
         if (!ready) return
         if (submitted) return

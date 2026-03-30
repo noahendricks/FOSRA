@@ -1,6 +1,6 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
-import { useSyncCompat } from "../context/compat/sync"
+import { useStore } from "../context/store"
 import { useApi } from "../context/api"
 import { map, pipe, entries, sortBy } from "remeda"
 import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tui/ui/dialog-select"
@@ -21,13 +21,13 @@ function Status(props: { enabled: boolean; loading: boolean }) {
 
 export function DialogMcp() {
   const local = useLocal()
-  const sync = useSyncCompat()
+  const store = useStore()
   const api = useApi()
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const options = createMemo(() => {
-    const mcpData = sync.data.mcp
+    const mcpData = Object.fromEntries([...store.state.mcp.entries()])
     const loadingMcp = loading()
 
     return pipe(

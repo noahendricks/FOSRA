@@ -1,21 +1,22 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
-import { useSyncCompat } from "@tui/context/compat/sync"
+import { useStore } from "@tui/context/store"
 import { createEffect, createMemo, createSignal, onMount } from "solid-js"
-import type { Session } from "@fosra/sdk/v2"
+import type { Session } from "@fosra/api/v2"
 import { useApi } from "@tui/context/api"
 import { useToast } from "../ui/toast"
 import { useKeybind } from "../context/keybind"
 import { DialogSessionList } from "./workspace/dialog-session-list"
-import { createFosraClient } from "@fosra/sdk/v2"
+import { createFosraClient } from "@fosra/api/v2"
 import { setTimeout as sleep } from "node:timers/promises"
+import { Log } from "@/util/log"
 
 async function openWorkspace(input: {
   dialog: ReturnType<typeof useDialog>
   route: ReturnType<typeof useRoute>
   sdk: ReturnType<typeof useApi>
-  sync: ReturnType<typeof useSyncCompat>
+  store: ReturnType<typeof useStore>
   toast: ReturnType<typeof useToast>
   workspaceID: string
   forceCreate?: boolean
@@ -26,7 +27,7 @@ async function openWorkspace(input: {
   const client = createFosraClient({
     baseUrl: input.sdk.url,
     fetch: input.sdk.fetch,
-    directory: input.sync.data.path.directory || input.sdk.directory,
+    directory: input.sdk.directory,
     experimental_workspaceID: input.workspaceID,
   })
   const listed = input.forceCreate ? undefined : await client.session.list({ roots: true, limit: 1 })
@@ -73,7 +74,7 @@ async function openWorkspace(input: {
 
 function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promise<void> }) {
   const dialog = useDialog()
-  const sync = useSyncCompat()
+  const store = useStore()
   const sdk = useApi()
   const toast = useToast()
   const [creating, setCreating] = createSignal<string>()
@@ -107,10 +108,10 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
     setCreating(type)
 
     const result = await sdk.fosra.experimental.workspace.create({ type, branch: null }).catch((err) => {
-      console.log(err)
+      Log.Default.debug("createWorkspace error", err)
       return undefined
     })
-    console.log(JSON.stringify(result, null, 2))
+    Log.Default.debug("createWorkspace result", result)
     const workspace = result?.data
     if (!workspace) {
       setCreating(undefined)
@@ -120,7 +121,6 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
       })
       return
     }
-    await sync.workspace.sync()
     await props.onSelect(workspace.id)
     setCreating(undefined)
   }
@@ -141,7 +141,7 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
 export function DialogWorkspaceList() {
   const dialog = useDialog()
   const route = useRoute()
-  const sync = useSyncCompat()
+  const store = useStore()
   const sdk = useApi()
   const toast = useToast()
   const keybind = useKeybind()
@@ -153,7 +153,7 @@ export function DialogWorkspaceList() {
       dialog,
       route,
       sdk,
-      sync,
+      store,
       toast,
       workspaceID,
       forceCreate,
@@ -184,7 +184,7 @@ export function DialogWorkspaceList() {
     const client = createFosraClient({
       baseUrl: sdk.url,
       fetch: sdk.fetch,
-      directory: sync.data.path.directory || sdk.directory,
+      directory: sdk.directory,
       experimental_workspaceID: workspaceID,
     })
     const listed = await client.session.list({ roots: true, limit: 1 }).catch(() => undefined)
@@ -197,18 +197,18 @@ export function DialogWorkspaceList() {
 
   const currentWorkspaceID = createMemo(() => {
     if (route.data.type === "session") {
-      return sync.session.get(route.data.sessionID)?.workspaceID ?? "__local__"
+      return store.state.sessions.get(route.data.sessionID)?.workspaceID ?? "__local__"
     }
     return "__local__"
   })
 
   const localCount = createMemo(
-    () => sync.data.session.filter((session) => !session.workspaceID && !session.parentID).length,
+    () => store.state.sessionsArray().filter((session) => !session.workspaceID && !session.parentID).length,
   )
 
   let run = 0
   createEffect(() => {
-    const workspaces = sync.data.workspaceList
+    const workspaces: { id: string; type?: string; branch?: string }[] = []
     const next = ++run
     if (!workspaces.length) {
       setCounts({})
@@ -220,7 +220,7 @@ export function DialogWorkspaceList() {
         const client = createFosraClient({
           baseUrl: sdk.url,
           fetch: sdk.fetch,
-          directory: sync.data.path.directory || sdk.directory,
+          directory: sdk.directory,
           experimental_workspaceID: workspace.id,
         })
         const result = await client.session.list({ roots: true }).catch(() => undefined)
@@ -240,24 +240,6 @@ export function DialogWorkspaceList() {
       description: "Use the local machine",
       footer: `${localCount()} session${localCount() === 1 ? "" : "s"}`,
     },
-    ...sync.data.workspaceList.map((workspace) => {
-      const count = counts()[workspace.id]
-      return {
-        title:
-          toDelete() === workspace.id
-            ? `Delete ${workspace.id}? Press ${keybind.print("session_delete")} again`
-            : workspace.id,
-        value: workspace.id,
-        category: workspace.type,
-        description: workspace.branch ? `Branch ${workspace.branch}` : undefined,
-        footer:
-          count === undefined
-            ? "Loading sessions..."
-            : count === null
-              ? "Sessions unavailable"
-              : `${count} session${count === 1 ? "" : "s"}`,
-      }
-    }),
     {
       title: "+ New workspace",
       value: "__create__",
@@ -268,7 +250,6 @@ export function DialogWorkspaceList() {
 
   onMount(() => {
     dialog.setSize("large")
-    void sync.workspace.sync()
   })
 
   return (
@@ -312,7 +293,6 @@ export function DialogWorkspaceList() {
                 type: "home",
               })
             }
-            await sync.workspace.sync()
           },
         },
       ]}

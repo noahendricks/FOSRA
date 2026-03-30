@@ -1,4 +1,4 @@
-import type { AssistantMessage, Part, UserMessage } from "@fosra/sdk/v2"
+import type { AssistantMessage, Part, UserMessage } from "@fosra/api/v2"
 import { Locale } from "@/util/locale"
 
 export type TranscriptOptions = {

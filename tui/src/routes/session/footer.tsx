@@ -1,6 +1,6 @@
 import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "../../context/theme"
-import { useSyncCompat } from "../../context/compat/sync"
+import { useStore } from "../../context/store"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
@@ -8,19 +8,20 @@ import { useRoute } from "../../context/route"
 
 export function Footer() {
   const { theme } = useTheme()
-  const sync = useSyncCompat()
+  const appStore = useStore()
   const route = useRoute()
-  const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => (x as any).status === "connected").length)
-  const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => (x as any).status === "failed"))
-  const lsp = createMemo(() => Object.keys(sync.data.lsp))
+  const mcpEntries = createMemo(() => Object.entries(Object.fromEntries([...appStore.state.mcp.entries()])))
+  const mcp = createMemo(() => mcpEntries().filter(([_, x]) => x.status === "connected").length)
+  const mcpError = createMemo(() => mcpEntries().some(([_, x]) => x.status === "failed"))
+  const lsp = createMemo(() => [])
   const permissions = createMemo(() => {
     if (route.data.type !== "session") return []
-    return sync.data.permission[route.data.sessionID] ?? []
+    return []
   })
   const directory = useDirectory()
   const connected = useConnected()
 
-  const [store, setStore] = createStore({
+  const [footerStore, setFooterStore] = createStore({
     welcome: false,
   })
 
@@ -30,14 +31,14 @@ export function Footer() {
 
     function tick() {
       if (connected()) return
-      if (!store.welcome) {
-        setStore("welcome", true)
+      if (!footerStore.welcome) {
+        setFooterStore("welcome", true)
         timeouts.push(setTimeout(() => tick(), 5000))
         return
       }
 
-      if (store.welcome) {
-        setStore("welcome", false)
+      if (footerStore.welcome) {
+        setFooterStore("welcome", false)
         timeouts.push(setTimeout(() => tick(), 10_000))
         return
       }
@@ -54,7 +55,7 @@ export function Footer() {
       <text fg={theme.textMuted}>{directory()}</text>
       <box gap={2} flexDirection="row" flexShrink={0}>
         <Switch>
-          <Match when={store.welcome}>
+          <Match when={footerStore.welcome}>
             <text fg={theme.text}>
               Get started <span style={{ fg: theme.textMuted }}>/connect</span>
             </text>

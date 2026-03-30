@@ -1,29 +1,45 @@
-import * as fs from "fs"
-import * as path from "path"
-import * as os from "os"
+import { Logger } from "tslog";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
-const LOG_FILE = path.join(os.homedir(), ".fosra-tui.log")
+const LOG_FILE = path.join(os.homedir(), ".fosra-tui.log");
 
-function writeLog(level: string, ...args: unknown[]) {
-  const timestamp = new Date().toISOString()
-  const entry = {
-    timestamp,
-    level,
-    ...((typeof args[0] === "string" ? { action: args[0] } : args[0]) as Record<string, unknown>),
+function ensureLogDir() {
+  const dir = path.dirname(LOG_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
-  const line = JSON.stringify(entry) + "\n"
-  try {
-    fs.appendFileSync(LOG_FILE, line)
-  } catch {}
-  const method = level === "ERROR" ? console.error : level === "WARN" ? console.warn : console.info
-  method(`[${level}]`, ...args)
 }
+
+const logger = new Logger({
+  name: "forsra-tui",
+  minLevel: 3,
+  type: "pretty",
+  prettyLogTemplate: "{{dateIsoStr}}\t{{logLevelName}}\t{{name}}\t{{msg}}\t{{args}}",
+  prettyLogTimeZone: "local",
+  stylePrettyLogs: true,
+  prettyLogStyles: {
+    logLevelName: {
+      SILLY: ["bold", "white"],
+      TRACE: ["bold", "whiteBright"],
+      DEBUG: ["bold", "cyan"],
+      INFO: ["bold", "green"],
+      WARN: ["bold", "yellow"],
+      ERROR: ["bold", "red"],
+      FATAL: ["bold", "redBright"],
+    },
+    dateIsoStr: "dim",
+    name: "cyan",
+  },
+});
+
+logger.attachTransport((logObj) => {
+  ensureLogDir();
+  const line = JSON.stringify(logObj, null, 2) + "\n";
+  fs.appendFileSync(LOG_FILE, line);
+});
 
 export const Log = {
-  Default: {
-    error: (...args: unknown[]) => writeLog("ERROR", ...args),
-    warn: (...args: unknown[]) => writeLog("WARN", ...args),
-    info: (...args: unknown[]) => writeLog("INFO", ...args),
-    debug: (...args: unknown[]) => writeLog("DEBUG", ...args),
-  },
-}
+  Default: logger,
+};

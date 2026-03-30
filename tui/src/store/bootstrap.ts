@@ -1,5 +1,7 @@
-import type { ApiClient } from "../api/client"
+import type { ApiClient } from "../context/api"
 import type { AppState } from "./state"
+import type { Message, Part } from "@fosra/api/v2"
+import { parseMessages } from "../fosra/schemas"
 
 export async function loadInitialState(
   api: ApiClient,
@@ -59,10 +61,10 @@ export async function loadSession(
     api.fosra.session.todo({ sessionID: sessionId }),
   ])
 
-  for (const msg of messages.data ?? []) {
-    state.messages.set(msg.info.id, [msg.info])
-    if (msg.parts) {
-      state.parts.set(msg.info.id, msg.parts)
+  for (const msg of parseMessages(messages.data ?? [])) {
+    state.messages.set(msg.info.id, [msg.info as Message])
+    if (msg.parts.length) {
+      state.parts.set(msg.info.id, msg.parts as Part[])
     }
   }
 

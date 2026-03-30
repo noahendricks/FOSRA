@@ -2,20 +2,28 @@ import { TextAttributes } from "@opentui/core"
 import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
-import { useSyncCompat } from "../context/compat/sync"
+import { useStore } from "../context/store"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
 
 export function DialogStatus() {
-  const sync = useSyncCompat()
+  const store = useStore()
   const { theme } = useTheme()
   const dialog = useDialog()
 
-  const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
+  const mcpEntries = createMemo(() => Object.entries(Object.fromEntries([...store.state.mcp.entries()])))
+  const mcpCount = createMemo(() => store.state.mcp.size)
+
+  const enabledFormatters = createMemo(() => {
+    const formatter = store.state.config()?.formatter
+    if (!formatter) return []
+    if (Array.isArray(formatter)) return formatter.filter((f: any) => f.enabled)
+    return []
+  })
 
   const plugins = createMemo(() => {
-    const list = sync.data.config.plugin ?? []
+    const list = store.state.config().plugin ?? []
     const result = list.map((value) => {
       if (value.startsWith("file://")) {
         const path = fileURLToPath(value)
@@ -49,10 +57,10 @@ export function DialogStatus() {
           esc
         </text>
       </box>
-      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
+      <Show when={mcpCount() > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
-          <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
-          <For each={Object.entries(sync.data.mcp)}>
+          <text fg={theme.text}>{mcpCount()} MCP Servers</text>
+          <For each={mcpEntries()}>
             {([key, item]) => (
               <box flexDirection="row" gap={1}>
                 <text
@@ -92,31 +100,9 @@ export function DialogStatus() {
           </For>
         </box>
       </Show>
-      {sync.data.lsp.length > 0 && (
-        <box>
-          <text fg={theme.text}>{sync.data.lsp.length} LSP Servers</text>
-          <For each={sync.data.lsp}>
-            {(item) => (
-              <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: {
-                      connected: theme.success,
-                      error: theme.error,
-                    }[item.status],
-                  }}
-                >
-                  •
-                </text>
-                <text fg={theme.text} wrapMode="word">
-                  <b>{item.id}</b> <span style={{ fg: theme.textMuted }}>{item.root}</span>
-                </text>
-              </box>
-            )}
-          </For>
-        </box>
-      )}
+      <Show when={false} fallback={<text fg={theme.text}>No LSP Servers</text>}>
+        <box />
+      </Show>
       <Show when={enabledFormatters().length > 0} fallback={<text fg={theme.text}>No Formatters</text>}>
         <box>
           <text fg={theme.text}>{enabledFormatters().length} Formatters</text>

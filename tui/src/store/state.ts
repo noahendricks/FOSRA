@@ -56,8 +56,14 @@ export function createAppState() {
 
   const loadedSessions = new Set<string>()
 
+  const [sessionsArray, setSessionsArray] = createSignal<Session[]>([])
+  const [providerDefault, setProviderDefault] = createSignal<Record<string, string>>({})
+  const [providerConnected, setProviderConnected] = createSignal<string[]>([])
+
   return {
     sessions,
+    sessionsArray,
+    setSessionsArray,
     messages,
     parts,
     todos,
@@ -90,6 +96,11 @@ export function createAppState() {
     setDirectory: (data: string) => setSystemState("directory", data),
 
     loadedSessions,
+
+    providerDefault,
+    setProviderDefault,
+    providerConnected,
+    setProviderConnected,
   }
 }
 
