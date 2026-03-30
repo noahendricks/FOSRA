@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.src.api.schemas import MessageUpdateRequest, NewConvoRequest
-from backend.src.api.schemas.api_schemas import ConvoDeleteRequest, ConvoUpdateRequest
+from backend.src.api.schemas.convo_api_schemas import (
+    ConvoDeleteRequest,
+    ConvoUpdateRequest,
+)
 from backend.src.domain.schemas.convo import Convo, ConvoFull, Message, NewConvo
 from backend.src.domain.schemas.doc import MDNFile
 from backend.src.storage.models import ConvoORM, MessageORM

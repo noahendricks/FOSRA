@@ -100,12 +100,12 @@ def _handle_convo_relationships(
 def domain_to_response(
     domain_obj: T_Msgspec, response_cls: Type[T_Pydantic]
 ) -> T_Pydantic:
-    logger.debug(f"Converting {type(domain_obj).__name__}")
-    logger.debug(f"Struct fields: {domain_obj.__struct_fields__}")
+    # logger.debug(f"Converting {type(domain_obj).__name__}")
+    # logger.debug(f"Struct fields: {domain_obj.__struct_fields__}")
 
     try:
         data = msgspec.to_builtins(domain_obj)
-        logger.debug(f"Converted to builtins: {type(data)}")
+        # logger.debug(f"Converted to builtins: {type(data)}")
     except Exception as e:
         logger.error(f"Failed on field inspection:")
         for field_name in domain_obj.__struct_fields__:

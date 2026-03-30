@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from backend.src.api.schemas.api_schemas import _BaseModelFlex
+from backend.src.api.schemas.base import _BaseModelFlex
 from backend.src.settings import UserPreferences
 
 if TYPE_CHECKING:

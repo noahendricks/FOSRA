@@ -11,12 +11,20 @@ configs captured by closures so the LangGraph state stays clean.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
 
 from falkordb import FalkorDB
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
-from qdrant_client import QdrantClient, models
+from pydantic import BaseModel, ConfigDict
+from qdrant_client import QdrantClient
+from qdrant_client.http.models.models import (
+    FeedbackItem,
+    NaiveFeedbackStrategy,
+    NaiveFeedbackStrategyParams,
+    RelevanceFeedbackInput,
+    RelevanceFeedbackQuery,
+)
 
 from backend.src.domain.schemas.retrieval import (
     AccumulatedContext,
@@ -49,22 +57,24 @@ if TYPE_CHECKING:
     )
 
 
-class RetrievalState(TypedDict, total=False):
+class RetrievalState(BaseModel):
     """Data flowing through the retrieval pipeline.
 
     Configs are NOT in the state — they are captured by closures in
     ``build_retrieval_pipeline()``.
     """
 
-    user_query: str
-    chat_history: str | None
-    query_expansion: QueryExpansion
-    checklist: list[ChecklistItem]
-    file_ids: set[str]
+    model_config = ConfigDict(extra="allow")
+
+    user_query: str = ""
+    chat_history: str | None = None
+    query_expansion: QueryExpansion | None = None
+    checklist: list[ChecklistItem] = []
+    file_ids: set[str] = set()
     accumulated_context: AccumulatedContext
-    iteration: int
-    formatted_context: str
-    context: str
+    iteration: int = 0
+    formatted_context: str = ""
+    context: str = ""
 
 
 def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
@@ -115,10 +125,9 @@ def build_retrieval_pipeline(
     falkordb_client: FalkorDB | None = None,
     token_budget: int = 4096,
     max_iterations: int = 5,
-    parents_top_k: int = 20,
     chunks_top_k: int = 10,
-    rrf_parent_weight: float = 3.0,
-    rrf_chunk_weight: float = 1.0,
+    dense_weight: float = 1.0,
+    sparse_weight: float = 1.0,
     feedback_a: float = 0.24,
     feedback_b: float = 1.35,
     feedback_c: float = 0.59,
@@ -133,8 +142,9 @@ def build_retrieval_pipeline(
         falkordb_client: Optional FalkorDB client for graph retrieval
         token_budget: Maximum tokens in final context
         max_iterations: Maximum agentic loop iterations
-        parents_top_k: Top-K for parent chunk retrieval
-        chunks_top_k: Top-K for child chunk retrieval
+        chunks_top_k: Top-K for chunk retrieval
+        dense_weight: Weight for dense vector in weighted RRF fusion
+        sparse_weight: Weight for sparse vector in weighted RRF fusion
 
     Returns:
         Compiled LangGraph pipeline
@@ -154,9 +164,9 @@ def build_retrieval_pipeline(
     async def expand_query_node(state: RetrievalState) -> dict:
         """Expand user query into rewritten query + checklist."""
         expansion = await QueryExpander.expand(
-            user_query=state["user_query"],
+            user_query=state.user_query,
             llm_config=llm_config,
-            chat_history=state.get("chat_history"),
+            chat_history=state.chat_history,
         )
         logger.debug(
             "Pipeline: expanded query → {} items in checklist",
@@ -172,42 +182,44 @@ def build_retrieval_pipeline(
 
     async def initial_retrieve_node(state: RetrievalState) -> dict:
         """Initial retrieval on rewritten query (chunks + auto-merge hierarchical upgrade)."""
-        query = state["query_expansion"].rewritten_query
+        if state.query_expansion:
+            query = state.query_expansion.rewritten_query
+        else:
+            query = state.user_query
 
-        parent_results, file_ids, merged_context = await VectorService.dual_retrieve(
+        chunks, file_ids, merged_context = await VectorService.retrieve(
             client=qdrant_client,
             embed_config=embedder_config,
             query=query,
-            parents_top_k=parents_top_k,
-            chunks_top_k=chunks_top_k,
-            parent_weight=rrf_parent_weight,
-            chunk_weight=rrf_chunk_weight,
+            top_k=chunks_top_k,
+            dense_weight=dense_weight,
+            sparse_weight=sparse_weight,
         )
 
-        # Use merged_context as primary LLM input (hierarchically merged chunks)
-        # parent_results available for fallback if needed
+        acc_items = [_retrieved_chunk_to_item(c) for c in chunks]
+        accumulated_context = AccumulatedContext(items=acc_items)
+
         logger.debug(
-            "Pipeline: initial retrieve → {} parent_refs, {} unique files, merged chars: {}",
-            len(parent_results),
+            "Pipeline: initial retrieve → {} chunks, {} unique files, merged chars: {}",
+            len(chunks),
             len(file_ids),
             len(merged_context),
         )
 
         return {
-            "accumulated_context": None,  # Will use merged_context instead
+            "accumulated_context": accumulated_context,
             "file_ids": file_ids,
             "iteration": 1,
             "merged_context": merged_context,
-            "parent_results": parent_results,
         }
 
     async def agentic_loop_node(state: RetrievalState) -> dict:
         """Run subagent iteration: assess coverage + plan retrieval."""
         result = await Subagent.assess_and_plan(
-            original_query=state["user_query"],
-            checklist=state["checklist"],
-            context=state["accumulated_context"],
-            iteration=state["iteration"],
+            original_query=state.user_query,
+            checklist=state.checklist,
+            context=state.accumulated_context,
+            iteration=state.iteration,
             llm_config=llm_config,
             max_iterations=max_iterations,
         )
@@ -217,7 +229,12 @@ def build_retrieval_pipeline(
         for rq in result.retrieval_queries:
             if rq.target in (RetrievalTarget.VECTOR, RetrievalTarget.BOTH):
                 vector_items = await _execute_vector_retrieval(
-                    rq.query, rq.filters, qdrant_client, embedder_config
+                    rq.query,
+                    rq.filters,
+                    qdrant_client,
+                    embedder_config,
+                    dense_weight=dense_weight,
+                    sparse_weight=sparse_weight,
                 )
                 new_items.extend(vector_items)
 
@@ -228,14 +245,14 @@ def build_retrieval_pipeline(
                     )
                     new_items.extend(graph_items)
 
-        updated_context = state["accumulated_context"].add_items(new_items)
+        updated_context = state.accumulated_context.add_items(new_items)
 
         new_file_ids = {i.file_id for i in new_items}
-        updated_file_ids = state["file_ids"] | new_file_ids
+        updated_file_ids = state.file_ids | new_file_ids
 
         logger.debug(
             "Pipeline: agentic iteration {} → {} new items, {} total files",
-            state["iteration"],
+            state.iteration,
             len(new_items),
             len(updated_file_ids),
         )
@@ -244,7 +261,7 @@ def build_retrieval_pipeline(
             "checklist": result.checklist,
             "accumulated_context": updated_context,
             "file_ids": updated_file_ids,
-            "iteration": state["iteration"] + 1,
+            "iteration": state.iteration + 1,
             "_all_answered": result.all_answered,
         }
 
@@ -253,20 +270,34 @@ def build_retrieval_pipeline(
         filters: Any | None,
         client: QdrantClient,
         embed_config: EmbedderConfig,
+        dense_weight: float = 1.0,
+        sparse_weight: float = 1.0,
     ) -> list[AccumulatedItem]:
         """Execute vector retrieval and return AccumulatedItems."""
         filter_dict = None
         if filters and filters.file_ids:
             filter_dict = {"doc_ids": filters.file_ids}
 
-        chunks = await VectorService.search_collection(
-            client=client,
-            collection_name=CHUNKS_COLLECTION,
-            embed_config=embed_config,
-            query=query,
-            filters=filter_dict,
-            limit=10,
-        )
+        if embed_config.sparse_enabled:
+            chunks = await VectorService.weighted_search(
+                client=client,
+                collection_name=CHUNKS_COLLECTION,
+                embed_config=embed_config,
+                query=query,
+                filters=filter_dict,
+                dense_weight=dense_weight,
+                sparse_weight=sparse_weight,
+                limit=10,
+            )
+        else:
+            chunks = await VectorService.search_collection(
+                client=client,
+                collection_name=CHUNKS_COLLECTION,
+                embed_config=embed_config,
+                query=query,
+                filters=filter_dict,
+                limit=10,
+            )
 
         return [_retrieved_chunk_to_item(c) for c in chunks]
 
@@ -319,8 +350,8 @@ def build_retrieval_pipeline(
 
     def should_continue_loop(state: RetrievalState) -> str:
         """Decide if agentic loop should continue."""
-        all_answered = state.get("_all_answered", False)
-        iteration = state.get("iteration", 0)
+        all_answered = getattr(state, "_all_answered", False)
+        iteration = getattr(state, "iteration", 0)
 
         if all_answered:
             return "relevance_feedback"
@@ -332,7 +363,7 @@ def build_retrieval_pipeline(
 
     async def relevance_feedback_node(state: RetrievalState) -> dict:
         """Apply Qdrant relevance feedback using accumulated items as positive examples."""
-        context = state["accumulated_context"]
+        context = state.accumulated_context
         if not context.items:
             return {"accumulated_context": context}
 
@@ -347,7 +378,7 @@ def build_retrieval_pipeline(
 
         embedder = EmbedderService()
         try:
-            embedded = await embedder.embed_query(state["user_query"], embedder_config)
+            embedded = await embedder.embed_query(state.user_query, embedder_config)
             if not embedded or not embedded.dense:
                 return {"accumulated_context": context}
         except Exception as e:
@@ -356,19 +387,19 @@ def build_retrieval_pipeline(
 
         top_items = sorted(feedback_items, key=lambda x: x.score, reverse=True)[:20]
         feedback = [
-            models.FeedbackItem(
+            FeedbackItem(
                 example=str(item.qdrant_point_id),
                 score=item.score,
             )
             for item in top_items
         ]
 
-        feedback_query = models.RelevanceFeedbackQuery(
-            relevance_feedback=models.RelevanceFeedbackInput(
+        feedback_query = RelevanceFeedbackQuery(
+            relevance_feedback=RelevanceFeedbackInput(
                 target=embedded.dense,
                 feedback=feedback,
-                strategy=models.NaiveFeedbackStrategy(
-                    naive=models.NaiveFeedbackStrategyParams(
+                strategy=NaiveFeedbackStrategy(
+                    naive=NaiveFeedbackStrategyParams(
                         a=feedback_a,
                         b=feedback_b,
                         c=feedback_c,
@@ -431,7 +462,7 @@ def build_retrieval_pipeline(
 
     async def rerank_node(state: RetrievalState) -> dict:
         """Rerank accumulated context against original query."""
-        context = state["accumulated_context"]
+        context = state.accumulated_context
 
         if not context.items:
             return {"formatted_context": "", "context": ""}
@@ -454,7 +485,7 @@ def build_retrieval_pipeline(
             reranker = RerankerService(config=reranker_config)
 
             reranked = reranker.rerank(
-                query=state["user_query"],
+                query=state.user_query,
                 chunks=chunks,
             )
 

@@ -27,6 +27,7 @@ class EmbedderType(StrEnum):
     FLAG = "FLAG"
     OLLAMA = "OLLAMA"
     HUGGINGFACE = "HUGGINGFACE"
+    NOMIC_CODE = "NOMIC_CODE"
     PINECONE = "PINECONE"
 
 

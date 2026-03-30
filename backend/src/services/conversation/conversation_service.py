@@ -12,11 +12,13 @@ from backend.src.api.schemas import (
     MessageResponse,
     NewConvoRequest,
 )
-from backend.src.api.schemas.api_schemas import (
+from backend.src.api.schemas.convo_api_schemas import (
     ConvoDeleteRequest,
     ConvoListItemResponse,
-    FilePart,
     NewConvoResponse,
+)
+from backend.src.api.schemas.tui_control_schemas import (
+    FilePart,
     TextPart,
     UIMessage,
 )

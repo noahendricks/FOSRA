@@ -8,7 +8,7 @@ from backend.src.services.retrieval.vector_service import VectorService
 from .broker import broker
 
 
-@broker.task
+@broker.task(max_execution_time=120)
 async def store_file_vectors(
     config: VectorStoreConfig,
     embed_config,
