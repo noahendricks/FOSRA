@@ -8,6 +8,7 @@ export function createEventRouter(channel: EventChannel) {
   const ui = createHandlerRegistry()
 
   const unsubscribe = channel.subscribe((event: Event) => {
+    Log.Default.info("[SSE ROUTER] Dispatching event type:", (event as any).type)
     Log.Default.debug("[SSE ROUTER] Dispatching event:", JSON.stringify(event))
     store.dispatch(event)
     ui.dispatch(event)

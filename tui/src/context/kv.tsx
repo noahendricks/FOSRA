@@ -5,6 +5,36 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import path from "path"
 
+function createDebouncedWriter(filePath: string, store: Record<string, any>) {
+  let writeTimer: ReturnType<typeof setTimeout> | null = null
+  let pending = false
+
+  function flush() {
+    if (writeTimer) {
+      clearTimeout(writeTimer)
+      writeTimer = null
+    }
+    if (pending) {
+      Filesystem.writeJson(filePath, store).catch(() => {})
+      pending = false
+    }
+  }
+
+  function scheduleWrite() {
+    pending = true
+    if (writeTimer) clearTimeout(writeTimer)
+    writeTimer = setTimeout(flush, 500)
+  }
+
+  if (typeof process !== "undefined" && process.on) {
+    process.on("SIGTERM", flush)
+    process.on("SIGINT", flush)
+    process.on("exit", flush)
+  }
+
+  return { scheduleWrite, flush }
+}
+
 export const { use: useKV, provider: KVProvider } = createSimpleContext({
   name: "KV",
   init: () => {
@@ -20,6 +50,8 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       .finally(() => {
         setReady(true)
       })
+
+    const writer = createDebouncedWriter(filePath, store)
 
     const result = {
       get ready() {
@@ -44,7 +76,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       },
       set(key: string, value: any) {
         setStore(key, value)
-        Filesystem.writeJson(filePath, store)
+        writer.scheduleWrite()
       },
     }
     return result

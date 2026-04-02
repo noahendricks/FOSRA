@@ -60,6 +60,8 @@ coverage.xml
 .pytest_cache/
 cover/
 
+backend/src/dev
+
 
 # Translations
 #
@@ -228,5 +230,6 @@ __marimo__/
 
 # Node modules
 tui/node_modules/
+/node_modules
 .zed/debug.json
 tui/ARCHITECTURE.md

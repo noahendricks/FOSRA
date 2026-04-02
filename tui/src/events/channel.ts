@@ -59,14 +59,15 @@ async function connectSSE(
     try {
       const subscription = await client.fosra.event.subscribe({}, { signal })
       backoff = 1000
-      Log.Default.debug("[SSE CHANNEL] Connected to SSE stream")
+      Log.Default.info("[SSE CHANNEL] Connected to SSE stream")
       for await (const event of subscription.stream) {
-        Log.Default.debug("[SSE CHANNEL] Received event:", JSON.stringify(event))
+        Log.Default.info("[SSE CHANNEL] raw event:", (event as any).type)
         onEvent(event)
       }
+      Log.Default.warn("[SSE CHANNEL] SSE stream ended without error, reconnecting...")
     } catch (err) {
       if (signal.aborted) return
-      Log.Default.warn(`sse disconnected, reconnecting in ${backoff}ms`, err)
+      Log.Default.warn(`[SSE CHANNEL] SSE disconnected, reconnecting in ${backoff}ms`, err)
       await new Promise((r) => setTimeout(r, backoff))
       backoff = Math.min(backoff * 2, 30_000)
     }
@@ -78,6 +79,7 @@ export function createEventChannel(config: ChannelConfig) {
   let cleanup: (() => void) | undefined
 
   const batcher = createBatcher(16, (events) => {
+    Log.Default.info("[SSE BATCHER] flushing", events.length, "events:", events.map((e: any) => e.type).join(", "))
     batch(() => {
       for (const event of events) {
         for (const listener of listeners) {

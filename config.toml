@@ -1,6 +1,5 @@
 # FOSRA Configuration
 # Secrets (API keys) are loaded from environment variables, not this file.
-
 [models]
 embedding_local = "nomic-ai/nomic-embed-text-v1.5"
 embedding_code_local = "nomic-ai/nomic-embed-text-v1.5"

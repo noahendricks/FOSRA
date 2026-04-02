@@ -6,37 +6,38 @@ import type {
   PermissionRequest,
   QuestionRequest,
 } from "../fosra/sdk-types";
+import type { ReactiveRecord } from "./state";
 import { Accessor, Setter } from "solid-js";
 import { Log } from "@/util/log";
 
 export type EntityKey = "sessions" | "messages" | "parts" | "todos";
 
 export function createStoreActions(state: {
-  sessions: Map<string, Session>;
+  sessions: ReactiveRecord<Session>;
   sessionsArray: Accessor<Session[]>;
   setSessionsArray: Setter<Session[]>;
-  messages: Map<string, Message[]>;
-  parts: Map<string, Part[]>;
-  todos: Map<string, Todo[]>;
-  permission: Map<string, PermissionRequest[]>;
-  question: Map<string, QuestionRequest[]>;
+  messages: ReactiveRecord<Message[]>;
+  parts: ReactiveRecord<Part[]>;
+  todos: ReactiveRecord<Todo[]>;
+  permission: ReactiveRecord<PermissionRequest[]>;
+  question: ReactiveRecord<QuestionRequest[]>;
 }) {
   function syncSessionsArray() {
-    state.setSessionsArray([...state.sessions.values()]);
+    state.setSessionsArray(state.sessions.values());
   }
 
   return {
     get<K extends EntityKey>(collection: K, id: string) {
-      return (state[collection] as Map<string, any>).get(id);
+      return state[collection].get(id);
     },
 
     set<K extends EntityKey>(collection: K, id: string, value: any) {
-      (state[collection] as Map<string, any>).set(id, value);
+      state[collection].set(id, value);
       if (collection === "sessions") syncSessionsArray();
     },
 
     remove<K extends EntityKey>(collection: K, id: string) {
-      (state[collection] as Map<string, any>).delete(id);
+      state[collection].delete(id);
       if (collection === "sessions") syncSessionsArray();
     },
 
@@ -45,10 +46,13 @@ export function createStoreActions(state: {
       const idx = current.findIndex((m) => m.id === message.id);
 
       if (idx >= 0) {
-        current[idx] = message;
-        state.messages.set(sessionId, [...current]);
+        const updated = [...current];
+        updated[idx] = message;
+        state.messages.set(sessionId, updated);
+        Log.Default.info("[STORE] setMessage UPDATE:", message.role, "id:", message.id, "session:", sessionId, "total:", current.length)
       } else {
         state.messages.set(sessionId, [...current, message]);
+        Log.Default.info("[STORE] setMessage INSERT:", message.role, "id:", message.id, "session:", sessionId, "total:", current.length + 1)
       }
     },
 
@@ -64,8 +68,9 @@ export function createStoreActions(state: {
       const current = state.parts.get(messageId) ?? [];
       const idx = current.findIndex((p) => p.id === part.id);
       if (idx >= 0) {
-        current[idx] = part;
-        state.parts.set(messageId, [...current]);
+        const updated = [...current];
+        updated[idx] = part;
+        state.parts.set(messageId, updated);
       } else {
         state.parts.set(messageId, [...current, part]);
       }
@@ -84,8 +89,9 @@ export function createStoreActions(state: {
       const idx = current.findIndex((t) => t.content === todo.content);
 
       if (idx >= 0) {
-        current[idx] = todo;
-        state.todos.set(sessionId, [...current]);
+        const updated = [...current];
+        updated[idx] = todo;
+        state.todos.set(sessionId, updated);
       } else {
         state.todos.set(sessionId, [...current, todo]);
       }
@@ -104,8 +110,9 @@ export function createStoreActions(state: {
       const idx = current.findIndex((r) => r.id === request.id);
 
       if (idx >= 0) {
-        current[idx] = request;
-        state.permission.set(sessionId, [...current]);
+        const updated = [...current];
+        updated[idx] = request;
+        state.permission.set(sessionId, updated);
       } else {
         state.permission.set(sessionId, [...current, request]);
       }
@@ -124,23 +131,46 @@ export function createStoreActions(state: {
     },
 
     applyDelta(
+      sessionId: string,
       messageId: string,
       partId: string,
       delta: string,
       field: string = "text",
     ) {
-      const parts = state.parts.get(messageId);
+      let parts = state.parts.get(messageId);
 
-      if (!parts) return;
+      if (!parts) {
+        parts = [];
+      }
 
-      const idx = parts.findIndex((p) => p.id === partId);
-      if (idx < 0) return;
+      let idx = parts.findIndex((p) => p.id === partId);
+
+      if (idx < 0) {
+        const newPart: Part = {
+          id: partId,
+          sessionID: sessionId,
+          messageID: messageId,
+          type: "text",
+          text: field === "text" ? delta : "",
+          time: { start: Date.now() },
+        };
+        if (field !== "text") {
+          (newPart as any)[field] = delta;
+        }
+        parts = [...parts, newPart];
+        Log.Default.info("[STORE] applyDelta: created new part", { messageId, partId, field, delta });
+        state.parts.set(messageId, parts);
+        return;
+      }
 
       const part = parts[idx] as any;
       const existing = part[field] as string | undefined;
 
-      part[field] = (existing ?? "") + delta;
-      state.parts.set(messageId, [...parts]);
+      const updatedPart = { ...part, [field]: (existing ?? "") + delta };
+      const newParts = [...parts];
+      newParts[idx] = updatedPart;
+      Log.Default.info("[STORE] applyDelta: updated part", { messageId, partId, field, newText: updatedPart[field]?.slice(0, 50) });
+      state.parts.set(messageId, newParts);
     },
   };
 }

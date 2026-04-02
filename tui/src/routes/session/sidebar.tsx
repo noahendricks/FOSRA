@@ -52,15 +52,20 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       ).length,
   );
 
-  const cost = createMemo(() => {
-    const total = messages().reduce(
-      (sum, x) => sum + (x.role === "assistant" ? x.cost : 0),
-      0,
-    );
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(total);
+  const pricing = createMemo(() => {
+    const model = session().metadata?.model;
+    if (!model?.cost) return null;
+    const fmt = (v: number) => {
+      const perMillion = v * 1_000_000;
+      if (perMillion === 0) return "$0";
+      if (perMillion < 0.01) return `$${perMillion.toFixed(4)}`;
+      if (perMillion < 1) return `$${perMillion.toFixed(2)}`;
+      return `$${perMillion.toFixed(2)}`;
+    };
+    return {
+      input: fmt(model.cost.input),
+      output: fmt(model.cost.output),
+    };
   });
 
   const context = createMemo(() => {
@@ -74,12 +79,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       last.tokens.reasoning +
       last.tokens.cache.read +
       last.tokens.cache.write;
-    const model = store.state.providers().find((x) => x.id === last.providerID)
-      ?.models[last.modelID];
+    const modelInfo = session().metadata?.model;
     return {
       tokens: total.toLocaleString(),
-      percentage: model?.limit.context
-        ? Math.round((total / model.limit.context) * 100)
+      percentage: modelInfo?.limit?.context
+        ? Math.round((total / modelInfo.limit.context) * 100)
         : null,
     };
   });
@@ -136,7 +140,20 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>
                 {context()?.percentage ?? 0}% used
               </text>
-              <text fg={theme.textMuted}>{cost()} spent</text>
+              <Show
+                when={pricing()}
+                fallback={
+                  <text fg={theme.textMuted}>Pricing unavailable</text>
+                }
+              >
+                {(p) => (
+                  <>
+                    <text fg={theme.textMuted}>
+                      {p().input}/M in · {p().output}/M out
+                    </text>
+                  </>
+                )}
+              </Show>
             </box>
             <Show when={isCodingMode()}>
               <Show when={mcpEntries().length > 0}>

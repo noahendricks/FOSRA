@@ -10,7 +10,10 @@ export function registerSessionHandlers(
   })
 
   router.on("session.updated", (props: any) => {
-    actions.set("sessions", props.info.id, props.info)
+    const session = actions.get("sessions", props.info.id)
+    if (session) {
+      actions.set("sessions", props.info.id, { ...session, ...props.info })
+    }
   })
 
   router.on("session.deleted", (props: any) => {
@@ -30,6 +33,22 @@ export function registerSessionHandlers(
     const session = actions.get("sessions", id)
     if (session) {
       actions.set("sessions", id, { ...session, error: props.error })
+    }
+  })
+
+  // backend sends "busy" and "idle" as standalone event types
+  // in addition to the "session.status" envelope
+  router.on("busy" as any, (props: any) => {
+    const session = actions.get("sessions", props.sessionID)
+    if (session) {
+      actions.set("sessions", props.sessionID, { ...session, status: props.status ?? { type: "busy" } })
+    }
+  })
+
+  router.on("idle" as any, (props: any) => {
+    const session = actions.get("sessions", props.sessionID)
+    if (session) {
+      actions.set("sessions", props.sessionID, { ...session, status: props.status ?? { type: "idle" } })
     }
   })
 }

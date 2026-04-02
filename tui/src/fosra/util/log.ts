@@ -14,7 +14,7 @@ function ensureLogDir() {
 
 const logger = new Logger({
   name: "forsra-tui",
-  minLevel: 3,
+  minLevel: 2,
   type: "pretty",
   prettyLogTemplate: "{{dateIsoStr}}\t{{logLevelName}}\t{{name}}\t{{msg}}\t{{args}}",
   prettyLogTimeZone: "local",

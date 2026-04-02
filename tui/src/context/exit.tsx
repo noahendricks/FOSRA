@@ -1,58 +1,59 @@
-import { useRenderer } from "@opentui/solid"
-import { createSimpleContext } from "./helper"
-import { FormatError, FormatUnknownError } from "@/cli/error"
-import { win32FlushInputBuffer } from "../win32"
+import { useRenderer } from "@opentui/solid";
+import { createSimpleContext } from "./helper";
+import { FormatError, FormatUnknownError } from "@/cli/error";
+import { win32FlushInputBuffer } from "../win32";
 type Exit = ((reason?: unknown) => Promise<void>) & {
   message: {
-    set: (value?: string) => () => void
-    clear: () => void
-    get: () => string | undefined
-  }
-}
+    set: (value?: string) => () => void;
+    clear: () => void;
+    get: () => string | undefined;
+  };
+};
 
 export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   name: "Exit",
   init: (input: { onExit?: () => Promise<void> }) => {
-    const renderer = useRenderer()
-    let message: string | undefined
-    let task: Promise<void> | undefined
+    const renderer = useRenderer();
+    let message: string | undefined;
+    let task: Promise<void> | undefined;
     const store = {
       set: (value?: string) => {
-        const prev = message
-        message = value
+        const prev = message;
+        message = value;
         return () => {
-          message = prev
-        }
+          message = prev;
+        };
       },
       clear: () => {
-        message = undefined
+        message = undefined;
       },
       get: () => message,
-    }
+    };
     const exit: Exit = Object.assign(
       (reason?: unknown) => {
-        if (task) return task
+        if (task) return task;
         task = (async () => {
-          // Reset window title before destroying renderer
-          renderer.setTerminalTitle("")
-          renderer.destroy()
-          win32FlushInputBuffer()
+          // reset window title before destroying renderer
+          renderer.setTerminalTitle("");
+          renderer.destroy();
+          win32FlushInputBuffer();
           if (reason) {
-            const formatted = FormatError(reason as Error) ?? FormatUnknownError(reason)
+            const formatted =
+              FormatError(reason as Error) ?? FormatUnknownError(reason);
             if (formatted) {
-              process.stderr.write(formatted + "\n")
+              process.stderr.write(formatted + "\n");
             }
           }
-          const text = store.get()
-          if (text) process.stdout.write(text + "\n")
-          await input.onExit?.()
-        })()
-        return task
+          const text = store.get();
+          if (text) process.stdout.write(text + "\n");
+          await input.onExit?.();
+        })();
+        return task;
       },
       {
         message: store,
       },
-    )
-    return exit
+    );
+    return exit;
   },
-})
+});

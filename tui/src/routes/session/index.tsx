@@ -11,15 +11,15 @@ import {
   Show,
   Switch,
   useContext,
-} from "solid-js"
-import { Dynamic } from "solid-js/web"
-import { Log } from "@/util/log"
-import path from "path"
-import { useRoute, useRouteData } from "@tui/context/route"
-import { useStore } from "@tui/context/store"
-import { SplitBorder } from "@tui/component/border"
-import { Spinner } from "@tui/component/spinner"
-import { selectedForeground, useTheme } from "@tui/context/theme"
+} from "solid-js";
+import { Dynamic } from "solid-js/web";
+import { Log } from "@/util/log";
+import path from "path";
+import { useRoute, useRouteData } from "@tui/context/route";
+import { useStore } from "@tui/context/store";
+import { SplitBorder } from "@tui/component/border";
+import { Spinner } from "@tui/component/spinner";
+import { selectedForeground, useTheme } from "@tui/context/theme";
 import {
   BoxRenderable,
   ScrollBoxRenderable,
@@ -28,210 +28,256 @@ import {
   type ScrollAcceleration,
   TextAttributes,
   RGBA,
-} from "@opentui/core"
-import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@fosra/api/v2"
-import { useLocal } from "@tui/context/local"
-import { Locale } from "@/util/locale"
-import type { Tool } from "@/tool/tool"
-import type { ReadTool } from "@/tool/read"
-import type { WriteTool } from "@/tool/write"
-import { BashTool } from "@/tool/bash"
-import type { GlobTool } from "@/tool/glob"
-import { TodoWriteTool } from "@/tool/todo"
-import type { GrepTool } from "@/tool/grep"
-import type { ListTool } from "@/tool/ls"
-import type { EditTool } from "@/tool/edit"
-import type { ApplyPatchTool } from "@/tool/apply_patch"
-import type { WebFetchTool } from "@/tool/webfetch"
-import type { TaskTool } from "@/tool/task"
-import type { QuestionTool } from "@/tool/question"
-import type { SkillTool } from "@/tool/skill"
-import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { useApi } from "@tui/context/api"
-import { useCommandDialog } from "@tui/component/dialog-command"
-import type { DialogContext } from "@tui/ui/dialog"
-import { useKeybind } from "@tui/context/keybind"
-import { Header } from "./header"
-import { parsePatch } from "diff"
-import { useDialog } from "../../ui/dialog"
-import { TodoItem } from "../../component/todo-item"
-import { DialogMessage } from "./dialog-message"
-import type { PromptInfo } from "../../component/prompt/history"
-import { DialogConfirm } from "@tui/ui/dialog-confirm"
-import { DialogTimeline } from "./dialog-timeline"
-import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
-import { DialogSessionRename } from "../../component/dialog-session-rename"
-import { Sidebar } from "./sidebar"
-import { Flag } from "@/flag/flag"
-import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import parsers from "../../parsers-config"
-import { Clipboard } from "../../util/clipboard"
-import { Toast, useToast } from "../../ui/toast"
-import { useKV } from "../../context/kv.tsx"
-import { Editor } from "../../util/editor"
-import stripAnsi from "strip-ansi"
-import { Footer } from "./footer.tsx"
-import { usePromptRef } from "../../context/prompt"
-import { useExit } from "../../context/exit"
-import { Filesystem } from "@/util/filesystem"
-import { Global } from "@/global"
-import { PermissionPrompt } from "./permission"
-import { QuestionPrompt } from "./question"
-import { DialogExportOptions } from "../../ui/dialog-export-options"
-import { formatTranscript } from "../../util/transcript"
-import { UI } from "@/cli/ui.ts"
-import { useTuiConfig } from "../../context/tui-config"
+} from "@opentui/core";
+import { Prompt, type PromptRef } from "@tui/component/prompt";
+import type {
+  AssistantMessage,
+  Part,
+  ToolPart,
+  UserMessage,
+  TextPart,
+  ReasoningPart,
+} from "@fosra/api/v2";
+import { useLocal } from "@tui/context/local";
+import { Locale } from "@/util/locale";
+import type { Tool } from "@/tool/tool";
+import type { ReadTool } from "@/tool/read";
+import type { WriteTool } from "@/tool/write";
+import { BashTool } from "@/tool/bash";
+import type { GlobTool } from "@/tool/glob";
+import { TodoWriteTool } from "@/tool/todo";
+import type { GrepTool } from "@/tool/grep";
+import type { ListTool } from "@/tool/ls";
+import type { EditTool } from "@/tool/edit";
+import type { ApplyPatchTool } from "@/tool/apply_patch";
+import type { WebFetchTool } from "@/tool/webfetch";
+import type { TaskTool } from "@/tool/task";
+import type { QuestionTool } from "@/tool/question";
+import type { SkillTool } from "@/tool/skill";
+import {
+  useKeyboard,
+  useRenderer,
+  useTerminalDimensions,
+  type JSX,
+} from "@opentui/solid";
+import { useApi } from "@tui/context/api";
+import { useCommandDialog } from "@tui/component/dialog-command";
+import type { DialogContext } from "@tui/ui/dialog";
+import { useKeybind } from "@tui/context/keybind";
+import { Header } from "./header";
+import { parsePatch } from "diff";
+import { useDialog } from "../../ui/dialog";
+import { TodoItem } from "../../component/todo-item";
+import { DialogMessage } from "./dialog-message";
+import type { PromptInfo } from "../../component/prompt/history";
+import { DialogConfirm } from "@tui/ui/dialog-confirm";
+import { DialogTimeline } from "./dialog-timeline";
+import { DialogForkFromTimeline } from "./dialog-fork-from-timeline";
+import { DialogSessionRename } from "../../component/dialog-session-rename";
+import { Sidebar } from "./sidebar";
+import { Flag } from "@/flag/flag";
+import { LANGUAGE_EXTENSIONS } from "@/lsp/language";
+import parsers from "../../parsers-config";
+import { Clipboard } from "../../util/clipboard";
+import { Toast, useToast } from "../../ui/toast";
+import { useKV } from "../../context/kv.tsx";
+import { Editor } from "../../util/editor";
+import stripAnsi from "strip-ansi";
+import { Footer } from "./footer.tsx";
+import { usePromptRef } from "../../context/prompt";
+import { useExit } from "../../context/exit";
+import { Filesystem } from "@/util/filesystem";
+import { Global } from "@/global";
+import { PermissionPrompt } from "./permission";
+import { QuestionPrompt } from "./question";
+import { DialogExportOptions } from "../../ui/dialog-export-options";
+import { formatTranscript } from "../../util/transcript";
+import { UI } from "@/cli/ui.ts";
+import { useTuiConfig } from "../../context/tui-config";
 
-addDefaultParsers(parsers.parsers)
+addDefaultParsers(parsers.parsers);
 
 class CustomSpeedScroll implements ScrollAcceleration {
   constructor(private speed: number) {}
 
   tick(_now?: number): number {
-    return this.speed
+    return this.speed;
   }
 
   reset(): void {}
 }
 
 const context = createContext<{
-  width: number
-  sessionID: string
-  conceal: () => boolean
-  showThinking: () => boolean
-  showTimestamps: () => boolean
-  showDetails: () => boolean
-  showGenericToolOutput: () => boolean
-  diffWrapMode: () => "word" | "none"
-  tui: ReturnType<typeof useTuiConfig>
-}>()
+  width: number;
+  sessionID: string;
+  conceal: () => boolean;
+  showThinking: () => boolean;
+  showTimestamps: () => boolean;
+  showDetails: () => boolean;
+  showGenericToolOutput: () => boolean;
+  diffWrapMode: () => "word" | "none";
+  tui: ReturnType<typeof useTuiConfig>;
+}>();
 
 function use() {
-  const ctx = useContext(context)
-  if (!ctx) throw new Error("useContext must be used within a Session component")
-  return ctx
+  const ctx = useContext(context);
+  if (!ctx)
+    throw new Error("useContext must be used within a Session component");
+  return ctx;
 }
 
 export function Session() {
-  const route = useRouteData("session")
-  const { navigate } = useRoute()
-  const store = useStore()
-  const tuiConfig = useTuiConfig()
-  const kv = useKV()
-  const { theme } = useTheme()
-  const promptRef = usePromptRef()
-  const session = createMemo(() => store.state.sessions.get(route.sessionID))
+  const route = useRouteData("session");
+  const { navigate } = useRoute();
+  const store = useStore();
+  const tuiConfig = useTuiConfig();
+  const kv = useKV();
+  const { theme } = useTheme();
+  const promptRef = usePromptRef();
+  const session = createMemo(() => store.state.sessions.get(route.sessionID));
   const children = createMemo(() => {
-    const parentID = session()?.parentID ?? session()?.id
-    return store.state.sessionsArray()
+    const parentID = session()?.parentID ?? session()?.id;
+    return store.state
+      .sessionsArray()
       .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  })
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  });
   const messages = createMemo(() => {
-    const msgs = (store.state.messages.get(route.sessionID) ?? []).toSorted((a, b) => {
-      const dt = a.time.created - b.time.created
-      if (dt !== 0) return dt
-      // user before assistant when timestamps are equal
-      if (a.role === "user" && b.role !== "user") return -1
-      if (a.role !== "user" && b.role === "user") return 1
-      return 0
-    })
-    return msgs
-  })
+    const msgs = (store.state.messages.get(route.sessionID) ?? []).toSorted(
+      (a, b) => {
+        const dt = a.time.created - b.time.created;
+        if (dt !== 0) return dt;
+        // user before assistant when timestamps are equal
+        if (a.role === "user" && b.role !== "user") return -1;
+        if (a.role !== "user" && b.role === "user") return 1;
+        return 0;
+      },
+    );
+    Log.Default.info("[SESSION] messages memo re-evaluated:", msgs.length, "messages for session:", route.sessionID)
+    return msgs;
+  });
   const permissions = createMemo(() => {
-    if (session()?.parentID) return []
-    return []
-  })
+    if (session()?.parentID) return [];
+    return store.state.permissions.get(route.sessionID) ?? [];
+  });
   const questions = createMemo(() => {
-    if (session()?.parentID) return []
-    return []
-  })
+    if (session()?.parentID) return [];
+    return store.state.questions.get(route.sessionID) ?? [];
+  });
 
   const pending = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
-  })
+    return messages().findLast(
+      (x) => x.role === "assistant" && !x.time.completed,
+    )?.id;
+  });
 
   const lastAssistant = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant")
-  })
+    return messages().findLast((x) => x.role === "assistant");
+  });
 
-  const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
-  const [sidebarOpen, setSidebarOpen] = createSignal(false as any)
-  const [conceal, setConceal] = createSignal(true)
-  const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
-  const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
-  const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
-  const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
-  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", true)
-  const [showHeader, setShowHeader] = kv.signal("header_visible", true)
-  const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
-  const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
-  const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const dimensions = useTerminalDimensions();
+  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto");
+  const [sidebarOpen, setSidebarOpen] = createSignal(false as any);
+  const [conceal, setConceal] = createSignal(true);
+  const [showThinking, setShowThinking] = kv.signal(
+    "thinking_visibility",
+    true,
+  );
+  const [timestamps, setTimestamps] = kv.signal<"hide" | "show">(
+    "timestamps",
+    "hide",
+  );
+  const [showDetails, setShowDetails] = kv.signal(
+    "tool_details_visibility",
+    true,
+  );
+  const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal(
+    "assistant_metadata_visibility",
+    true,
+  );
+  const [showScrollbar, setShowScrollbar] = kv.signal(
+    "scrollbar_visible",
+    true,
+  );
+  const [showHeader, setShowHeader] = kv.signal("header_visible", true);
+  const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word");
+  const [animationsEnabled, setAnimationsEnabled] = kv.signal(
+    "animations_enabled",
+    true,
+  );
+  const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal(
+    "generic_tool_output_visibility",
+    false,
+  );
 
-  const wide = createMemo(() => dimensions().width > 120)
+  const wide = createMemo(() => dimensions().width > 120);
   const sidebarVisible = createMemo(() => {
-    if (session()?.parentID) return false
-    if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
-    return false
-  })
-  const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+    if (session()?.parentID) return false;
+    if (sidebarOpen()) return true;
+    if (sidebar() === "auto" && wide()) return true;
+    return false;
+  });
+  const showTimestamps = createMemo(() => timestamps() === "show");
+  const contentWidth = createMemo(
+    () => dimensions().width - (sidebarVisible() ? 42 : 0) - 4,
+  );
 
   const scrollAcceleration = createMemo(() => {
-    const tui = tuiConfig
-    if (typeof tui?.scroll_acceleration === "object" && tui?.scroll_acceleration?.enabled) {
-      return new MacOSScrollAccel()
+    const tui = tuiConfig;
+    if (
+      typeof tui?.scroll_acceleration === "object" &&
+      tui?.scroll_acceleration?.enabled
+    ) {
+      return new MacOSScrollAccel();
     }
     if (tui?.scroll_speed) {
-      return new CustomSpeedScroll(tui.scroll_speed)
+      return new CustomSpeedScroll(tui.scroll_speed);
     }
 
-    return new CustomSpeedScroll(3)
-  })
+    return new CustomSpeedScroll(3);
+  });
 
   createEffect(async () => {
     await store.session
       .load(route.sessionID)
       .then(() => {
-        if (scroll) scroll.scrollBy(100_000)
+        if (scroll) scroll.scrollBy(100_000);
       })
       .catch((e) => {
-        console.error(e)
+        console.error(e);
         toast.show({
           message: `Session not found: ${route.sessionID}`,
           variant: "error",
-        })
-        return navigate({ type: "home" })
-      })
-  })
+        });
+        return navigate({ type: "home" });
+      });
+  });
 
-  const toast = useToast()
-  const api = useApi()
+  const toast = useToast();
+  const api = useApi();
 
   // Handle initial prompt from fork
   createEffect(() => {
     if (route.initialPrompt && prompt) {
-      prompt.set(route.initialPrompt)
+      prompt.set(route.initialPrompt);
     }
-  })
+  });
 
-  let scroll: ScrollBoxRenderable
-  let prompt: PromptRef
-  const keybind = useKeybind()
-  const dialog = useDialog()
-  const renderer = useRenderer()
+  let scroll: ScrollBoxRenderable;
+  let prompt: PromptRef;
+  const keybind = useKeybind();
+  const dialog = useDialog();
+  const renderer = useRenderer();
 
   // Allow exit when in child session (prompt is hidden)
-  const exit = useExit()
+  const exit = useExit();
 
   createEffect(() => {
-    const title = Locale.truncate(session()?.title ?? "", 50)
-    const pad = (text: string) => text.padEnd(10, " ")
-    const weak = (text: string) => UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL
-    const logo = UI.logo("  ").split(/\r?\n/)
+    const title = Locale.truncate(session()?.title ?? "", 50);
+    const pad = (text: string) => text.padEnd(10, " ");
+    const weak = (text: string) =>
+      UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL;
+    const logo = UI.logo("  ").split(/\r?\n/);
     return exit.message.set(
       [
         `${logo[0] ?? ""}`,
@@ -243,106 +289,117 @@ export function Session() {
         `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
-    )
-  })
+    );
+  });
 
   useKeyboard((evt) => {
-    if (!session()?.parentID) return
+    if (!session()?.parentID) return;
     if (keybind.match("app_exit", evt)) {
-      exit()
+      exit();
     }
-  })
+  });
 
   // Helper: Find next visible message boundary in direction
-  const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
-    const children = scroll.getChildren()
-    const messagesList = messages()
-    const scrollTop = scroll.y
+  const findNextVisibleMessage = (
+    direction: "next" | "prev",
+  ): string | null => {
+    const children = scroll.getChildren();
+    const messagesList = messages();
+    const scrollTop = scroll.y;
 
     // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
       .filter((c) => {
-        if (!c.id) return false
-        const message = messagesList.find((m) => m.id === c.id)
-        if (!message) return false
+        if (!c.id) return false;
+        const message = messagesList.find((m) => m.id === c.id);
+        if (!message) return false;
 
         // Check if message has valid non-synthetic, non-ignored text parts
-        const parts = store.state.parts.get(message.id) ?? []
-        if (!parts || !Array.isArray(parts)) return false
+        const parts = store.state.parts.get(message.id) ?? [];
+        if (!parts || !Array.isArray(parts)) return false;
 
-        return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+        return parts.some(
+          (part) =>
+            part && part.type === "text" && !part.synthetic && !part.ignored,
+        );
       })
-      .sort((a, b) => a.y - b.y)
+      .sort((a, b) => a.y - b.y);
 
-    if (visibleMessages.length === 0) return null
+    if (visibleMessages.length === 0) return null;
 
     if (direction === "next") {
       // Find first message below current position
-      return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
+      return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null;
     }
     // Find last message above current position
-    return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
-  }
+    return (
+      [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ??
+      null
+    );
+  };
 
   // Helper: Scroll to message in direction or fallback to page scroll
-  const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
-    const targetID = findNextVisibleMessage(direction)
+  const scrollToMessage = (
+    direction: "next" | "prev",
+    dialog: ReturnType<typeof useDialog>,
+  ) => {
+    const targetID = findNextVisibleMessage(direction);
 
     if (!targetID) {
-      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
-      dialog.clear()
-      return
+      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height);
+      dialog.clear();
+      return;
     }
 
-    const child = scroll.getChildren().find((c) => c.id === targetID)
-    if (child) scroll.scrollBy(child.y - scroll.y - 1)
-    dialog.clear()
-  }
+    const child = scroll.getChildren().find((c) => c.id === targetID);
+    if (child) scroll.scrollBy(child.y - scroll.y - 1);
+    dialog.clear();
+  };
 
   function toBottom() {
     setTimeout(() => {
-      if (!scroll || scroll.isDestroyed) return
-      scroll.scrollTo(scroll.scrollHeight)
-    }, 50)
+      if (!scroll || scroll.isDestroyed) return;
+      scroll.scrollTo(scroll.scrollHeight);
+    }, 50);
   }
 
-  const local = useLocal()
+  const local = useLocal();
 
   function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
+    if (children().length === 1) return;
+    const next = children().find((x) => !!x.parentID);
     if (next) {
       navigate({
         type: "session",
         sessionID: next.id,
-      })
+      });
     }
   }
 
   function moveChild(direction: number) {
-    if (children().length === 1) return
+    if (children().length === 1) return;
 
-    const sessions = children().filter((x) => !!x.parentID)
-    let next = sessions.findIndex((x) => x.id === session()?.id) + direction
+    const sessions = children().filter((x) => !!x.parentID);
+    let next = sessions.findIndex((x) => x.id === session()?.id) + direction;
 
-    if (next >= sessions.length) next = 0
-    if (next < 0) next = sessions.length - 1
+    if (next >= sessions.length) next = 0;
+    if (next < 0) next = sessions.length - 1;
     if (sessions[next]) {
       navigate({
         type: "session",
         sessionID: sessions[next].id,
-      })
+      });
     }
   }
 
   function childSessionHandler(func: (dialog: DialogContext) => void) {
     return (dialog: DialogContext) => {
-      if (!session()?.parentID || dialog.stack.length > 0) return
-      func(dialog)
-    }
+      if (!session()?.parentID || dialog.stack.length > 0) return;
+      func(dialog);
+    };
   }
 
-  const command = useCommandDialog()
+  const command = useCommandDialog();
   command.register(() => [
     {
       title: session()?.share?.url ? "Copy share link" : "Share session",
@@ -357,13 +414,23 @@ export function Session() {
       onSelect: async (dialog) => {
         const copy = (url: string) =>
           Clipboard.copy(url)
-            .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-            .catch(() => toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }))
-        const url = session()?.share?.url
+            .then(() =>
+              toast.show({
+                message: "Share URL copied to clipboard!",
+                variant: "success",
+              }),
+            )
+            .catch(() =>
+              toast.show({
+                message: "Failed to copy URL to clipboard",
+                variant: "error",
+              }),
+            );
+        const url = session()?.share?.url;
         if (url) {
-          await copy(url)
-          dialog.clear()
-          return
+          await copy(url);
+          dialog.clear();
+          return;
         }
         await api.fosra.session
           .share({
@@ -372,11 +439,14 @@ export function Session() {
           .then((res) => copy(res.data!.url))
           .catch((error) => {
             toast.show({
-              message: error instanceof Error ? error.message : "Failed to share session",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to share session",
               variant: "error",
-            })
-          })
-        dialog.clear()
+            });
+          });
+        dialog.clear();
       },
     },
     {
@@ -388,7 +458,7 @@ export function Session() {
         name: "rename",
       },
       onSelect: (dialog) => {
-        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
+        dialog.replace(() => <DialogSessionRename session={route.sessionID} />);
       },
     },
     {
@@ -404,14 +474,14 @@ export function Session() {
           <DialogTimeline
             onMove={(messageID) => {
               const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+                return child.id === messageID;
+              });
+              if (child) scroll.scrollBy(child.y - scroll.y - 1);
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt.set(promptInfo)}
           />
-        ))
+        ));
       },
     },
     {
@@ -427,13 +497,13 @@ export function Session() {
           <DialogForkFromTimeline
             onMove={(messageID) => {
               const child = scroll.getChildren().find((child) => {
-                return child.id === messageID
-              })
-              if (child) scroll.scrollBy(child.y - scroll.y - 1)
+                return child.id === messageID;
+              });
+              if (child) scroll.scrollBy(child.y - scroll.y - 1);
             }}
             sessionID={route.sessionID}
           />
-        ))
+        ));
       },
     },
     {
@@ -446,21 +516,21 @@ export function Session() {
         aliases: ["summarize"],
       },
       onSelect: (dialog) => {
-        const selectedModel = local.model.current()
+        const selectedModel = local.model.current();
         if (!selectedModel) {
           toast.show({
             variant: "warning",
             message: "Connect a provider to summarize this session",
             duration: 3000,
-          })
-          return
+          });
+          return;
         }
         api.fosra.session.summarize({
           sessionID: route.sessionID,
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -477,14 +547,22 @@ export function Session() {
           .unshare({
             sessionID: route.sessionID,
           })
-          .then(() => toast.show({ message: "Session unshared successfully", variant: "success" }))
+          .then(() =>
+            toast.show({
+              message: "Session unshared successfully",
+              variant: "success",
+            }),
+          )
           .catch((error) => {
             toast.show({
-              message: error instanceof Error ? error.message : "Failed to unshare session",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to unshare session",
               variant: "error",
-            })
-          })
-        dialog.clear()
+            });
+          });
+        dialog.clear();
       },
     },
     {
@@ -496,36 +574,41 @@ export function Session() {
         name: "undo",
       },
       onSelect: async (dialog) => {
-        const sessionStatus = store.session.status(route.sessionID)
-        if (sessionStatus !== "idle") await api.fosra.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const revert = session()?.revert?.messageID
-        const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
-        if (!message) return
+        const sessionStatus = store.session.status(route.sessionID);
+        if (sessionStatus !== "idle")
+          await api.fosra.session
+            .abort({ sessionID: route.sessionID })
+            .catch(() => {});
+        const revert = session()?.revert?.messageID;
+        const message = messages().findLast(
+          (x) => (!revert || x.id < revert) && x.role === "user",
+        );
+        if (!message) return;
         api.fosra.session
           .revert({
             sessionID: route.sessionID,
             messageID: message.id,
           })
           .then(() => {
-            toBottom()
+            toBottom();
           })
           .catch((e: unknown) => {
-            console.error("revert error", e)
-          })
-        const parts = store.state.parts.get(message.id) ?? []
+            console.error("revert error", e);
+          });
+        const parts = store.state.parts.get(message.id) ?? [];
         prompt.set(
           parts.reduce(
             (agg, part) => {
               if (part.type === "text") {
-                if (!part.synthetic) agg.input += part.text
+                if (!part.synthetic) agg.input += part.text;
               }
-              if (part.type === "file") agg.parts.push(part)
-              return agg
+              if (part.type === "file") agg.parts.push(part);
+              return agg;
             },
             { input: "", parts: [] as PromptInfo["parts"] },
           ),
-        )
-        dialog.clear()
+        );
+        dialog.clear();
       },
     },
     {
@@ -538,21 +621,23 @@ export function Session() {
         name: "redo",
       },
       onSelect: (dialog) => {
-        dialog.clear()
-        const messageID = session()?.revert?.messageID
-        if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
+        dialog.clear();
+        const messageID = session()?.revert?.messageID;
+        if (!messageID) return;
+        const message = messages().find(
+          (x) => x.role === "user" && x.id > messageID,
+        );
         if (!message) {
           api.fosra.session.unrevert({
             sessionID: route.sessionID,
-          })
-          prompt.set({ input: "", parts: [] })
-          return
+          });
+          prompt.set({ input: "", parts: [] });
+          return;
         }
         api.fosra.session.revert({
           sessionID: route.sessionID,
           messageID: message.id,
-        })
+        });
       },
     },
     {
@@ -562,11 +647,11 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         batch(() => {
-          const isVisible = sidebarVisible()
-          setSidebar(() => (isVisible ? "hide" : "auto") as any)
-          setSidebarOpen(!isVisible)
-        })
-        dialog.clear()
+          const isVisible = sidebarVisible();
+          setSidebar(() => (isVisible ? "hide" : "auto") as any);
+          setSidebarOpen(!isVisible);
+        });
+        dialog.clear();
       },
     },
     {
@@ -575,8 +660,8 @@ export function Session() {
       keybind: "messages_toggle_conceal" as any,
       category: "Session",
       onSelect: (dialog) => {
-        setConceal((prev) => !prev)
-        dialog.clear()
+        setConceal((prev) => !prev);
+        dialog.clear();
       },
     },
     {
@@ -588,8 +673,9 @@ export function Session() {
         aliases: ["toggle-timestamps"],
       },
       onSelect: (dialog) => {
-        setTimestamps(((prev: any) => (prev === "show" ? "hide" : "show")) as any)
-        dialog.clear()
+        setTimestamps(((prev: any) =>
+          prev === "show" ? "hide" : "show") as any);
+        dialog.clear();
       },
     },
     {
@@ -602,8 +688,8 @@ export function Session() {
         aliases: ["toggle-thinking"],
       },
       onSelect: (dialog) => {
-        setShowThinking(((prev: any) => !prev) as any)
-        dialog.clear()
+        setShowThinking(((prev: any) => !prev) as any);
+        dialog.clear();
       },
     },
     {
@@ -612,8 +698,8 @@ export function Session() {
       keybind: "tool_details",
       category: "Session",
       onSelect: (dialog) => {
-        setShowDetails(((prev: any) => !prev) as any)
-        dialog.clear()
+        setShowDetails(((prev: any) => !prev) as any);
+        dialog.clear();
       },
     },
     {
@@ -622,8 +708,8 @@ export function Session() {
       keybind: "scrollbar_toggle",
       category: "Session",
       onSelect: (dialog) => {
-        setShowScrollbar(((prev: any) => !prev) as any)
-        dialog.clear()
+        setShowScrollbar(((prev: any) => !prev) as any);
+        dialog.clear();
       },
     },
     {
@@ -631,17 +717,19 @@ export function Session() {
       value: "session.toggle.header",
       category: "Session",
       onSelect: (dialog) => {
-        setShowHeader(((prev: any) => !prev) as any)
-        dialog.clear()
+        setShowHeader(((prev: any) => !prev) as any);
+        dialog.clear();
       },
     },
     {
-      title: showGenericToolOutput() ? "Hide generic tool output" : "Show generic tool output",
+      title: showGenericToolOutput()
+        ? "Hide generic tool output"
+        : "Show generic tool output",
       value: "session.toggle.generic_tool_output",
       category: "Session",
       onSelect: (dialog) => {
-        setShowGenericToolOutput(((prev: any) => !prev) as any)
-        dialog.clear()
+        setShowGenericToolOutput(((prev: any) => !prev) as any);
+        dialog.clear();
       },
     },
     {
@@ -651,8 +739,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(-scroll.height / 2)
-        dialog.clear()
+        scroll.scrollBy(-scroll.height / 2);
+        dialog.clear();
       },
     },
     {
@@ -662,8 +750,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(scroll.height / 2)
-        dialog.clear()
+        scroll.scrollBy(scroll.height / 2);
+        dialog.clear();
       },
     },
     {
@@ -673,8 +761,8 @@ export function Session() {
       category: "Session",
       disabled: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(-1)
-        dialog.clear()
+        scroll.scrollBy(-1);
+        dialog.clear();
       },
     },
     {
@@ -684,8 +772,8 @@ export function Session() {
       category: "Session",
       disabled: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(1)
-        dialog.clear()
+        scroll.scrollBy(1);
+        dialog.clear();
       },
     },
     {
@@ -695,8 +783,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(-scroll.height / 4)
-        dialog.clear()
+        scroll.scrollBy(-scroll.height / 4);
+        dialog.clear();
       },
     },
     {
@@ -706,8 +794,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollBy(scroll.height / 4)
-        dialog.clear()
+        scroll.scrollBy(scroll.height / 4);
+        dialog.clear();
       },
     },
     {
@@ -717,8 +805,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollTo(0)
-        dialog.clear()
+        scroll.scrollTo(0);
+        dialog.clear();
       },
     },
     {
@@ -728,8 +816,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        scroll.scrollTo(scroll.scrollHeight)
-        dialog.clear()
+        scroll.scrollTo(scroll.scrollHeight);
+        dialog.clear();
       },
     },
     {
@@ -739,27 +827,28 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: () => {
-        const messages = store.state.messages.get(route.sessionID) ?? []
-        if (!messages || !messages.length) return
+        const messages = store.state.messages.get(route.sessionID) ?? [];
+        if (!messages || !messages.length) return;
 
         // Find the most recent user message with non-ignored, non-synthetic text parts
         for (let i = messages.length - 1; i >= 0; i--) {
-          const message = messages[i]
-          if (!message || message.role !== "user") continue
+          const message = messages[i];
+          if (!message || message.role !== "user") continue;
 
-        const parts = store.state.parts.get(message.id) ?? []
-          if (!parts || !Array.isArray(parts)) continue
+          const parts = store.state.parts.get(message.id) ?? [];
+          if (!parts || !Array.isArray(parts)) continue;
 
           const hasValidTextPart = parts.some(
-            (part) => part && part.type === "text" && !part.synthetic && !part.ignored,
-          )
+            (part) =>
+              part && part.type === "text" && !part.synthetic && !part.ignored,
+          );
 
           if (hasValidTextPart) {
             const child = scroll.getChildren().find((child) => {
-              return child.id === message.id
-            })
-            if (child) scroll.scrollBy(child.y - scroll.y - 1)
-            break
+              return child.id === message.id;
+            });
+            if (child) scroll.scrollBy(child.y - scroll.y - 1);
+            break;
           }
         }
       },
@@ -786,41 +875,57 @@ export function Session() {
       keybind: "messages_copy",
       category: "Session",
       onSelect: (dialog) => {
-        const revertID = session()?.revert?.messageID
+        const revertID = session()?.revert?.messageID;
         const lastAssistantMessage = messages().findLast(
           (msg) => msg.role === "assistant" && (!revertID || msg.id < revertID),
-        )
+        );
         if (!lastAssistantMessage) {
-          toast.show({ message: "No assistant messages found", variant: "error" })
-          dialog.clear()
-          return
+          toast.show({
+            message: "No assistant messages found",
+            variant: "error",
+          });
+          dialog.clear();
+          return;
         }
 
-        const parts = store.state.parts.get(lastAssistantMessage.id) ?? []
-        const textParts = parts.filter((part) => part.type === "text")
+        const parts = store.state.parts.get(lastAssistantMessage.id) ?? [];
+        const textParts = parts.filter((part) => part.type === "text");
         if (textParts.length === 0) {
-          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
-          dialog.clear()
-          return
+          toast.show({
+            message: "No text parts found in last assistant message",
+            variant: "error",
+          });
+          dialog.clear();
+          return;
         }
 
         const text = textParts
           .map((part) => part.text)
           .join("\n")
-          .trim()
+          .trim();
         if (!text) {
           toast.show({
             message: "No text content found in last assistant message",
             variant: "error",
-          })
-          dialog.clear()
-          return
+          });
+          dialog.clear();
+          return;
         }
 
         Clipboard.copy(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
-        dialog.clear()
+          .then(() =>
+            toast.show({
+              message: "Message copied to clipboard!",
+              variant: "success",
+            }),
+          )
+          .catch(() =>
+            toast.show({
+              message: "Failed to copy to clipboard",
+              variant: "error",
+            }),
+          );
+        dialog.clear();
       },
     },
     {
@@ -832,24 +937,33 @@ export function Session() {
       },
       onSelect: async (dialog) => {
         try {
-          const sessionData = session()
-          if (!sessionData) return
-          const sessionMessages = messages()
+          const sessionData = session();
+          if (!sessionData) return;
+          const sessionMessages = messages();
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: store.state.parts.get(msg.id) ?? [] })),
+            sessionMessages.map((msg) => ({
+              info: msg,
+              parts: store.state.parts.get(msg.id) ?? [],
+            })),
             {
               thinking: showThinking(),
               toolDetails: showDetails(),
               assistantMetadata: showAssistantMetadata(),
             },
-          )
-          await Clipboard.copy(transcript)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          );
+          await Clipboard.copy(transcript);
+          toast.show({
+            message: "Session transcript copied to clipboard!",
+            variant: "success",
+          });
         } catch (error) {
-          toast.show({ message: "Failed to copy session transcript", variant: "error" })
+          toast.show({
+            message: "Failed to copy session transcript",
+            variant: "error",
+          });
         }
-        dialog.clear()
+        dialog.clear();
       },
     },
     {
@@ -862,11 +976,11 @@ export function Session() {
       },
       onSelect: async (dialog) => {
         try {
-          const sessionData = session()
-          if (!sessionData) return
-          const sessionMessages = messages()
+          const sessionData = session();
+          if (!sessionData) return;
+          const sessionMessages = messages();
 
-          const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
+          const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`;
 
           const options = await DialogExportOptions.show(
             dialog,
@@ -875,42 +989,48 @@ export function Session() {
             showDetails(),
             showAssistantMetadata(),
             false,
-          )
+          );
 
-          if (options === null) return
+          if (options === null) return;
 
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: store.state.parts.get(msg.id) ?? [] })),
+            sessionMessages.map((msg) => ({
+              info: msg,
+              parts: store.state.parts.get(msg.id) ?? [],
+            })),
             {
               thinking: options.thinking,
               toolDetails: options.toolDetails,
               assistantMetadata: options.assistantMetadata,
             },
-          )
+          );
 
           if (options.openWithoutSaving) {
             // Just open in editor without saving
-            await Editor.open({ value: transcript, renderer })
+            await Editor.open({ value: transcript, renderer });
           } else {
-            const exportDir = process.cwd()
-            const filename = options.filename.trim()
-            const filepath = path.join(exportDir, filename)
+            const exportDir = process.cwd();
+            const filename = options.filename.trim();
+            const filepath = path.join(exportDir, filename);
 
-            await Filesystem.write(filepath, transcript)
+            await Filesystem.write(filepath, transcript);
 
             // Open with EDITOR if available
-            const result = await Editor.open({ value: transcript, renderer })
+            const result = await Editor.open({ value: transcript, renderer });
             if (result !== undefined) {
-              await Filesystem.write(filepath, result)
+              await Filesystem.write(filepath, result);
             }
 
-            toast.show({ message: `Session exported to ${filename}`, variant: "success" })
+            toast.show({
+              message: `Session exported to ${filename}`,
+              variant: "success",
+            });
           }
         } catch (error) {
-          toast.show({ message: "Failed to export session", variant: "error" })
+          toast.show({ message: "Failed to export session", variant: "error" });
         }
-        dialog.clear()
+        dialog.clear();
       },
     },
     {
@@ -920,8 +1040,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        moveFirstChild()
-        dialog.clear()
+        moveFirstChild();
+        dialog.clear();
       },
     },
     {
@@ -932,14 +1052,14 @@ export function Session() {
       hidden: true,
       enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
-        const parentID = session()?.parentID
+        const parentID = session()?.parentID;
         if (parentID) {
           navigate({
             type: "session",
             sessionID: parentID,
-          })
+          });
         }
-        dialog.clear()
+        dialog.clear();
       }),
     },
     {
@@ -950,8 +1070,8 @@ export function Session() {
       hidden: true,
       enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
-        moveChild(1)
-        dialog.clear()
+        moveChild(1);
+        dialog.clear();
       }),
     },
     {
@@ -962,67 +1082,69 @@ export function Session() {
       hidden: true,
       enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
-        moveChild(-1)
-        dialog.clear()
+        moveChild(-1);
+        dialog.clear();
       }),
     },
-  ])
+  ]);
 
-  const revertInfo = createMemo(() => session()?.revert)
-  const revertMessageID = createMemo(() => revertInfo()?.messageID)
+  const revertInfo = createMemo(() => session()?.revert);
+  const revertMessageID = createMemo(() => revertInfo()?.messageID);
 
   const revertDiffFiles = createMemo(() => {
-    const diffText = revertInfo()?.diff ?? ""
-    if (!diffText) return []
+    const diffText = revertInfo()?.diff ?? "";
+    if (!diffText) return [];
 
     try {
-      const patches = parsePatch(diffText)
+      const patches = parsePatch(diffText);
       return patches.map((patch) => {
-        const filename = patch.newFileName || patch.oldFileName || "unknown"
-        const cleanFilename = filename.replace(/^[ab]\//, "")
+        const filename = patch.newFileName || patch.oldFileName || "unknown";
+        const cleanFilename = filename.replace(/^[ab]\//, "");
         return {
           filename: cleanFilename,
           additions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+            (sum, hunk) =>
+              sum + hunk.lines.filter((line) => line.startsWith("+")).length,
             0,
           ),
           deletions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+            (sum, hunk) =>
+              sum + hunk.lines.filter((line) => line.startsWith("-")).length,
             0,
           ),
-        }
-      })
+        };
+      });
     } catch (error) {
-      return []
+      return [];
     }
-  })
+  });
 
   const revertRevertedMessages = createMemo(() => {
-    const messageID = revertMessageID()
-    if (!messageID) return []
-    return messages().filter((x) => x.id >= messageID && x.role === "user")
-  })
+    const messageID = revertMessageID();
+    if (!messageID) return [];
+    return messages().filter((x) => x.id >= messageID && x.role === "user");
+  });
 
   const revert = createMemo(() => {
-    const info = revertInfo()
-    if (!info) return
-    if (!info.messageID) return
+    const info = revertInfo();
+    if (!info) return;
+    if (!info.messageID) return;
     return {
       messageID: info.messageID,
       reverted: revertRevertedMessages(),
       diff: info.diff,
       diffFiles: revertDiffFiles(),
-    }
-  })
+    };
+  });
 
   // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
+  createEffect(on(() => route.sessionID, toBottom));
 
   return (
     <context.Provider
       value={{
         get width() {
-          return contentWidth()
+          return contentWidth();
         },
         sessionID: route.sessionID,
         conceal,
@@ -1035,7 +1157,14 @@ export function Session() {
       }}
     >
       <box flexDirection="row">
-        <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
+        <box
+          flexGrow={1}
+          paddingBottom={1}
+          paddingTop={1}
+          paddingLeft={2}
+          paddingRight={2}
+          gap={1}
+        >
           <Show when={session()}>
             <Show when={showHeader() && (!sidebarVisible() || !wide())}>
               <Header />
@@ -1063,20 +1192,20 @@ export function Session() {
                   <Switch>
                     <Match when={message.id === revert()?.messageID}>
                       {(function () {
-                        const command = useCommandDialog()
-                        const [hover, setHover] = createSignal(false as any)
-                        const dialog = useDialog()
+                        const command = useCommandDialog();
+                        const [hover, setHover] = createSignal(false as any);
+                        const dialog = useDialog();
 
                         const handleUnrevert = async () => {
                           const confirmed = await DialogConfirm.show(
                             dialog,
                             "Confirm Redo",
                             "Are you sure you want to restore the reverted messages?",
-                          )
+                          );
                           if (confirmed) {
-                            command.trigger("session.redo")
+                            command.trigger("session.redo");
                           }
-                        }
+                        };
 
                         return (
                           <box
@@ -1093,12 +1222,20 @@ export function Session() {
                               paddingTop={1}
                               paddingBottom={1}
                               paddingLeft={2}
-                              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                              backgroundColor={
+                                hover()
+                                  ? theme.backgroundElement
+                                  : theme.backgroundPanel
+                              }
                             >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
                               <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
-                                restore
+                                {revert()!.reverted.length} message reverted
+                              </text>
+                              <text fg={theme.textMuted}>
+                                <span style={{ fg: theme.text }}>
+                                  {keybind.print("messages_redo")}
+                                </span>{" "}
+                                or /redo to restore
                               </text>
                               <Show when={revert()!.diffFiles?.length}>
                                 <box marginTop={1}>
@@ -1107,10 +1244,18 @@ export function Session() {
                                       <text fg={theme.text}>
                                         {file.filename}
                                         <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                          <span style={{ fg: theme.diffAdded }}>
+                                            {" "}
+                                            +{file.additions}
+                                          </span>
                                         </Show>
                                         <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                          <span
+                                            style={{ fg: theme.diffRemoved }}
+                                          >
+                                            {" "}
+                                            -{file.deletions}
+                                          </span>
                                         </Show>
                                       </text>
                                     )}
@@ -1119,27 +1264,31 @@ export function Session() {
                               </Show>
                             </box>
                           </box>
-                        )
+                        );
                       })()}
                     </Match>
-                    <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                    <Match
+                      when={
+                        revert()?.messageID && message.id >= revert()!.messageID
+                      }
+                    >
                       <></>
                     </Match>
                     <Match when={message.role === "user"}>
                       <UserMessage
                         index={index()}
                         onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
+                          if (renderer.getSelection()?.getSelectedText())
+                            return;
                           dialog.replace(() => (
                             <DialogMessage
                               messageID={message.id}
                               sessionID={route.sessionID}
                               setPrompt={(promptInfo) => prompt.set(promptInfo)}
                             />
-                          ))
+                          ));
                         }}
                         message={message as UserMessage}
-                        parts={store.state.parts.get(message.id) ?? []}
                         pending={pending()}
                       />
                     </Match>
@@ -1147,7 +1296,6 @@ export function Session() {
                       <AssistantMessage
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
-                        parts={store.state.parts.get(message.id) ?? []}
                       />
                     </Match>
                   </Switch>
@@ -1162,18 +1310,22 @@ export function Session() {
                 <QuestionPrompt request={questions()[0]} />
               </Show>
               <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
+                visible={
+                  !session()?.parentID &&
+                  permissions().length === 0 &&
+                  questions().length === 0
+                }
                 ref={(r) => {
-                  prompt = r
-                  promptRef.set(r)
+                  prompt = r;
+                  promptRef.set(r);
                   // Apply initial prompt when prompt component mounts (e.g., from fork)
                   if (route.initialPrompt) {
-                    r.set(route.initialPrompt)
+                    r.set(route.initialPrompt);
                   }
                 }}
                 disabled={permissions().length > 0 || questions().length > 0}
                 onSubmit={() => {
-                  toBottom()
+                  toBottom();
                 }}
                 sessionID={route.sessionID}
               />
@@ -1203,7 +1355,7 @@ export function Session() {
         </Show>
       </box>
     </context.Provider>
-  )
+  );
 }
 
 const MIME_BADGE: Record<string, string> = {
@@ -1214,40 +1366,57 @@ const MIME_BADGE: Record<string, string> = {
   "image/webp": "img",
   "application/pdf": "pdf",
   "application/x-directory": "dir",
-}
+};
 
 function UserMessage(props: {
-  message: UserMessage
-  parts: Part[]
-  onMouseUp: () => void
-  index: number
-  pending?: string
+  message: UserMessage;
+  onMouseUp: () => void;
+  index: number;
+  pending?: string;
 }) {
-  Log.Default.debug("[UserMessage] Rendering", { 
-    messageId: props.message.id, 
+  const store = useStore();
+  
+
+  const parts = createMemo(() => {
+    return store.state.parts.get(props.message.id) ?? [];
+  });
+
+  Log.Default.debug("[UserMessage] Rendering", {
+    messageId: props.message.id,
     role: props.message.role,
-    partCount: props.parts.length,
+    partCount: parts().length,
     index: props.index,
     agent: props.message.agent,
-    timestamp: props.message.time.created
-  })
-  const ctx = use()
-  const local = useLocal()
+    timestamp: props.message.time.created,
+  });
+  const ctx = use();
+  const local = useLocal();
   const text = createMemo(() => {
-    const t = props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0]
-    Log.Default.debug("[UserMessage text memo]", { messageId: props.message.id, hasText: !!t, textLength: t?.text?.length })
-    return t
-  })
-  const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
-  const store = useStore()
-  const { theme } = useTheme()
-  const [hover, setHover] = createSignal(false as any)
-  const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => local.agent.color(props.message.agent))
-  const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+    const t = parts().flatMap((x) =>
+      x.type === "text" && !x.synthetic ? [x] : [],
+    )[0];
+    Log.Default.debug("[UserMessage text memo]", {
+      messageId: props.message.id,
+      hasText: !!t,
+      textLength: t?.text?.length,
+    });
+    return t;
+  });
+  const files = createMemo(() =>
+    parts().flatMap((x) => (x.type === "file" ? [x] : [])),
+  );
+  const { theme } = useTheme();
+  const [hover, setHover] = createSignal(false as any);
+  const queued = createMemo(
+    () => props.pending && props.message.id > props.pending,
+  );
+  const color = createMemo(() => local.agent.color(props.message.agent));
+  const queuedFg = createMemo(() => selectedForeground(theme, color()));
+  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps());
 
-  const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+  const compaction = createMemo(() =>
+    parts().find((x) => x.type === "compaction"),
+  );
 
   return (
     <>
@@ -1261,34 +1430,53 @@ function UserMessage(props: {
         >
           <box
             onMouseOver={() => {
-              setHover(true)
+              setHover(true);
             }}
             onMouseOut={() => {
-              setHover(false)
+              setHover(false);
             }}
             onMouseUp={props.onMouseUp}
             paddingTop={1}
             paddingBottom={1}
             paddingLeft={2}
-            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+            backgroundColor={
+              hover() ? theme.backgroundElement : theme.backgroundPanel
+            }
             flexShrink={0}
           >
             <text fg={theme.text}>{text()?.text}</text>
             <Show when={files().length}>
-              <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+              <box
+                flexDirection="row"
+                paddingBottom={metadataVisible() ? 1 : 0}
+                paddingTop={1}
+                gap={1}
+                flexWrap="wrap"
+              >
                 <For each={files()}>
                   {(file) => {
                     const bg = createMemo(() => {
-                      if (file.mime.startsWith("image/")) return theme.accent
-                      if (file.mime === "application/pdf") return theme.primary
-                      return theme.secondary
-                    })
+                      if (file.mime.startsWith("image/")) return theme.accent;
+                      if (file.mime === "application/pdf") return theme.primary;
+                      return theme.secondary;
+                    });
                     return (
                       <text fg={theme.text}>
-                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                        <span style={{ bg: bg(), fg: theme.background }}>
+                          {" "}
+                          {MIME_BADGE[file.mime] ?? file.mime}{" "}
+                        </span>
+                        <span
+                          style={{
+                            bg: theme.backgroundElement,
+                            fg: theme.textMuted,
+                          }}
+                        >
+                          {""}
+                          {file.filename}{" "}
+                        </span>
                       </text>
-                    )
+                    );
                   }}
                 </For>
               </box>
@@ -1306,7 +1494,10 @@ function UserMessage(props: {
               }
             >
               <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                <span style={{ bg: color(), fg: queuedFg(), bold: true }}>
+                  {" "}
+                  QUEUED{" "}
+                </span>
               </text>
             </Show>
           </box>
@@ -1322,47 +1513,62 @@ function UserMessage(props: {
         />
       </Show>
     </>
-  )
+  );
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
-  const local = useLocal()
-  const { theme } = useTheme()
-  const appStore = useStore()
-  const messages = createMemo(() => appStore.state.messages.get(props.message.sessionID) ?? [])
+function AssistantMessage(props: { message: AssistantMessage; last: boolean }) {
+  const local = useLocal();
+  const { theme } = useTheme();
+  const appStore = useStore();
+  const messages = createMemo(
+    () => appStore.state.messages.get(props.message.sessionID) ?? [],
+  );
+
+  const parts = createMemo(() => {
+    return appStore.state.parts.get(props.message.id) ?? [];
+  });
 
   const final = createMemo(() => {
-    return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
-  })
+    return (
+      props.message.finish &&
+      !["tool-calls", "unknown"].includes(props.message.finish)
+    );
+  });
 
   const duration = createMemo(() => {
-    if (!final()) return 0
-    if (!props.message.time.completed) return 0
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
-  })
+    if (!final()) return 0;
+    if (!props.message.time.completed) return 0;
+    const user = messages().find(
+      (x) => x.role === "user" && x.id === props.message.parentID,
+    );
+    if (!user || !user.time) return 0;
+    return props.message.time.completed - user.time.created;
+  });
 
-  const keybind = useKeybind()
+  console.log("Duration:", duration());
+
+  const keybind = useKeybind();
 
   return (
     <>
-      <For each={props.parts}>
+      <For each={parts()}>
         {(part, index) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+          const component = createMemo(
+            () => PART_MAPPING[part.type as keyof typeof PART_MAPPING],
+          );
           return (
             <Show when={component()}>
               <Dynamic
-                last={index() === props.parts.length - 1}
+                last={index() === parts().length - 1}
                 component={component()}
                 part={part as any}
                 message={props.message}
               />
             </Show>
-          )
+          );
         }}
       </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+      <Show when={parts().some((x) => x.type === "tool" && x.tool === "task")}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
             {keybind.print("session_child_first")}
@@ -1370,7 +1576,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           </text>
         </box>
       </Show>
-      <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
+      <Show
+        when={
+          props.message.error &&
+          props.message.error.name !== "MessageAbortedError"
+        }
+      >
         <box
           border={["left"]}
           paddingTop={1}
@@ -1385,7 +1596,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
+        <Match
+          when={
+            props.last ||
+            final() ||
+            props.message.error?.name === "MessageAbortedError"
+          }
+        >
           <box paddingLeft={3}>
             <text marginTop={1}>
               <span
@@ -1398,10 +1615,18 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               >
                 ▣{" "}
               </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              <span style={{ fg: theme.text }}>
+                {Locale.titlecase(props.message.mode)}
+              </span>
+              <span style={{ fg: theme.textMuted }}>
+                {" "}
+                · {props.message.modelID}
+              </span>
               <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+                <span style={{ fg: theme.textMuted }}>
+                  {" "}
+                  · {Locale.duration(duration())}
+                </span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
@@ -1411,23 +1636,27 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </Match>
       </Switch>
     </>
-  )
+  );
 }
 
 const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
   reasoning: ReasoningPart,
-}
+};
 
-function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme, subtleSyntax } = useTheme()
-  const ctx = use()
+function ReasoningPart(props: {
+  last: boolean;
+  part: ReasoningPart;
+  message: AssistantMessage;
+}) {
+  const { theme, subtleSyntax } = useTheme();
+  const ctx = use();
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
-    return props.part.text.replace("[REDACTED]", "").trim()
-  })
+    return props.part.text.replace("[REDACTED]", "").trim();
+  });
   return (
     <Show when={content() && ctx.showThinking()}>
       <box
@@ -1450,15 +1679,24 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         />
       </box>
     </Show>
-  )
+  );
 }
 
-function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
-  const ctx = use()
-  const { theme, syntax } = useTheme()
+function TextPart(props: {
+  last: boolean;
+  part: TextPart;
+  message: AssistantMessage;
+}) {
+  const ctx = use();
+  const { theme, syntax } = useTheme();
   return (
     <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box
+        id={"text-" + props.part.id}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+      >
         <Switch>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
@@ -1482,44 +1720,54 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
         </Switch>
       </box>
     </Show>
-  )
+  );
 }
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
-  const ctx = use()
-  const store = useStore()
+function ToolPart(props: {
+  last: boolean;
+  part: ToolPart;
+  message: AssistantMessage;
+}) {
+  const ctx = use();
+  const store = useStore();
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
-    if (ctx.showDetails()) return false
-    if (props.part.state.status !== "completed") return false
-    return true
-  })
+    if (ctx.showDetails()) return false;
+    if (props.part.state.status !== "completed") return false;
+    return true;
+  });
 
   const toolprops = {
     get metadata() {
-      return props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
+      return props.part.state.status === "pending"
+        ? {}
+        : (props.part.state.metadata ?? {});
     },
     get input() {
-      return props.part.state.input ?? {}
+      return props.part.state.input ?? {};
     },
     get output() {
-      return props.part.state.status === "completed" ? props.part.state.output : undefined
+      return props.part.state.status === "completed"
+        ? props.part.state.output
+        : undefined;
     },
     get permission() {
-      const permissions: any[] = []
-      const permissionIndex = permissions.findIndex((x: any) => x.tool?.callID === props.part.callID)
-      return permissions[permissionIndex]
+      const permissions: any[] = [];
+      const permissionIndex = permissions.findIndex(
+        (x: any) => x.tool?.callID === props.part.callID,
+      );
+      return permissions[permissionIndex];
     },
     get tool() {
-      return props.part.tool
+      return props.part.tool;
     },
     get part() {
-      return props.part
+      return props.part;
     },
-  }
+  };
 
   return (
     <Show when={!shouldHide()}>
@@ -1574,35 +1822,40 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         </Match>
       </Switch>
     </Show>
-  )
+  );
 }
 
 type ToolProps<T extends Tool.Info> = {
-  input: Partial<Tool.InferParameters<T>>
-  metadata: Partial<Tool.InferMetadata<T>>
-  permission: Record<string, any>
-  tool: string
-  output?: string
-  part: ToolPart
-}
+  input: Partial<Tool.InferParameters<T>>;
+  metadata: Partial<Tool.InferMetadata<T>>;
+  permission: Record<string, any>;
+  tool: string;
+  output?: string;
+  part: ToolPart;
+};
 function GenericTool(props: ToolProps<any>) {
-  const { theme } = useTheme()
-  const ctx = use()
-  const output = createMemo(() => props.output?.trim() ?? "")
-  const [expanded, setExpanded] = createSignal(false as any)
-  const lines = createMemo(() => output().split("\n"))
-  const maxLines = 3
-  const overflow = createMemo(() => lines().length > maxLines)
+  const { theme } = useTheme();
+  const ctx = use();
+  const output = createMemo(() => props.output?.trim() ?? "");
+  const [expanded, setExpanded] = createSignal(false as any);
+  const lines = createMemo(() => output().split("\n"));
+  const maxLines = 3;
+  const overflow = createMemo(() => lines().length > maxLines);
   const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, maxLines), "…"].join("\n")
-  })
+    if (expanded() || !overflow()) return output();
+    return [...lines().slice(0, maxLines), "…"].join("\n");
+  });
 
   return (
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
+        <InlineTool
+          icon="⚙"
+          pending="Writing command..."
+          complete={true}
+          part={props.part}
+        >
           {props.tool} {input(props.input)}
         </InlineTool>
       }
@@ -1615,63 +1868,72 @@ function GenericTool(props: ToolProps<any>) {
         <box gap={1}>
           <text fg={theme.text}>{limited()}</text>
           <Show when={overflow()}>
-            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            <text fg={theme.textMuted}>
+              {expanded() ? "Click to collapse" : "Click to expand"}
+            </text>
           </Show>
         </box>
       </BlockTool>
     </Show>
-  )
+  );
 }
 
-function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
-  const { theme } = useTheme()
+function ToolTitle(props: {
+  fallback: string;
+  when: any;
+  icon: string;
+  children: JSX.Element;
+}) {
+  const { theme } = useTheme();
   return (
     <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
       <Show fallback={<>~ {props.fallback}</>} when={props.when}>
         <span style={{ bold: true }}>{props.icon}</span> {props.children}
       </Show>
     </text>
-  )
+  );
 }
 
 function InlineTool(props: {
-  icon: string
-  iconColor?: RGBA
-  complete: any
-  pending: string
-  spinner?: boolean
-  children: JSX.Element
-  part: ToolPart
-  onClick?: () => void
+  icon: string;
+  iconColor?: RGBA;
+  complete: any;
+  pending: string;
+  spinner?: boolean;
+  children: JSX.Element;
+  part: ToolPart;
+  onClick?: () => void;
 }) {
-  const [margin, setMargin] = createSignal(0)
-  const { theme } = useTheme()
-  const ctx = use()
-  const store = useStore()
-  const renderer = useRenderer()
-  const [hover, setHover] = createSignal(false as any)
+  const [margin, setMargin] = createSignal(0);
+  const { theme } = useTheme();
+  const ctx = use();
+  const store = useStore();
+  const renderer = useRenderer();
+  const [hover, setHover] = createSignal(false as any);
 
   const permission = createMemo(() => {
-    const callID: string | undefined = undefined
-    if (!callID) return false
-    return callID === props.part.callID
-  })
+    const callID: string | undefined = undefined;
+    if (!callID) return false;
+    return callID === props.part.callID;
+  });
 
   const fg = createMemo(() => {
-    if (permission()) return theme.warning
-    if (hover() && props.onClick) return theme.text
-    if (props.complete) return theme.textMuted
-    return theme.text
-  })
+    if (permission()) return theme.warning;
+    if (hover() && props.onClick) return theme.text;
+    if (props.complete) return theme.textMuted;
+    return theme.text;
+  });
 
-  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
+  const error = createMemo(() =>
+    props.part.state.status === "error" ? props.part.state.error : undefined,
+  );
 
   const denied = createMemo(
     () =>
       error()?.includes("rejected permission") ||
       error()?.includes("specified a rule") ||
       error()?.includes("user dismissed"),
-  )
+  );
 
   return (
     <box
@@ -1680,29 +1942,29 @@ function InlineTool(props: {
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
-        props.onClick?.()
+        if (renderer.getSelection()?.getSelectedText()) return;
+        props.onClick?.();
       }}
       renderBefore={function () {
-        const el = this as BoxRenderable
-        const parent = el.parent
+        const el = this as BoxRenderable;
+        const parent = el.parent;
         if (!parent) {
-          return
+          return;
         }
         if (el.height > 1) {
-          setMargin(1)
-          return
+          setMargin(1);
+          return;
         }
-        const children = parent.getChildren()
-        const index = children.indexOf(el)
-        const previous = children[index - 1]
+        const children = parent.getChildren();
+        const index = children.indexOf(el);
+        const previous = children[index - 1];
         if (!previous) {
-          setMargin(0)
-          return
+          setMargin(0);
+          return;
         }
         if (previous.height > 1 || previous.id.startsWith("text-")) {
-          setMargin(1)
-          return
+          setMargin(1);
+          return;
         }
       }}
     >
@@ -1711,9 +1973,14 @@ function InlineTool(props: {
           <Spinner color={fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+          <text
+            paddingLeft={3}
+            fg={fg()}
+            attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+          >
             <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+              <span style={{ fg: props.iconColor }}>{props.icon}</span>{" "}
+              {props.children}
             </Show>
           </text>
         </Match>
@@ -1722,20 +1989,22 @@ function InlineTool(props: {
         <text fg={theme.error}>{error()}</text>
       </Show>
     </box>
-  )
+  );
 }
 
 function BlockTool(props: {
-  title: string
-  children: JSX.Element
-  onClick?: () => void
-  part?: ToolPart
-  spinner?: boolean
+  title: string;
+  children: JSX.Element;
+  onClick?: () => void;
+  part?: ToolPart;
+  spinner?: boolean;
 }) {
-  const { theme } = useTheme()
-  const renderer = useRenderer()
-  const [hover, setHover] = createSignal(false as any)
-  const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const { theme } = useTheme();
+  const renderer = useRenderer();
+  const [hover, setHover] = createSignal(false as any);
+  const error = createMemo(() =>
+    props.part?.state.status === "error" ? props.part.state.error : undefined,
+  );
   return (
     <box
       border={["left"]}
@@ -1750,8 +2019,8 @@ function BlockTool(props: {
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
-        props.onClick?.()
+        if (renderer.getSelection()?.getSelectedText()) return;
+        props.onClick?.();
       }}
     >
       <Show
@@ -1762,53 +2031,57 @@ function BlockTool(props: {
           </text>
         }
       >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+        <Spinner color={theme.textMuted}>
+          {props.title.replace(/^# /, "")}
+        </Spinner>
       </Show>
       {props.children}
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
     </box>
-  )
+  );
 }
 
 function Bash(props: ToolProps<typeof BashTool>) {
-  const { theme } = useTheme()
-  const store = useStore()
-  const isRunning = createMemo(() => props.part.state.status === "running")
-  const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
-  const [expanded, setExpanded] = createSignal(false as any)
-  const lines = createMemo(() => output().split("\n"))
-  const overflow = createMemo(() => lines().length > 10)
+  const { theme } = useTheme();
+  const store = useStore();
+  const isRunning = createMemo(() => props.part.state.status === "running");
+  const output = createMemo(() =>
+    stripAnsi(props.metadata.output?.trim() ?? ""),
+  );
+  const [expanded, setExpanded] = createSignal(false as any);
+  const lines = createMemo(() => output().split("\n"));
+  const overflow = createMemo(() => lines().length > 10);
   const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, 10), "…"].join("\n")
-  })
+    if (expanded() || !overflow()) return output();
+    return [...lines().slice(0, 10), "…"].join("\n");
+  });
 
   const workdirDisplay = createMemo(() => {
-    const workdir = props.input.workdir
-    if (!workdir || workdir === ".") return undefined
+    const workdir = props.input.workdir;
+    if (!workdir || workdir === ".") return undefined;
 
-    const base: string = undefined as any
-    if (!base) return undefined
+    const base: string = undefined as any;
+    if (!base) return undefined;
 
-    const absolute = path.resolve(base, workdir)
-    if (absolute === base) return undefined
+    const absolute = path.resolve(base, workdir);
+    if (absolute === base) return undefined;
 
-    const home = Global.Path.home
-    if (!home) return absolute
+    const home = Global.Path.home;
+    if (!home) return absolute;
 
-    const match = absolute === home || absolute.startsWith(home + path.sep)
-    return match ? absolute.replace(home, "~") : absolute
-  })
+    const match = absolute === home || absolute.startsWith(home + path.sep);
+    return match ? absolute.replace(home, "~") : absolute;
+  });
 
   const title = createMemo(() => {
-    const desc = props.input.description ?? "Shell"
-    const wd = workdirDisplay()
-    if (!wd) return `# ${desc}`
-    if (desc.includes(wd)) return `# ${desc}`
-    return `# ${desc} in ${wd}`
-  })
+    const desc = props.input.description ?? "Shell";
+    const wd = workdirDisplay();
+    if (!wd) return `# ${desc}`;
+    if (desc.includes(wd)) return `# ${desc}`;
+    return `# ${desc} in ${wd}`;
+  });
 
   return (
     <Switch>
@@ -1825,73 +2098,104 @@ function Bash(props: ToolProps<typeof BashTool>) {
               <text fg={theme.text}>{limited()}</text>
             </Show>
             <Show when={overflow()}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              <text fg={theme.textMuted}>
+                {expanded() ? "Click to collapse" : "Click to expand"}
+              </text>
             </Show>
           </box>
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
+        <InlineTool
+          icon="$"
+          pending="Writing command..."
+          complete={props.input.command}
+          part={props.part}
+        >
           {props.input.command}
         </InlineTool>
       </Match>
     </Switch>
-  )
+  );
 }
 
 function Write(props: ToolProps<typeof WriteTool>) {
-  const { theme, syntax } = useTheme()
+  const { theme, syntax } = useTheme();
   const code = createMemo(() => {
-    if (!props.input.content) return ""
-    return props.input.content
-  })
+    if (!props.input.content) return "";
+    return props.input.content;
+  });
 
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool
+          title={"# Wrote " + normalizePath(props.input.filePath!)}
+          part={props.part}
+        >
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
               fg={theme.text}
-              filetype={filetype(Array.isArray(props.input.filePath) ? props.input.filePath[0] : props.input.filePath!) as string}
+              filetype={
+                filetype(
+                  Array.isArray(props.input.filePath)
+                    ? props.input.filePath[0]
+                    : props.input.filePath!,
+                ) as string
+              }
               syntaxStyle={syntax()}
               content={code()}
             />
           </line_number>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
+          <Diagnostics
+            diagnostics={props.metadata.diagnostics}
+            filePath={props.input.filePath ?? ""}
+          />
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
+        <InlineTool
+          icon="←"
+          pending="Preparing write..."
+          complete={props.input.filePath}
+          part={props.part}
+        >
           Write {normalizePath(props.input.filePath!)}
         </InlineTool>
       </Match>
     </Switch>
-  )
+  );
 }
 
 function Glob(props: ToolProps<typeof GlobTool>) {
   return (
-    <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
-      Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+    <InlineTool
+      icon="✱"
+      pending="Finding files..."
+      complete={props.input.pattern}
+      part={props.part}
+    >
+      Glob "{props.input.pattern}"{" "}
+      <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
       <Show when={props.metadata.count}>
-        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
+        ({props.metadata.count}{" "}
+        {props.metadata.count === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
-  )
+  );
 }
 
 function Read(props: ToolProps<typeof ReadTool>) {
-  const { theme } = useTheme()
-  const isRunning = createMemo(() => props.part.state.status === "running")
+  const { theme } = useTheme();
+  const isRunning = createMemo(() => props.part.state.status === "running");
   const loaded = createMemo(() => {
-    if (props.part.state.status !== "completed") return []
-    if (props.part.state.time.compacted) return []
-    const value = props.metadata.loaded
-    if (!value || !Array.isArray(value)) return []
-    return value.filter((p): p is string => typeof p === "string")
-  })
+    if (props.part.state.status !== "completed") return [];
+    if (props.part.state.time.compacted) return [];
+    const value = props.metadata.loaded;
+    if (!value || !Array.isArray(value)) return [];
+    return value.filter((p): p is string => typeof p === "string");
+  });
   return (
     <>
       <InlineTool
@@ -1901,7 +2205,8 @@ function Read(props: ToolProps<typeof ReadTool>) {
         spinner={isRunning()}
         part={props.part}
       >
-        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+        Read {normalizePath(props.input.filePath!)}{" "}
+        {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
@@ -1913,115 +2218,154 @@ function Read(props: ToolProps<typeof ReadTool>) {
         )}
       </For>
     </>
-  )
+  );
 }
 
 function Grep(props: ToolProps<typeof GrepTool>) {
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
-      Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+    <InlineTool
+      icon="✱"
+      pending="Searching content..."
+      complete={props.input.pattern}
+      part={props.part}
+    >
+      Grep "{props.input.pattern}"{" "}
+      <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
       <Show when={props.metadata.matches}>
-        ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
+        ({props.metadata.matches}{" "}
+        {props.metadata.matches === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
-  )
+  );
 }
 
 function List(props: ToolProps<typeof ListTool>) {
   const dir = createMemo(() => {
     if (props.input.path) {
-      return normalizePath(props.input.path)
+      return normalizePath(props.input.path);
     }
-    return ""
-  })
+    return "";
+  });
   return (
-    <InlineTool icon="→" pending="Listing directory..." complete={props.input.path !== undefined} part={props.part}>
+    <InlineTool
+      icon="→"
+      pending="Listing directory..."
+      complete={props.input.path !== undefined}
+      part={props.part}
+    >
       List {dir()}
     </InlineTool>
-  )
+  );
 }
 
 function WebFetch(props: ToolProps<typeof WebFetchTool>) {
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={(props.input as any).url} part={props.part}>
+    <InlineTool
+      icon="%"
+      pending="Fetching from the web..."
+      complete={(props.input as any).url}
+      part={props.part}
+    >
       WebFetch {(props.input as any).url}
     </InlineTool>
-  )
+  );
 }
 
 function CodeSearch(props: ToolProps<any & { name: string }>) {
-  const input = props.input as any
-  const metadata = props.metadata as any
+  const input = props.input as any;
+  const metadata = props.metadata as any;
   return (
-    <InlineTool icon="◇" pending="Searching code..." complete={input.query} part={props.part}>
-      Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
+    <InlineTool
+      icon="◇"
+      pending="Searching code..."
+      complete={input.query}
+      part={props.part}
+    >
+      Exa Code Search "{input.query}"{" "}
+      <Show when={metadata.results}>({metadata.results} results)</Show>
     </InlineTool>
-  )
+  );
 }
 
 function WebSearch(props: ToolProps<any & { name: string }>) {
-  const input = props.input as any
-  const metadata = props.metadata as any
+  const input = props.input as any;
+  const metadata = props.metadata as any;
   return (
-    <InlineTool icon="◈" pending="Searching web..." complete={input.query} part={props.part}>
-      Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+    <InlineTool
+      icon="◈"
+      pending="Searching web..."
+      complete={input.query}
+      part={props.part}
+    >
+      Exa Web Search "{input.query}"{" "}
+      <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
     </InlineTool>
-  )
+  );
 }
 
 function Task(props: ToolProps<typeof TaskTool>) {
-  const { theme } = useTheme()
-  const keybind = useKeybind()
-  const { navigate } = useRoute()
-  const local = useLocal()
-  const store = useStore()
+  const { theme } = useTheme();
+  const keybind = useKeybind();
+  const { navigate } = useRoute();
+  const local = useLocal();
+  const store = useStore();
 
   onMount(() => {
     if (props.metadata.sessionId) {
-      const msgs = store.state.messages.get(props.metadata.sessionId)
+      const msgs = store.state.messages.get(props.metadata.sessionId);
       if (!msgs?.length) {
-        store.session.load(props.metadata.sessionId)
+        store.session.load(props.metadata.sessionId);
       }
     }
-  })
+  });
 
-  const messages = createMemo(() => store.state.messages.get(props.metadata.sessionId ?? "") ?? [])
+  const messages = createMemo(
+    () => store.state.messages.get(props.metadata.sessionId ?? "") ?? [],
+  );
 
   const tools = createMemo(() => {
     return messages().flatMap((msg) =>
       (store.state.parts.get(msg.id) ?? [])
         .filter((part): part is ToolPart => part.type === "tool")
         .map((part) => ({ tool: part.tool, state: part.state })),
-    )
-  })
+    );
+  });
 
-  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
+  const current = createMemo(() =>
+    tools().findLast((x) => (x.state as any).title),
+  );
 
-  const isRunning = createMemo(() => props.part.state.status === "running")
+  const isRunning = createMemo(() => props.part.state.status === "running");
 
   const duration = createMemo(() => {
-    const first = messages().find((x) => x.role === "user")?.time.created
-    const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
-    if (!first || !assistant) return 0
-    return assistant - first
-  })
+    const first = messages().find((x) => x.role === "user")?.time.created;
+    const assistant = messages().findLast((x) => x.role === "assistant")?.time
+      .completed;
+    if (!first || !assistant) return 0;
+    return assistant - first;
+  });
 
   const content = createMemo(() => {
-    if (!props.input.description) return ""
-    let content = [`Task ${props.input.description}`]
+    if (!props.input.description) return "";
+    let content = [`Task ${props.input.description}`];
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
-      if (current()) content.push(`↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
-      else content.push(`↳ ${tools().length} toolcalls`)
+      if (current())
+        content.push(
+          `↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`,
+        );
+      else content.push(`↳ ${tools().length} toolcalls`);
     }
 
     if (props.part.state.status === "completed") {
-      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+      content.push(
+        `└ ${tools().length} toolcalls · ${Locale.duration(duration())}`,
+      );
     }
 
-    return content.join("\n")
-  })
+    return content.join("\n");
+  });
 
   return (
     <InlineTool
@@ -2032,34 +2376,37 @@ function Task(props: ToolProps<typeof TaskTool>) {
       part={props.part}
       onClick={() => {
         if (props.metadata.sessionId) {
-          navigate({ type: "session", sessionID: props.metadata.sessionId })
+          navigate({ type: "session", sessionID: props.metadata.sessionId });
         }
       }}
     >
       {content()}
     </InlineTool>
-  )
+  );
 }
 
 function Edit(props: ToolProps<typeof EditTool>) {
-  const ctx = use()
-  const { theme, syntax } = useTheme()
+  const ctx = use();
+  const { theme, syntax } = useTheme();
 
   const view = createMemo(() => {
-    const diffStyle = ctx.tui.diff_style
-    if (diffStyle === "stacked") return "unified"
+    const diffStyle = ctx.tui.diff_style;
+    if (diffStyle === "stacked") return "unified";
     // Default to "auto" behavior
-    return ctx.width > 120 ? "split" : "unified"
-  })
+    return ctx.width > 120 ? "split" : "unified";
+  });
 
-  const ft = createMemo(() => filetype(props.input.filePath))
+  const ft = createMemo(() => filetype(props.input.filePath));
 
-  const diffContent = createMemo(() => props.metadata.diff)
+  const diffContent = createMemo(() => props.metadata.diff);
 
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool
+          title={"← Edit " + normalizePath(props.input.filePath!)}
+          part={props.part}
+        >
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -2081,29 +2428,38 @@ function Edit(props: ToolProps<typeof EditTool>) {
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
           </box>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={props.input.filePath ?? ""} />
+          <Diagnostics
+            diagnostics={props.metadata.diagnostics}
+            filePath={props.input.filePath ?? ""}
+          />
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+        <InlineTool
+          icon="←"
+          pending="Preparing edit..."
+          complete={props.input.filePath}
+          part={props.part}
+        >
+          Edit {normalizePath(props.input.filePath!)}{" "}
+          {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>
-  )
+  );
 }
 
 function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
-  const ctx = use()
-  const { theme, syntax } = useTheme()
+  const ctx = use();
+  const { theme, syntax } = useTheme();
 
-  const files = createMemo(() => props.metadata.files ?? [])
+  const files = createMemo(() => props.metadata.files ?? []);
 
   const view = createMemo(() => {
-    const diffStyle = ctx.tui.diff_style
-    if (diffStyle === "stacked") return "unified"
-    return ctx.width > 120 ? "split" : "unified"
-  })
+    const diffStyle = ctx.tui.diff_style;
+    if (diffStyle === "stacked") return "unified";
+    return ctx.width > 120 ? "split" : "unified";
+  });
 
   function Diff(p: { diff: string; filePath: string }) {
     return (
@@ -2128,14 +2484,22 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
           removedLineNumberBg={theme.diffRemovedLineNumberBg}
         />
       </box>
-    )
+    );
   }
 
-  function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
-    if (file.type === "delete") return "# Deleted " + file.relativePath
-    if (file.type === "add") return "# Created " + file.relativePath
-    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + file.relativePath
-    return "← Patched " + file.relativePath
+  function title(file: {
+    type: string;
+    relativePath: string;
+    filePath: string;
+    deletions: number;
+  }) {
+    if (file.type === "delete") return "# Deleted " + file.relativePath;
+    if (file.type === "add") return "# Created " + file.relativePath;
+    if (file.type === "move")
+      return (
+        "# Moved " + normalizePath(file.filePath) + " → " + file.relativePath
+      );
+    return "← Patched " + file.relativePath;
   }
 
   return (
@@ -2153,19 +2517,27 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
                 }
               >
                 <Diff diff={file.diff} filePath={file.filePath} />
-                <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
+                <Diagnostics
+                  diagnostics={props.metadata.diagnostics}
+                  filePath={file.movePath ?? file.filePath}
+                />
               </Show>
             </BlockTool>
           )}
         </For>
       </Match>
       <Match when={true}>
-        <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
+        <InlineTool
+          icon="%"
+          pending="Preparing patch..."
+          complete={false}
+          part={props.part}
+        >
           Patch
         </InlineTool>
       </Match>
     </Switch>
-  )
+  );
 }
 
 function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
@@ -2175,27 +2547,34 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
         <BlockTool title="# Todos" part={props.part}>
           <box>
             <For each={props.input.todos ?? []}>
-              {(todo) => <TodoItem status={todo.status} content={todo.content} />}
+              {(todo) => (
+                <TodoItem status={todo.status} content={todo.content} />
+              )}
             </For>
           </box>
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="⚙" pending="Updating todos..." complete={false} part={props.part}>
+        <InlineTool
+          icon="⚙"
+          pending="Updating todos..."
+          complete={false}
+          part={props.part}
+        >
           Updating todos...
         </InlineTool>
       </Match>
     </Switch>
-  )
+  );
 }
 
 function Question(props: ToolProps<typeof QuestionTool>) {
-  const { theme } = useTheme()
-  const count = createMemo(() => props.input.questions?.length ?? 0)
+  const { theme } = useTheme();
+  const count = createMemo(() => props.input.questions?.length ?? 0);
 
   function format(answer?: string[]) {
-    if (!answer?.length) return "(no answer)"
-    return answer.join(", ")
+    if (!answer?.length) return "(no answer)";
+    return answer.join(", ");
   }
 
   return (
@@ -2207,7 +2586,9 @@ function Question(props: ToolProps<typeof QuestionTool>) {
               {(q, i) => (
                 <box flexDirection="column">
                   <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
+                  <text fg={theme.text}>
+                    {format(props.metadata.answers?.[i()])}
+                  </text>
                 </box>
               )}
             </For>
@@ -2215,29 +2596,42 @@ function Question(props: ToolProps<typeof QuestionTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="→" pending="Asking questions..." complete={count()} part={props.part}>
+        <InlineTool
+          icon="→"
+          pending="Asking questions..."
+          complete={count()}
+          part={props.part}
+        >
           Asked {count()} question{count() !== 1 ? "s" : ""}
         </InlineTool>
       </Match>
     </Switch>
-  )
+  );
 }
 
 function Skill(props: ToolProps<typeof SkillTool>) {
   return (
-    <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
+    <InlineTool
+      icon="→"
+      pending="Loading skill..."
+      complete={props.input.name}
+      part={props.part}
+    >
       Skill "{props.input.name}"
     </InlineTool>
-  )
+  );
 }
 
-function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
-  const { theme } = useTheme()
+function Diagnostics(props: {
+  diagnostics?: Record<string, Record<string, any>[]>;
+  filePath: string;
+}) {
+  const { theme } = useTheme();
   const errors = createMemo(() => {
-    const normalized = normalizePath(props.filePath)
-    const arr = props.diagnostics?.[normalized] ?? []
-    return arr.filter((x) => x.severity === 1).slice(0, 3)
-  })
+    const normalized = normalizePath(props.filePath);
+    const arr = props.diagnostics?.[normalized] ?? [];
+    return arr.filter((x) => x.severity === 1).slice(0, 3);
+  });
 
   return (
     <Show when={errors().length}>
@@ -2245,42 +2639,52 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
         <For each={errors()}>
           {(diagnostic) => (
             <text fg={theme.error}>
-              Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
+              Error [{diagnostic.range.start.line + 1}:
+              {diagnostic.range.start.character + 1}] {diagnostic.message}
             </text>
           )}
         </For>
       </box>
     </Show>
-  )
+  );
 }
 
 function normalizePath(input?: string) {
-  if (!input) return ""
+  if (!input) return "";
 
-  const cwd = process.cwd()
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
-  const relative = path.relative(cwd, absolute)
+  const cwd = process.cwd();
+  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input);
+  const relative = path.relative(cwd, absolute);
 
-  if (!relative) return "."
-  if (!relative.startsWith("..")) return relative
+  if (!relative) return ".";
+  if (!relative.startsWith("..")) return relative;
 
   // outside cwd - use absolute
-  return absolute
+  return absolute;
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {
   const primitives = Object.entries(input).filter(([key, value]) => {
-    if (omit?.includes(key)) return false
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  })
-  if (primitives.length === 0) return ""
-  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+    if (omit?.includes(key)) return false;
+    return (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    );
+  });
+  if (primitives.length === 0) return "";
+  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`;
 }
 
 function filetype(input?: string) {
-  if (!input) return "none"
-  const ext = path.extname(input)
-  const language = LANGUAGE_EXTENSIONS[ext]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(Array.isArray(language) ? language[0] : language)) return "typescript"
-  return language
+  if (!input) return "none";
+  const ext = path.extname(input);
+  const language = LANGUAGE_EXTENSIONS[ext];
+  if (
+    ["typescriptreact", "javascriptreact", "javascript"].includes(
+      Array.isArray(language) ? language[0] : language,
+    )
+  )
+    return "typescript";
+  return language;
 }

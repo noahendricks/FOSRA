@@ -56,9 +56,11 @@ const ctx = createSimpleContext({
       ])
 
       for (const msg of messages.data ?? []) {
-        state.messages.set(msg.info.id, [msg.info as Message])
+        actions.setMessage(msg.info.sessionID, msg.info as Message)
         if (msg.parts?.length) {
-          state.parts.set(msg.info.id, msg.parts as Part[])
+          for (const part of msg.parts) {
+            actions.setPart(msg.info.id, part as Part)
+          }
         }
       }
       state.todos.set(sessionID, todos.data ?? [])
@@ -68,6 +70,14 @@ const ctx = createSimpleContext({
     function sessionStatus(sessionID: string): "idle" | "working" | "compacting" {
       const session = state.sessions.get(sessionID)
       if (!session) return "idle"
+      // session.status is a SessionStatus object ({ type: "idle" | "busy" | "retry" })
+      if ("status" in session && session.status) {
+        const st = session.status as any
+        const type = typeof st === "string" ? st : st.type
+        if (type === "idle") return "idle"
+        if (type === "busy") return "working"
+        if (type === "retry") return "working"
+      }
       if (session.time?.compacting) return "compacting"
       const msgs = state.messages.get(sessionID) ?? []
       const last = msgs.at(-1)

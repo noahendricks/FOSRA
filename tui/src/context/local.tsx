@@ -129,21 +129,41 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         pending: false,
       }
 
+      let writeTimer: ReturnType<typeof setTimeout> | null = null
+      function flushWrite() {
+        if (writeTimer) {
+          clearTimeout(writeTimer)
+          writeTimer = null
+        }
+        Filesystem.writeJson(filePath, {
+          model: modelStore.model,
+          recent: modelStore.recent,
+          favorite: modelStore.favorite,
+          variant: modelStore.variant ?? {},
+        }).catch(() => {})
+      }
+      function scheduleWrite() {
+        if (writeTimer) clearTimeout(writeTimer)
+        writeTimer = setTimeout(flushWrite, 500)
+      }
+      if (typeof process !== "undefined" && process.on) {
+        process.on("SIGTERM", flushWrite)
+        process.on("SIGINT", flushWrite)
+        process.on("exit", flushWrite)
+      }
+
       function save() {
         if (!modelStore.ready) {
           state.pending = true
           return
         }
         state.pending = false
-        Filesystem.writeJson(filePath, {
-          recent: modelStore.recent,
-          favorite: modelStore.favorite,
-          variant: modelStore.variant ?? {},
-        })
+        scheduleWrite()
       }
 
       Filesystem.readJson(filePath)
         .then((x: any) => {
+          if (typeof x.model === "object" && !Array.isArray(x.model)) setModelStore("model", x.model)
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object") setModelStore("variant", x.variant ?? {})
@@ -303,8 +323,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 "recent",
                 uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
               )
-              save()
             }
+            save()
           })
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {

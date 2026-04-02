@@ -7,6 +7,7 @@ export function registerMessageHandlers(
   actions: StoreActions,
 ) {
   router.on("message.updated", (props: any) => {
+    Log.Default.info("[SSE HANDLER] message.updated:", props.info?.role, "id:", props.info?.id, "session:", props.info?.sessionID)
     actions.setMessage(props.info.sessionID, props.info);
   });
 
@@ -23,7 +24,8 @@ export function registerMessageHandlers(
   });
 
   router.on("message.part.delta", (props: any) => {
+    Log.Default.info("[SSE HANDLER] message.part.delta received:", props.delta?.slice(0, 30), "field:", props.field)
     Log.Default.debug("[SSE HANDLER] message.part.delta:", JSON.stringify({ messageID: props.messageID, partID: props.partID, delta: props.delta?.slice(0, 50), field: props.field }))
-    actions.applyDelta(props.messageID, props.partID, props.delta, props.field);
+    actions.applyDelta(props.sessionID, props.messageID, props.partID, props.delta, props.field);
   });
 }
