@@ -1,70 +1,73 @@
 # %% Cell 1 - Imports
 import asyncio
 import time
-import numpy as np
 from pathlib import Path
+
+import icecream as ic
+import numpy as np
+from rich.console import Console
 
 # Rich and Icecream for pretty printing
 from rich.pretty import pprint as pp
-from rich.console import Console
-from rich.table import Table
 from rich.syntax import Syntax
+from rich.table import Table
 from rich.traceback import install
-import icecream as ic
 
 install(show_locals=True)
 
 console = Console()
-ic.configureOutput(prefix="DEBUG | ", includeContext=True)
+ic.ic.configureOutput(prefix="DEBUG | ", includeContext=True)
 
 # Qdrant imports
+# FalkorDB imports
+from falkordb import FalkorDB
 from qdrant_client import QdrantClient
 from qdrant_client.async_qdrant_client import AsyncQdrantClient
 
-# FalkorDB imports
-from falkordb import FalkorDB
+from backend.src.domain.enums import GraphNodeType, VectorStoreType
 
-# Config imports
-from backend.src.settings.config import (
-    EmbedderConfig,
-    VectorStoreConfig,
-    RerankerConfig,
-    QdrantConfig,
-    ChunkerConfig,
-    LLMConfig,
-)
-from backend.src.domain.enums import VectorStoreType, GraphNodeType
-
-# Service imports
-from backend.src.services.retrieval.vector_service import VectorService, RetrievedChunk
-from backend.src.services.retrieval.graph_service import GraphService
-from backend.src.services.retrieval.graph_retriever import GraphRetriever
-from backend.src.services.retrieval.reranker_service import RerankerService
-
-# Processing imports
-from backend.src.services.processing.chunker_service import ChunkerService
-from backend.src.services.processing.embedder_service import EmbedderService
-from backend.src.services.processing.loader_service import LoaderService
-from backend.src.services.processing.hi_chunk import HiChunk, HiChunkStructurer
-from backend.src.services.processing.callgraph_service import CallGraphService
+# Domain imports
+from backend.src.domain.schemas.doc import Chunk, Doc
+from backend.src.domain.schemas.retrieval import AccumulatedContext
+from backend.src.services.conversation.agent_service import create_fosra_agent
+from backend.src.services.conversation.query_expander import QueryExpander
 
 # Conversation/Agentic imports
 from backend.src.services.conversation.retrieval_pipeline import (
-    build_retrieval_pipeline,
     RetrievalState,
+    build_retrieval_pipeline,
 )
-from backend.src.services.conversation.query_expander import QueryExpander
 from backend.src.services.conversation.subagent import Subagent
 from backend.src.services.conversation.tools import (
     RetrievalResultStore,
     create_retrieval_tool,
 )
-from backend.src.services.conversation.agent_service import create_fosra_agent
-from backend.src.services.conversation.llm_service import LLMService
+from backend.src.services.processing.callgraph_service import CallGraphService
 
-# Domain imports
-from backend.src.domain.schemas.doc import Doc, Chunk
-from backend.src.domain.schemas.retrieval import AccumulatedContext
+# Processing imports
+from backend.src.services.processing.chunker_service import ChunkerService
+from backend.src.services.processing.embedder_service import (
+    EmbedderService,
+    bge_m3_embedder_config,
+)
+from backend.src.services.processing.hi_chunk import HiChunk, HiChunkStructurer
+from backend.src.services.processing.loader_service import LoaderService
+from backend.src.services.retrieval.graph_retriever import GraphRetriever
+from backend.src.services.retrieval.graph_service import GraphService
+from backend.src.services.retrieval.reranker_service import RerankerService
+
+# Service imports
+from backend.src.services.retrieval.vector_service import RetrievedChunk, VectorService
+
+# Config imports
+from backend.src.settings import (
+    ChunkerConfig,
+    EmbedderConfig,
+    QdrantConfig,
+    RerankerConfig,
+    VectorStoreConfig,
+)
+from backend.src.settings.config import LLMConfig
 
 pp("All imports successful!")
 
@@ -79,7 +82,7 @@ vector_store_config = VectorStoreConfig(
 )
 chunker_config = ChunkerConfig()
 reranker_config = RerankerConfig()
-llm_config = LLMService._resolve_llm_config(None)
+llm_config = LLMConfig()
 
 qdrant_client = QdrantClient(url="http://localhost:6333")
 qdrant_async_client = AsyncQdrantClient(url="http://localhost:6333")
@@ -89,14 +92,14 @@ graph_service = GraphService(client=falkordb_client, graph_name="codebase")
 graph_retriever = GraphRetriever(graph_service=graph_service)
 
 pp("=== SERVICES INITIALIZED ===")
-ic(embedder_config, vector_store_config, reranker_config, llm_config)
-ic(type(qdrant_client), type(falkordb_client))
+ic.ic(embedder_config, vector_store_config, reranker_config, llm_config)
+ic.ic(type(qdrant_client), type(falkordb_client))
 pp(f"LLM: {llm_config.provider}/{llm_config.model}")
 
 
 # %% Cell 3 - Ensure Qdrant Collections Exist
 async def setup_collections():
-    await VectorService.ensure_dual_collections(qdrant_async_client, embedder_config)
+    await VectorService.ensure_collection(qdrant_async_client, embedder_config)
 
 
 await setup_collections()  # pyright: ignore
@@ -112,7 +115,7 @@ setup_graph_indexes()
 pp("FalkorDB indexes created/verified")
 
 # %% Cell 5 - INGESTION: Qdrant Docs Folder
-QDRANT_DOCS_FOLDER = "/home/roccoluxe/Documents/docs/03-databases/qdrant"
+QDRANT_DOCS_FOLDER = "/home/roccoluxe/Documents/docs/03-databases/qdrant/01-core-concepts/documentation_concepts_collections.md"
 
 
 async def ingest_qdrant_docs_folder():
@@ -121,7 +124,7 @@ async def ingest_qdrant_docs_folder():
     embedder = EmbedderService()
 
     docs = loader._parse_directory(QDRANT_DOCS_FOLDER)
-    ic(docs)
+    ic.ic(docs)
 
     all_chunks = []
     for doc in docs:
@@ -169,12 +172,12 @@ async def ingest_qdrant_docs_folder():
 qdrant_docs_result = await ingest_qdrant_docs_folder()  # pyright: ignore
 QDRANT_DOC_IDS = {doc.id for doc in qdrant_docs_result["docs"]}
 pp("=== QDRANT DOCS INGESTION COMPLETE ===")
-ic(
+ic.ic(
     qdrant_docs_result["docs_count"],
     qdrant_docs_result["parent_chunks_upserted"],
     qdrant_docs_result["leaf_chunks_upserted"],
 )
-ic(QDRANT_DOC_IDS)
+ic.ic(QDRANT_DOC_IDS)
 
 # %% Cell 6 - INGESTION: Single Markdown File
 SINGLE_FILE_PATH = "/home/roccoluxe/Documents/docs/03-databases/qdrant/01-core-concepts/documentation_concepts_filtering.md"
@@ -229,8 +232,8 @@ async def ingest_single_file():
 single_file_result = await ingest_single_file()  # pyright: ignore
 SINGLE_FILE_DOC_ID = single_file_result["doc"].id
 pp("=== SINGLE FILE INGESTION COMPLETE ===")
-ic(single_file_result["doc"].metadata.doc_title, SINGLE_FILE_DOC_ID)
-ic(
+ic.ic(single_file_result["doc"].metadata.doc_title, SINGLE_FILE_DOC_ID)
+ic.ic(
     single_file_result["parent_chunks_upserted"],
     single_file_result["leaf_chunks_upserted"],
 )
@@ -241,8 +244,8 @@ CODEBASE_REPO_NAME = "trustgraph"
 
 
 async def ingest_codebase():
-    from pathlib import Path
     import hashlib
+    from pathlib import Path
 
     callgraph_service = CallGraphService()
 
@@ -313,7 +316,7 @@ async def ingest_codebase():
                 codebase_graph_results.append(graph_result)
 
         except Exception as e:
-            ic(file_path, e)
+            ic.ic(file_path, e)
 
     codebase_result = {
         "files_processed": stats["files_processed"],
@@ -327,8 +330,8 @@ async def ingest_codebase():
 codebase_result = await ingest_codebase()  # pyright: ignore
 CODEBASE_FILE_IDS = {gr.file_id for gr in codebase_result["graph_results"]}
 pp("=== CODEBASE INGESTION COMPLETE ===")
-ic(codebase_result)
-ic(list(CODEBASE_FILE_IDS)[:5])
+ic.ic(codebase_result)
+ic.ic(list(CODEBASE_FILE_IDS)[:5])
 
 
 # %% Cell 8 - INGESTION SUMMARY
@@ -347,7 +350,7 @@ async def get_ingestion_stats():
 
 ingestion_stats = await get_ingestion_stats()  # pyright: ignore
 pp("=== INGESTION SUMMARY ===")
-ic(ingestion_stats)
+ic.ic(ingestion_stats)
 
 
 # %% Cell 9 - STEP 1: Query Expansion
@@ -363,7 +366,7 @@ async def test_query_expansion(user_query: str):
 QUERY = "How does filtering work in Qdrant?"
 query_expansion = await test_query_expansion(QUERY)  # pyright: ignore
 pp(f"=== QUERY EXPANSION: '{QUERY}' ===")
-ic(query_expansion.rewritten_query)
+ic.ic(query_expansion.rewritten_query)
 pp("Checklist:")
 
 table = Table(title="Query Expansion Checklist")
@@ -400,7 +403,7 @@ INITIAL_QUERY = query_expansion.rewritten_query
 initial_retrieval_result = await test_initial_retrieval(INITIAL_QUERY)  # pyright: ignore
 pp(f"=== INITIAL RETRIEVAL ===")
 pp(f"Query: {INITIAL_QUERY}")
-ic(
+ic.ic(
     len(initial_retrieval_result["parent_results"]),
     initial_retrieval_result["file_ids"],
 )
@@ -457,7 +460,7 @@ agentic_result_1 = await test_agentic_loop(  # pyright: ignore
 )
 
 pp("=== AGENTIC LOOP ITERATION 1 ===")
-ic(agentic_result_1.all_answered)
+ic.ic(agentic_result_1.all_answered)
 
 table = Table(title="Checklist")
 table.add_column("ID", style="cyan")
@@ -470,14 +473,14 @@ console.print(table)
 
 pp("Planned Retrieval Queries:")
 for i, rq in enumerate(agentic_result_1.retrieval_queries):
-    ic(i + 1, rq.target.value, rq.query)
+    ic.ic(i + 1, rq.target.value, rq.query)
 
 
 # %% Cell 12 - STEP 4: Execute Retrieval Queries
 async def execute_retrieval_queries(
     retrieval_queries: list, current_context: AccumulatedContext
 ):
-    from backend.src.domain.schemas.retrieval import RetrievalTarget, AccumulatedItem
+    from backend.src.domain.schemas.retrieval import AccumulatedItem, RetrievalTarget
 
     new_items = []
 
@@ -515,8 +518,9 @@ async def execute_retrieval_queries(
             rq.target in (RetrievalTarget.GRAPH, RetrievalTarget.BOTH)
             and falkordb_client
         ):
+            code_embedder_config = bge_m3_embedder_config()
             embedder = EmbedderService()
-            embedded = await embedder.embed_query(rq.query, embedder_config)
+            embedded = await embedder.embed_query(rq.query, code_embedder_config)
             if embedded and embedded.dense:
                 node_types = None
                 if rq.filters and rq.filters.node_type:
@@ -536,17 +540,27 @@ async def execute_retrieval_queries(
                     ]
 
                 try:
-                    result = await graph_service.semantic_search(
+                    result = await graph_service.hybrid_code_search(
+                        query=rq.query,
                         query_embedding=embedded.dense,
                         node_types=node_types,
                         file_ids=file_ids,
                         limit=10,
+                        expand=True,
                     )
+
+                    reranker = RerankerService(reranker_config)
+                    if result.nodes:
+                        result.nodes = reranker.rerank_code_nodes(
+                            query=rq.query,
+                            nodes=result.nodes,
+                            top_k=10,
+                        )
 
                     for node in result.nodes:
                         new_items.append(node.to_accumulated_item())
                 except Exception as e:
-                    ic(e)
+                    ic.ic(e)
 
     updated_context = current_context.add_items(new_items)
     return updated_context, new_items
@@ -557,7 +571,7 @@ if agentic_result_1.retrieval_queries:
         agentic_result_1.retrieval_queries, initial_context
     )
     pp("=== RETRIEVAL EXECUTION COMPLETE ===")
-    ic(len(new_items), len(updated_context.items))
+    ic.ic(len(new_items), len(updated_context.items))
 else:
     updated_context = initial_context
     pp("No retrieval queries to execute")
@@ -571,7 +585,7 @@ agentic_result_2 = await test_agentic_loop(  # pyright: ignore
 )
 
 pp("=== AGENTIC LOOP ITERATION 2 ===")
-ic(agentic_result_2.all_answered)
+ic.ic(agentic_result_2.all_answered)
 
 table = Table(title="Updated Checklist")
 table.add_column("ID", style="cyan")
@@ -584,7 +598,7 @@ console.print(table)
 
 pp("Planned Retrieval Queries:")
 for i, rq in enumerate(agentic_result_2.retrieval_queries):
-    ic(i + 1, rq.target.value, rq.query)
+    ic.ic(i + 1, rq.target.value, rq.query)
 
 
 # %% Cell 14 - STEP 6: Final Rerank
@@ -618,7 +632,7 @@ def test_rerank_final(user_query: str, context: AccumulatedContext):
 
 final_context = test_rerank_final(QUERY, updated_context)
 pp("=== FINAL RERANKED CONTEXT ===")
-ic(len(final_context.items))
+ic.ic(len(final_context.items))
 pp("Formatted Context Preview:")
 console.print(
     Syntax(
@@ -654,8 +668,8 @@ pipeline_result = await run_full_retrieval_pipeline(PIPELINE_QUERY)  # pyright: 
 elapsed = time.time() - start_time
 
 pp(f"Pipeline completed in {elapsed:.2f}s")
-ic(pipeline_result.get("iteration"), pipeline_result.get("file_ids"))
-ic(len(pipeline_result.get("accumulated_context", AccumulatedContext()).items))
+ic.ic(pipeline_result.get("iteration"), pipeline_result.get("file_ids"))
+ic.ic(len(pipeline_result.get("accumulated_context", AccumulatedContext()).items))
 
 pp("Formatted Context Preview:")
 console.print(
@@ -682,7 +696,7 @@ retrieval_tool = create_retrieval_tool(
 )
 
 pp("=== RETRIEVAL TOOL CREATED ===")
-ic(retrieval_tool.name)
+ic.ic(retrieval_tool.name)
 pp(f"Description: {retrieval_tool.description[:100]}...")
 
 TOOL_TEST_QUERY = "What is vector search in Qdrant?"
@@ -694,20 +708,21 @@ tool_result = await retrieval_tool.ainvoke({"query": TOOL_TEST_QUERY, "target": 
 elapsed = time.time() - start_time
 
 pp(f"Completed in {elapsed:.2f}s")
-ic(len(result_store.items))
+ic.ic(len(result_store.items))
 pp("Result Preview:")
 console.print(Syntax(tool_result[:500], "markdown", theme="monokai", line_numbers=True))
 
 # %% Cell 17 - FOSRA AGENT
 from backend.src.services.conversation.utils.prompts import FOSRA_AGENT_SYSTEM_PROMPT
+from backend.src.settings.config import UserPreferences
 
 agent, agent_result_store = create_fosra_agent(
-    user_prefs=None,
+    user_prefs=UserPreferences(),
     system_prompt=FOSRA_AGENT_SYSTEM_PROMPT,
 )
 
 pp("=== FOSRA AGENT CREATED ===")
-ic(type(agent).__name__, type(agent_result_store).__name__)
+ic.ic(type(agent).__name__, type(agent_result_store).__name__)
 
 
 # %% Cell 18 - UTILITY: Collection Stats
@@ -719,7 +734,7 @@ async def count_collections():
 
 counts = await count_collections()  # pyright: ignore
 pp("=== COLLECTION COUNTS ===")
-ic(counts)
+ic.ic(counts)
 
 pp("=== REPL Ready for Interactive Testing ===")
 pp(
