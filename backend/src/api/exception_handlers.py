@@ -54,10 +54,10 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    from fastapi import ValidationError
+    from fastapi.exceptions import RequestValidationError
     from starlette.status import HTTP_404_NOT_FOUND, HTTP_503_SERVICE_UNAVAILABLE
 
-    app.add_exception_handler(ValidationError, validation_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(HTTP_404_NOT_FOUND, not_found_exception_handler)
     app.add_exception_handler(HTTP_503_SERVICE_UNAVAILABLE, service_unavailable_handler)
     app.add_exception_handler(Exception, generic_exception_handler)

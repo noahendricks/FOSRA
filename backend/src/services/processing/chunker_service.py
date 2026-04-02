@@ -14,6 +14,7 @@ from backend.src.domain.schemas.doc import (
     Chunk,
     ChunkMetadata,
     Doc,
+    DocMetadata,
     PDFMetadata,
     TextMetadata,
 )
@@ -130,10 +131,71 @@ class ChunkerService:
 
     @staticmethod
     async def _chunk_text(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
-        """Handle text file chunking."""
+        """Handle text file chunking.
+
+        Uses pre-extracted sections from kreuzberg if available, otherwise
+        falls back to flat HiChunk on the full page_content.
+        """
+        if doc.metadata.sections:
+            return await ChunkerService._chunk_by_sections(doc, config)
+
         structurer = HiChunkStructurer(config=config)
         chunks = HiChunk.index(document=doc, structurer=structurer)
         return chunks
+
+    @staticmethod
+    async def _chunk_by_sections(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
+        """Chunk using pre-grouped sections (from docling or kreuzberg).
+
+        Each section's text is passed to HiChunk independently, and every
+        resulting chunk inherits the section's positional metadata.
+        Uses section.section_text when available (docling), otherwise falls
+        back to SectionGrouper.section_text() concatenation (kreuzberg).
+        """
+        from backend.src.services.processing.kreuzberg_extractor import (
+            SectionGrouper,
+        )
+
+        all_chunks: list[Chunk] = []
+        structurer = HiChunkStructurer(config=config)
+
+        for section in doc.metadata.sections:
+            section_text = (
+                section.section_text
+                if section.section_text
+                else SectionGrouper.section_text(section)
+            )
+            if not section_text.strip():
+                continue
+
+            section_doc = Doc(
+                id=doc.id,
+                page_content=section_text,
+                metadata=DocMetadata(
+                    source=doc.metadata.source,
+                    mime_type=doc.metadata.mime_type,
+                    doc_id=doc.metadata.doc_id,
+                    doc_title=doc.metadata.doc_title,
+                    path=doc.metadata.path,
+                    language=doc.metadata.language,
+                    repo=doc.metadata.repo,
+                    source_type=doc.metadata.source_type,
+                    checksum=doc.metadata.checksum,
+                    section_heading=section.heading,
+                ),
+            )
+
+            section_chunks = HiChunk.index(document=section_doc, structurer=structurer)
+
+            for c in section_chunks:
+                c.metadata.page_number = section.start_page
+                c.metadata.doc_title = doc.metadata.doc_title
+                c.metadata.section_heading = section.heading
+                c.metadata.element_ids = section.element_ids
+
+            all_chunks.extend(section_chunks)
+
+        return all_chunks
 
     # NOTE: ADD PDF CHUNKING LATER
     #       needs page level chunking,

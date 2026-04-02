@@ -87,12 +87,6 @@ CALL_QUERY_PATTERNS = {
             field: (field_identifier) @callee_name
           )
         ) @call_expr
-        (call_expression
-          function: (selector_expression
-            operand: (pkg_import) @pkg
-            field: (field_identifier) @callee_name
-          )
-        ) @call_expr
     """,
     "rust": """
         (call_expression
@@ -102,12 +96,6 @@ CALL_QUERY_PATTERNS = {
           function: (field_expression
             value: (identifier) @obj
             field: (field_identifier) @callee_name
-          )
-        ) @call_expr
-        (call_expression
-          function: (scoped_identifier
-            path: (identifier) @mod
-            name: (type_identifier) @callee_name
           )
         ) @call_expr
     """,
@@ -147,19 +135,16 @@ FUNCTION_QUERY_PATTERNS = {
         (function_declaration
           name: (identifier) @name
           parameters: (parameter_list) @params
-          result: (parameter_list)? @return_type
         ) @func
         (method_declaration
           name: (field_identifier) @name
           parameters: (parameter_list) @params
-          receiver: (parameter_list) @receiver
         ) @method
     """,
     "rust": """
         (function_item
           name: (identifier) @name
           parameters: (parameters) @params
-          return_type: (type)? @return_type
         ) @func
     """,
 }
@@ -271,6 +256,8 @@ class CallGraphService:
             root, source_code, file_path, file_id, language, nodes
         )
 
+        method_edges = self._extract_method_edges(nodes, file_id)
+
         imports = self._extract_imports(parse_result, file_id)
 
         return GraphResult(
@@ -280,6 +267,7 @@ class CallGraphService:
             nodes=nodes,
             call_edges=call_edges,
             inheritance_edges=inheritance_edges,
+            method_edges=method_edges,
             imports=imports,
         )
 
@@ -677,7 +665,14 @@ class CallGraphService:
     def _is_method(self, func_node: Any, language: str) -> bool:
         if language == "python":
             parent = func_node.parent
-            return parent is not None and parent.type == "class_definition"
+            if parent is not None and parent.type == "class_definition":
+                return True
+            if parent is not None and parent.type == "block":
+                block_parent = parent.parent
+                return (
+                    block_parent is not None and block_parent.type == "class_definition"
+                )
+            return False
         if language == "go":
             receiver = func_node.child_by_field_name("receiver")
             return receiver is not None
@@ -750,6 +745,82 @@ class CallGraphService:
                         if expr and expr.type == "string":
                             doc = source_code[expr.start_byte : expr.end_byte]
                             return doc.strip("\"'")
+        elif language in ("javascript", "typescript"):
+            doc = self._extract_js_docstring(func_node, source_code)
+            if doc:
+                return doc
+        elif language == "go":
+            doc = self._extract_go_docstring(func_node, source_code)
+            if doc:
+                return doc
+        elif language == "rust":
+            doc = self._extract_rust_docstring(func_node, source_code)
+            if doc:
+                return doc
+        return None
+
+    def _extract_js_docstring(
+        self,
+        func_node: Any,
+        source_code: str,
+    ) -> str | None:
+        prev_sibling = func_node.prev_sibling
+        if prev_sibling and prev_sibling.type == "comment":
+            text = source_code[prev_sibling.start_byte : prev_sibling.end_byte]
+            if text.strip().startswith("/**"):
+                text = text.strip()[3:].rstrip("*/")
+                return text.strip()
+        return None
+
+    def _extract_go_docstring(
+        self,
+        func_node: Any,
+        source_code: str,
+    ) -> str | None:
+        start_byte = func_node.start_byte
+        if start_byte == 0:
+            return None
+        line_start = source_code.rfind("\n", 0, start_byte)
+        if line_start == -1:
+            line_start = 0
+        else:
+            line_start += 1
+        search_end = start_byte
+        lines: list[str] = []
+        while line_start < search_end:
+            line_end = source_code.find("\n", line_start, search_end)
+            if line_end == -1:
+                line_end = search_end
+            line = source_code[line_start:line_end]
+            stripped = line.strip()
+            if stripped.startswith("//"):
+                lines.append(stripped[2:].strip())
+            else:
+                if stripped and not stripped.startswith("package"):
+                    break
+                if not stripped:
+                    break
+                if not stripped.startswith("//"):
+                    break
+            line_start = line_end + 1
+            if not lines and line_start >= search_end:
+                break
+        return " ".join(lines) if lines else None
+
+    def _extract_rust_docstring(
+        self,
+        func_node: Any,
+        source_code: str,
+    ) -> str | None:
+        prev_sibling = func_node.prev_sibling
+        if prev_sibling and prev_sibling.type == "comment":
+            text = source_code[prev_sibling.start_byte : prev_sibling.end_byte]
+            stripped = text.strip()
+            if stripped.startswith("///"):
+                return stripped[3:].strip()
+            if stripped.startswith("/**"):
+                text = stripped[3:].rstrip("*/")
+                return text.strip()
         return None
 
     def _extract_call_edges(
@@ -870,6 +941,38 @@ class CallGraphService:
                                     is_cross_file=False,
                                 )
                             )
+
+        return edges
+
+    def _extract_method_edges(
+        self,
+        nodes: list[CodeNode],
+        file_id: str,
+    ) -> list[MethodEdge]:
+        """Create DEFINES_METHOD edges from Class nodes to their Method nodes."""
+        edges = []
+        class_map: dict[str, CodeNode] = {
+            n.qualified_name: n for n in nodes if n.node_type == GraphNodeType.CLASS
+        }
+
+        for node in nodes:
+            if node.node_type == GraphNodeType.METHOD and node.metadata.get(
+                "containing_class"
+            ):
+                class_name = node.metadata["containing_class"]
+                class_qualified = f"{node.file_path}:{class_name}"
+                class_node = class_map.get(class_qualified)
+                if class_node:
+                    edges.append(
+                        MethodEdge(
+                            class_name=class_name,
+                            class_qualified=class_node.qualified_name,
+                            class_file_id=file_id,
+                            method_name=node.name,
+                            method_qualified=node.qualified_name,
+                            method_file_id=file_id,
+                        )
+                    )
 
         return edges
 

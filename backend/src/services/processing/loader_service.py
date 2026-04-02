@@ -43,7 +43,6 @@ class LoaderService:
 
         from backend.src.services.processing.utils.loader import code_mimes
 
-        # TODO: MAKE ASYNC
         docs = []
 
         for file in files:
@@ -51,12 +50,9 @@ class LoaderService:
                 file = file.as_posix()
 
             if isinstance(file, str):
-                # determine route to parse based on file type
                 mime_type = get_mime(file)
-
                 logger.debug("Detected mime type: {}", mime_type)
             elif isinstance(file, MDNFile):
-                # NOTE: This is for browser received files as bytes, Will have to switch to magic library (magic.from_buffer) when i switch to browser ingest
                 raise NotImplementedError("MDNFiles cant be ingested yet")
             else:
                 raise RuntimeError(f"Incorrect File Type at Ingestion: {type(file)}")
@@ -64,22 +60,40 @@ class LoaderService:
             id = ulid_factory()
 
             match mime_type:
-                # NOTE: deal with PDF specifics later
-                case "text/markdown" | "text/plain":
+                case "application/pdf":
                     file_bytes = to_bytes(file)
-
-                    # TODO: hash bytes
-
                     blob: Blob = Blob.from_data(
                         file_bytes,
                         mime_type=mime_type,
                         path=file,
                     )
+                    from backend.src.services.processing.docling_loader import (
+                        DoclingLoader,
+                    )
 
-                    text_docs: list[Document] = TextParser().parse(blob)
+                    try:
+                        d = DoclingLoader.parse_file_sync(file, mime_type=mime_type)
+                        docs.append(d)
+                        logger.debug(
+                            "created (docling) {}: {}: {}",
+                            d.metadata.mime_type,
+                            d.metadata.source,
+                            d.id,
+                        )
+                        continue
+                    except Exception as ex:
+                        logger.warning(
+                            "Docling failed for {}, falling back to PyMuPDFParser: {}",
+                            file,
+                            ex,
+                        )
+                        pass
 
-                    for lc_doc in text_docs:
-                        d: Doc = Doc(
+                    pdf_docs: list[Document] = PyMuPDFParser(mode="single").parse(
+                        blob=blob
+                    )
+                    for lc_doc in pdf_docs:
+                        d = Doc(
                             id=ulid_factory(),
                             page_content=lc_doc.page_content,
                             metadata=DocMetadata(
@@ -89,32 +103,62 @@ class LoaderService:
                                 doc_title=Path(file).name,
                             ),
                         )
+                        docs.append(d)
 
+                case "text/markdown" | "text/plain":
+                    from backend.src.services.processing.docling_loader import (
+                        DoclingLoader,
+                    )
+
+                    try:
+                        d = DoclingLoader.parse_file_sync(file, mime_type=mime_type)
+                        docs.append(d)
                         logger.debug(
-                            "created {}: {}: {}",
+                            "created (docling) {}: {}: {}",
                             d.metadata.mime_type,
                             d.metadata.source,
                             d.id,
                         )
+                        continue
+                    except Exception as ex:
+                        logger.warning(
+                            "Docling failed for {}, falling back to TextParser: {}",
+                            file,
+                            ex,
+                        )
 
+                    file_bytes = to_bytes(file)
+                    blob: Blob = Blob.from_data(
+                        file_bytes,
+                        mime_type=mime_type,
+                        path=file,
+                    )
+                    text_docs: list[Document] = TextParser().parse(blob)
+
+                    for lc_doc in text_docs:
+                        d = Doc(
+                            id=ulid_factory(),
+                            page_content=lc_doc.page_content,
+                            metadata=DocMetadata(
+                                mime_type=mime_type,
+                                source=file,
+                                doc_id=ulid_factory(),
+                                doc_title=Path(file).name,
+                            ),
+                        )
                         docs.append(d)
 
                 case _ if mime_type in code_mimes:
-                    "code in code mimes"
                     file_bytes = to_bytes(file)
-
                     blob: Blob = Blob.from_data(
                         file_bytes,
                         mime_type=mime_type,
                         path=file,
                     )
-
                     text_docs: list[Document] = TextParser().parse(blob)
 
                     for lc_doc in text_docs:
-                        #!todo: combine all documents and use page content to get doc hash
-
-                        d: Doc = Doc(
+                        d = Doc(
                             id=ulid_factory(),
                             page_content=lc_doc.page_content,
                             metadata=DocMetadata(
@@ -124,36 +168,7 @@ class LoaderService:
                                 doc_title=Path(file).name,
                             ),
                         )
-                        logger.debug(
-                            "created {}: {}: {}",
-                            d.metadata.mime_type,
-                            d.metadata.source,
-                            d.id,
-                        )
-
                         docs.append(d)
-
-                # case "application/pdf":
-                #     # pdf parsing
-                #     file_bytes = to_bytes(file)
-                #
-                #     blob: Blob = Blob.from_data(
-                #         file_bytes,
-                #         mime_type=mime_type,
-                #         path=file,
-                #     )
-                #
-                #     print(blob)
-                #
-                #     pdf_docs: list[Document] = PyMuPDFParser(mode="single").parse(
-                #         blob=blob
-                #     )
-                #
-                #     for lc_doc in pdf_docs:
-                #         lc_doc.metadata["mime_type"] = mime_type
-                #
-                #         d.id = id
-                #         docs.append(d)
 
                 case _:
                     pass

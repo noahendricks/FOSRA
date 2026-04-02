@@ -19,6 +19,7 @@ from backend.src.api.routes.tui import router as tui_router
 from backend.src.api.routes.workspace import router as workspace_router
 from backend.src.settings.observe import setup_telemetry
 from backend.src.tasks.broker import broker
+from backend.src.settings import settings
 
 # install(show_locals=True)
 
@@ -106,13 +107,9 @@ app.include_router(tui_router)
 
 app.add_middleware(
     middleware_class=CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://localhost:5173",
-    ],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors.allowed_origins,
+    allow_methods=settings.cors.allowed_methods,
+    allow_headers=settings.cors.allowed_headers,
 )
 
 
@@ -134,6 +131,11 @@ from rich.console import Console
 #         )
 #     )
 #     return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

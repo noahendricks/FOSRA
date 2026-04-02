@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from backend.src.services.retrieval.vector_service import RetrievedChunk
 
 from backend.src.domain.enums import RerankerType
+from backend.src.domain.schemas.graph import CodeNode
 
 
 # =============================================================================
@@ -176,3 +177,66 @@ class RerankerService:
                 e,
             )
             return self._rank_flashrank(query, chunks, top_k, score_threshold)
+
+    def rerank_code_nodes(
+        self,
+        query: str,
+        nodes: list[CodeNode],
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+    ) -> list[CodeNode]:
+        """Rerank code graph nodes against a query.
+
+        Adapts CodeNode → RetrievedChunk, reranks, returns reranked CodeNodes.
+        """
+        from backend.src.services.retrieval.vector_service import RetrievedChunk
+
+        if not nodes:
+            return []
+
+        top_k = top_k or self._config.top_k or 10
+        score_threshold = (
+            score_threshold
+            if score_threshold is not None
+            else self._config.score_threshold
+        )
+
+        def to_retrieved(node: CodeNode) -> RetrievedChunk:
+            content_parts = []
+            if node.signature:
+                content_parts.append(node._signature_to_string())
+            if node.docstring:
+                content_parts.append(node.docstring)
+            if node.source_code:
+                content_parts.append(node.source_code)
+            text = "\n\n".join(content_parts) if content_parts else node.name
+            return RetrievedChunk(
+                text=text,
+                token_count=len(text) // 4,
+                start_char=0,
+                score=0.0,
+                payload={
+                    "qualified_name": node.qualified_name,
+                    "chunk_id": node.qualified_name,
+                },
+            )
+
+        chunks = [to_retrieved(n) for n in nodes]
+        try:
+            reranked_chunks = self.rerank(
+                query=query,
+                chunks=chunks,
+                top_k=top_k,
+                score_threshold=score_threshold,
+            )
+        except Exception as e:
+            logger.warning(f"Code node reranking failed: {e}")
+            return nodes[:top_k]
+
+        reranked_qns = {c.payload["qualified_name"] for c in reranked_chunks}
+        result: list[CodeNode] = []
+        qn_map = {n.qualified_name: n for n in nodes}
+        for qn in reranked_qns:
+            if qn in qn_map:
+                result.append(qn_map[qn])
+        return result

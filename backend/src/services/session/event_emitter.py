@@ -139,10 +139,14 @@ class EventEmitter:
             "question.rejected", {"sessionID": session_id, "requestID": request_id}
         )
 
-    async def emit_todo_updated(
-        self, session_id: str, todos: list[dict[str, Any]]
-    ) -> None:
-        await self.emit("todo.updated", {"sessionID": session_id, "todos": todos})
+    async def emit_todo_created(self, session_id: str, todo: dict[str, Any]) -> None:
+        await self.emit("todo.created", {"sessionID": session_id, "todo": todo})
+
+    async def emit_todo_updated(self, session_id: str, todo: dict[str, Any]) -> None:
+        await self.emit("todo.updated", {"sessionID": session_id, "todo": todo})
+
+    async def emit_todo_deleted(self, session_id: str, todo: dict[str, Any]) -> None:
+        await self.emit("todo.deleted", {"sessionID": session_id, "todo": todo})
 
     async def emit_lsp_updated(self, status: dict[str, Any]) -> None:
         await self.emit("lsp.updated", status)

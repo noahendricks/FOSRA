@@ -133,6 +133,10 @@ class DocMetadata(_BaseModelFlex):
     repo: str | None = None
     source_type: str = "doc"
     checksum: str | None = None
+    sections: list[Section] = Field(
+        default_factory=list
+    )  # populated by kreuzberg extraction
+    section_heading: str | None = None  # active section heading during chunking
 
 
 class Doc(BaseModel):
@@ -195,6 +199,8 @@ class ChunkMetadata(_BaseModelFlex):
     dense_embedding: list[float] = []
     sparse_embedding: Any | SparseVector = None
     parent: HierarchicalChunk | None = Field(default=None, validate_default=False)
+    section_heading: str | None = None
+    element_ids: list[str] = Field(default_factory=list)
 
 
 class Chunk(_BaseModelFlex):
@@ -212,3 +218,25 @@ class Chunk(_BaseModelFlex):
         )
 
         return cls(text=chunk.text, metadata=_meta)
+
+
+class ElementPosition(_BaseModelFlex):
+    """Positional metadata for a single kreuzberg element."""
+
+    page_number: int
+    element_index: int
+    element_id: str
+    additional: dict[str, Any] | None = None
+
+
+class Section(_BaseModelFlex):
+    """A logical section of elements grouped by heading boundary."""
+
+    elements: list[dict[str, Any]]  # kreuzberg element dicts
+    section_text: str | None = None  # docling: combined text of all items in section
+    heading: str | None = None  # section heading text (full path for docling)
+    heading_path: list[str] | None = None  # docling: full heading hierarchy
+    start_page: int | None = None
+    end_page: int | None = None
+    element_ids: list[str] = Field(default_factory=list)
+    section_index: int = 0

@@ -11,18 +11,17 @@ from chonkie import (
     CodeChunker,
     LateChunker,
     NeuralChunker,
+    RecursiveChunker,
     SentenceChunker,
     SentenceTransformerEmbeddings,
     TokenChunker,
 )
 from chonkie.refinery import EmbeddingsRefinery
 from loguru import logger
-from pydantic import BaseModel, ConfigDict
-from pydantic.v1.utils import to_camel
 from qdrant_client.models import PointStruct
 
+from backend.src.api.schemas.base import _BaseModelFlexLower as _BaseModelFlex
 from backend.src.domain.enums import ChunkerType
-from backend.src.settings import ChunkerConfig, EmbedderConfig
 from backend.src.domain.schemas.doc import (
     Chunk,
     ChunkMetadata,
@@ -34,20 +33,7 @@ from backend.src.domain.schemas.doc import (
     SimplifiedCodeMetadata,
     TextMetadata,
 )
-
-
-class _BaseModelFlex(BaseModel):
-    """_BaseModelFlex with flexible config for attribute-based initialization."""
-
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-        str_to_lower=True,
-    )
-
-    model_config = _FLEXIBLE_CONFIG
+from backend.src.settings import ChunkerConfig, EmbedderConfig
 
 
 class FlatChunkProducer:
@@ -115,10 +101,15 @@ class HiChunkStructurer:
                     # neuralchunker token-classification to predict segment boundaries
                     self.l1_chunker = NeuralChunker(**config.neural_config.model_dump())
 
-                    self.l2_chunker = NeuralChunker(
-                        model=config.neural_config.model,
-                        min_characters_per_chunk=128,
+                    # L2: RecursiveChunker with ~512 token target, from config
+                    from chonkie import RecursiveRules
+
+                    rec_dump = config.recursive_config.model_dump(
+                        exclude={"chunk_overlap"}
                     )
+                    if isinstance(rec_dump.get("rules"), dict):
+                        rec_dump["rules"] = RecursiveRules.from_dict(rec_dump["rules"])
+                    self.l2_chunker = RecursiveChunker(**rec_dump)
                 else:
                     raise ImportError("Install chonkie with NeuralChunker support.")
 
@@ -158,7 +149,7 @@ class HiChunkStructurer:
 
         l1_chunks: list[HierarchicalChunk] = []
 
-        # WARN: CHECK IF METADATA [ESPECIALLY CODE] IS MAKES SENSE HIERARCHICALLY
+        # WARN: CHECK IF METADATA [ESPECIALLY CODE] MAKES SENSE HIERARCHICALLY
         if not isinstance(l1_raw, list):
             l1_raw = [l1_raw]
 

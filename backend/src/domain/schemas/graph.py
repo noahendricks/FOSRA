@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pydantic import Field as PydanticField
+
 from backend.src.api.schemas.base import _BaseModelFlex
 from backend.src.domain.enums import GraphNodeType
 from backend.src.storage.utils.converters import DomainStruct
@@ -169,10 +171,10 @@ class GraphResult(_BaseModelFlex):
     file_path: str
     language: str
     nodes: list[CodeNode]
-    call_edges: list[CallEdge] = field(default_factory=list)
-    inheritance_edges: list[InheritanceEdge] = field(default_factory=list)
-    method_edges: list[MethodEdge] = field(default_factory=list)
-    imports: list[ResolvedImport] = field(default_factory=list)
+    call_edges: list[CallEdge] = PydanticField(default_factory=list)
+    inheritance_edges: list[InheritanceEdge] = PydanticField(default_factory=list)
+    method_edges: list[MethodEdge] = PydanticField(default_factory=list)
+    imports: list[ResolvedImport] = PydanticField(default_factory=list)
 
     @property
     def functions(self) -> list[CodeNode]:

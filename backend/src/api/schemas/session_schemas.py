@@ -50,6 +50,10 @@ class SessionStatusRetry(BaseModel):
 SessionStatus = Union[SessionStatusIdle, SessionStatusBusy, SessionStatusRetry]
 
 
+class SessionMetadataModel(BaseModel):
+    model: Optional[dict[str, Any]] = None
+
+
 class Session(BaseModel):
     id: str
     slug: str
@@ -64,6 +68,7 @@ class Session(BaseModel):
     time: SessionTime
     permission: Optional[Any] = None
     revert: Optional[SessionRevert] = None
+    metadata: Optional[SessionMetadataModel] = None
 
 
 class GlobalSession(BaseModel):

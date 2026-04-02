@@ -18,22 +18,23 @@ Usage::
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
-from deepagents.middleware.skills import SkillsMiddleware
-from deepagents.middleware.summarization import SummarizationMiddleware
+from falkordb import FalkorDB
 from loguru import logger
 
 from backend.src.services.conversation.tools import (
     RetrievalResultStore,
+    create_graph_tool,
     create_retrieval_tool,
 )
 from backend.src.services.conversation.utils.llm_utils import build_llm
-from backend.src.settings import LLMConfig
+from backend.src.settings import LLMConfig, settings
 from backend.src.settings.config import EmbedderConfig, VectorStoreConfig
-from backend.src.settings.fosra_dirs import fosra_dirs
+from backend.src.settings.fosra_paths import fosra_paths
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -46,6 +47,7 @@ def create_fosra_agent(
     system_prompt: str | None = None,
     backend: Any | None = None,
     checkpointer: Any | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> tuple[CompiledStateGraph, RetrievalResultStore]:
     """Create a FOSRA agent with retrieval capabilities.
 
@@ -60,6 +62,9 @@ def create_fosra_agent(
     backend:
         Optional filesystem backend for coding mode. When provided,
         the agent gets read/write/edit/grep/glob tools.
+    llm_config:
+        Explicit LLM configuration. When provided, takes priority over
+        user_prefs chain. Used when the TUI sends providerID/modelID.
 
     Returns
     -------
@@ -79,31 +84,32 @@ def create_fosra_agent(
         system_prompt = FOSRA_AGENT_SYSTEM_PROMPT
 
     # -- Resolve LLM ---------------------------------------------------
-    llm_config: LLMConfig
-    if user_prefs:
-        for cfg in (
-            user_prefs.llm_default,
-            user_prefs.llm_logic,
-            user_prefs.llm_fast,
-            user_prefs.llm_heavy,
-        ):
-            if cfg is not None:
-                llm_config = cfg
-                break
+    # explicit config from TUI prompt request takes priority
+    if llm_config is None:
+        if user_prefs:
+            for cfg in (
+                user_prefs.llm_default,
+                user_prefs.llm_logic,
+                user_prefs.llm_fast,
+                user_prefs.llm_heavy,
+            ):
+                if cfg is not None:
+                    llm_config = cfg
+                    break
+            else:
+                llm_config = LLMConfig(
+                    provider="openai",
+                    model=settings.agent.fallback_model,
+                    api_key="not-needed",
+                    api_base=settings.agent.fallback_api_base,
+                )
         else:
             llm_config = LLMConfig(
                 provider="openai",
-                model="Qwen3.5-35B-A3B-Q4_K_M.gguf",
+                model=settings.agent.fallback_model,
                 api_key="not-needed",
-                api_base="http://localhost:8045/v1",
+                api_base=settings.agent.fallback_api_base,
             )
-    else:
-        llm_config = LLMConfig(
-            provider="openai",
-            model="Qwen3.5-35B-A3B-Q4_K_M.gguf",
-            api_key="not-needed",
-            api_base="http://localhost:8045/v1",
-        )
     llm = build_llm(llm_config)
 
     # -- Build retrieval tool ------------------------------------------
@@ -117,6 +123,11 @@ def create_fosra_agent(
         token_budget=(user_prefs.chunker.token_budget if user_prefs.chunker else 4096),
         max_iterations=3,
         result_store=result_store,
+    )
+
+    graph_tool = create_graph_tool(
+        FalkorDB(host=settings.falkordb.host, port=settings.falkordb.port),
+        user_prefs.embedder or EmbedderConfig(),
     )
 
     # -- Create agent --------------------------------------------------
@@ -135,26 +146,39 @@ def create_fosra_agent(
         type(backend).__name__ if backend else "none",
     )
 
+    mw_backend = FilesystemBackend(root_dir=fosra_paths.data_dir)
+
+    research_subagent = dict(
+        name="Research",
+        description="Performs deep research on a topic using web search and fetch tools. Use for fact-checking, background research, and information gathering.",
+        system_prompt="You are a research assistant. Your role is to gather comprehensive, accurate information on a given topic using available tools. Be thorough and cite sources where possible.",
+        tools=[],
+        model=f"{llm_config.provider}:{llm_config.model}",
+    )
+
+    code_analysis_subagent = dict(
+        name="Code Analysis",
+        description="Analyzes code structure, call chains, and relationships. Use for understanding codebases, finding functions, tracing dependencies, and refactoring planning.",
+        system_prompt="You are a code analysis specialist. Your role is to analyze code structure, find functions, trace call chains, and help understand codebases. Use code graph tools to explore.",
+        tools=[graph_tool],
+        model=f"{llm_config.provider}:{llm_config.model}",
+    )
+
+    # use create_deep_agent's dedicated params instead of manual middleware
+    # to avoid duplicates (it auto-creates Summarization, Skills, SubAgent, etc.)
     kwargs: dict[str, Any] = {
         "model": llm,
         "tools": [retrieval_tool],
         "system_prompt": system_prompt,
+        "backend": backend or mw_backend,
+        "memory": [
+            str(Path(__file__).parent / "fixtures" / "AGENTS.md"),
+        ],
+        "skills": [str(fosra_paths.skills_dir)],
+        "subagents": [research_subagent, code_analysis_subagent],
     }
-    if backend is not None:
-        kwargs["backend"] = backend
     if checkpointer is not None:
         kwargs["checkpointer"] = checkpointer
-
-    mw_backend = FilesystemBackend(root_dir=fosra_dirs.data_dir)
-    # summarization_mw = SummarizationMiddleware(
-    #     model=f"{llm_config.provider}:{llm_config.model}",
-    #     backend=mw_backend,
-    # )
-    skills_mw = SkillsMiddleware(
-        backend=mw_backend,
-        sources=[str(fosra_dirs.skills_dir)],
-    )
-    kwargs["middleware"] = [skills_mw]
 
     agent = create_deep_agent(**kwargs)
 

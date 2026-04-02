@@ -39,4 +39,10 @@ async def get_session_factory(
 
 
 async def get_current_user_id() -> str:
-    return DEV_USER_ID
+    from backend.src.settings import settings
+
+    if settings.is_development():
+        return DEV_USER_ID
+    raise RuntimeError(
+        "get_current_user_id requires authentication in non-development environments"
+    )

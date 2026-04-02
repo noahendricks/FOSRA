@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from backend.src.settings.fosra_dirs import fosra_dirs
+from backend.src.settings.fosra_paths import fosra_paths
 
 router = APIRouter(prefix="/oc/skill", tags=["Skills"])
 
@@ -49,7 +49,10 @@ async def list_skills():
     skills: list[dict[str, Any]] = []
     seen_names: set[str] = set()
 
-    for base_dir in [fosra_dirs.skills_dir, Path(__file__).parent.parent.parent.parent]:
+    for base_dir in [
+        fosra_paths.skills_dir,
+        Path(__file__).parent.parent.parent.parent,
+    ]:
         if not base_dir.exists():
             continue
         for path in base_dir.rglob("*.skill.md"):

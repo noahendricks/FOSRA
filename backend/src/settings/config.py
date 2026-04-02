@@ -20,7 +20,6 @@ from backend.src.domain.enums import (
     VectorStoreType,
 )
 
-
 if TYPE_CHECKING:
     pass
 
@@ -143,11 +142,11 @@ class LLMConfig(_BaseModelFlex):
 
     config_id: int = 0
     config_name: str = "default"
-    provider: str = "openrouter"
+    provider: str = "ollama"
     custom_provider: str | None = None
-    model: str = "openai/gpt-3.5-turbo"
+    model: str = "stable-code:3b"
     api_key: str | SecretStr = SecretStr("secret")
-    api_base: str = "https://openrouter.ai/api/v1"
+    api_base: str = "https://api.minimax.io/v1"
     language: str = "English"
     litellm_params: dict[str, Any] = {}
 

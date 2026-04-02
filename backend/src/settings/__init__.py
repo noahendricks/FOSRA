@@ -11,7 +11,7 @@ from pydantic_settings import (
 )
 
 from backend.src.domain.enums import EmbedderType, SourceType
-from backend.src.settings.fosra_dirs import fosra_dirs
+from backend.src.settings.fosra_paths import fosra_paths
 
 
 class ConnectorSettings(BaseSettings):
@@ -162,6 +162,30 @@ class AgentSettings(BaseSettings):
 
     max_retrieval_iterations: int = Field(default=3, ge=1, le=10)
     token_budget: int = Field(default=4096, ge=512, le=16384)
+    fallback_model: str = Field(
+        default="Qwen3.5-35B-A3B-Q4_K_M.gguf",
+        description="Fallback model when no user preferences are configured",
+    )
+    fallback_api_base: str = Field(
+        default="http://localhost:8045/v1",
+        description="API base for fallback model",
+    )
+
+
+class CORSSettings(BaseSettings):
+    """CORS configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="CORS_")
+
+    allowed_origins: list[str] = Field(
+        default=[
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "http://localhost:5173",
+        ]
+    )
+    allowed_methods: list[str] = Field(default=["*"])
+    allowed_headers: list[str] = Field(default=["*"])
 
 
 class APIKeySettings(BaseSettings):
@@ -225,6 +249,7 @@ class Settings(BaseSettings):
     model_ops: ModelOpsSettings = Field(default_factory=ModelOpsSettings)
     ingestion: IngestionSettings = Field(default_factory=IngestionSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
+    cors: CORSSettings = Field(default_factory=CORSSettings)
 
     @field_validator("environment", mode="before")
     @classmethod
@@ -319,6 +344,7 @@ __all__ = [
     "RerankerSettings",
     "RetrievalSettings",
     "VectorSettings",
+    "CORSSettings",
     "ChunkerConfig",
     "CodeChunkerConfig",
     "EmbedderConfig",

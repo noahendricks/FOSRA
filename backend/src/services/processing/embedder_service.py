@@ -137,11 +137,13 @@ class FlagProvider:
     def _get_model(self, config: EmbedderConfig) -> BGEM3FlagModel:
         model_name = config.dense_model
         if model_name not in self._cache:
-            logger.info(f"Initializing FlagEmbedding model: {model_name}")
+            devices = ["cuda"] if config.cuda_enabled else ["cpu"]
+            logger.info(f"Initializing FlagEmbedding model: {model_name} on {devices}")
             self._cache[model_name] = BGEM3FlagModel(
                 model_name,
                 use_fp16=False,
                 cache_dir=config.cache_dir.as_posix(),
+                devices=devices,
             )
         return self._cache[model_name]
 
@@ -390,6 +392,141 @@ class NomicCodeProvider:
 
 
 # =============================================================================
+# Qwen3 Embedding Provider (Qwen/Qwen3-Embedding-0.6B: 0.6B, 1024d, Qwen3 base)
+# Uses task-specific prompts: "query" for queries (with instruct), no prompt for docs.
+# Supports MRL (Matryoshka Representation Learning) for custom dimensions 32-1024.
+# =============================================================================
+class Qwen3EmbeddingProvider:
+    _cache: dict[str, SentenceTransformer] = {}
+
+    async def embed_chunks(
+        self, chunks: list[Chunk], config: EmbedderConfig
+    ) -> list[Chunk]:
+        if not chunks:
+            return chunks
+
+        texts = [chunk.text for chunk in chunks]
+        model = self._get_model(config)
+
+        def _encode():
+            return model.encode(
+                texts,
+                batch_size=config.batch_size,
+                prompt=None,
+                normalize_embeddings=True,
+            )
+
+        embeddings = await asyncio.to_thread(_encode)
+
+        for chunk, embedding in zip(chunks, embeddings):
+            chunk.metadata.dense_embedding = embedding.tolist()
+
+        return chunks
+
+    async def embed_query(
+        self, query: str, config: EmbedderConfig
+    ) -> EmbeddedQueries | None:
+        model = self._get_model(config)
+
+        def _encode():
+            emb = model.encode(
+                [query],
+                prompt_name="query",
+                prompt=None,
+                normalize_embeddings=True,
+            )
+            return emb[0].tolist()
+
+        dense = await asyncio.to_thread(_encode)
+
+        result = EmbeddedQueries()
+        result.dense = dense
+        return result
+
+    def _get_model(self, config: EmbedderConfig) -> SentenceTransformer:
+        model_name = config.dense_model
+        if model_name not in self._cache:
+            device = "cuda" if config.cuda_enabled else "cpu"
+            logger.info(f"Initializing Qwen3 Embedding model: {model_name} on {device}")
+            self._cache[model_name] = SentenceTransformer(
+                model_name,
+                cache_folder=config.cache_dir.as_posix(),
+                tokenizer_kwargs={"padding_side": "left"},
+                model_kwargs={"torch_dtype": "bfloat16"},
+                device=device,
+            )
+        return self._cache[model_name]
+
+
+# =============================================================================
+# JinaCode Provider (jinaai/jina-code-embeddings-0.5b: 494M, 896d, Qwen2.5-Coder base)
+# Uses task-specific prompts via prompt_name: nl2code_query / nl2code_document
+# Supports asymmetric embedding (different prompts for query vs passage).
+# =============================================================================
+class JinaCodeProvider:
+    _cache: dict[str, SentenceTransformer] = {}
+
+    async def embed_chunks(
+        self, chunks: list[Chunk], config: EmbedderConfig
+    ) -> list[Chunk]:
+        if not chunks:
+            return chunks
+
+        texts = [chunk.text for chunk in chunks]
+        model = self._get_model(config)
+
+        def _encode():
+            return model.encode(
+                texts,
+                batch_size=config.batch_size,
+                prompt_name="nl2code_document",
+                prompt=None,
+                normalize_embeddings=True,
+            )
+
+        embeddings = await asyncio.to_thread(_encode)
+
+        for chunk, embedding in zip(chunks, embeddings):
+            chunk.metadata.dense_embedding = embedding.tolist()
+
+        return chunks
+
+    async def embed_query(
+        self, query: str, config: EmbedderConfig
+    ) -> EmbeddedQueries | None:
+        model = self._get_model(config)
+
+        def _encode():
+            emb = model.encode(
+                [query],
+                prompt_name="nl2code_query",
+                prompt=None,
+                normalize_embeddings=True,
+            )
+            return emb[0].tolist()
+
+        dense = await asyncio.to_thread(_encode)
+
+        result = EmbeddedQueries()
+        result.dense = dense
+        return result
+
+    def _get_model(self, config: EmbedderConfig) -> SentenceTransformer:
+        model_name = config.dense_model
+        if model_name not in self._cache:
+            device = "cuda" if config.cuda_enabled else "cpu"
+            logger.info(f"Initializing JinaCode model: {model_name} on {device}")
+            self._cache[model_name] = SentenceTransformer(
+                model_name,
+                cache_folder=config.cache_dir.as_posix(),
+                tokenizer_kwargs={"padding_side": "left"},
+                model_kwargs={"torch_dtype": "bfloat16"},
+                device=device,
+            )
+        return self._cache[model_name]
+
+
+# =============================================================================
 # Provider Registry
 # =============================================================================
 _PROVIDERS: dict[str, type[EmbedderProvider]] = {
@@ -397,6 +534,8 @@ _PROVIDERS: dict[str, type[EmbedderProvider]] = {
     "flag": FlagProvider,
     "huggingface": HuggingFaceProvider,
     "nomic_code": NomicCodeProvider,
+    "jina_code": JinaCodeProvider,
+    "qwen3_embedding": Qwen3EmbeddingProvider,
 }
 
 
@@ -410,6 +549,10 @@ def _resolve_provider(config: EmbedderConfig) -> EmbedderProvider:
             provider_cls = _PROVIDERS.get("huggingface", HuggingFaceProvider)
         case EmbedderType.NOMIC_CODE:
             provider_cls = _PROVIDERS.get("nomic_code", NomicCodeProvider)
+        case EmbedderType.JINA_CODE:
+            provider_cls = _PROVIDERS.get("jina_code", JinaCodeProvider)
+        case EmbedderType.QWEN3_EMBEDDING:
+            provider_cls = _PROVIDERS.get("qwen3_embedding", Qwen3EmbeddingProvider)
         case EmbedderType.FASTEMBED:
             provider_cls = _PROVIDERS.get("fastembed", FastEmbedProvider)
         case _:
@@ -459,15 +602,60 @@ class EmbedderService:
 # =============================================================================
 # Code-specific embedder config factory
 # =============================================================================
-def nomic_code_embedder_config() -> "EmbedderConfig":
-    """Return an EmbedderConfig configured for Nomic Embed Code (768d)."""
-    from backend.src.settings import get_settings
+
+
+def bge_m3_embedder_config() -> "EmbedderConfig":
+    """Return an EmbedderConfig configured for BGE-M3 via FlagProvider (1024d).
+
+    BGE-M3 outperforms Jina Code 0.5B on semantic code search, producing
+    30-100% higher cosine similarity for related function names while
+    maintaining competitive exact name match performance.
+    """
+    from backend.src.domain.enums import EmbedderType
+    from backend.src.settings import EmbedderConfig, get_settings
 
     settings = get_settings()
     return EmbedderConfig(
-        embedder_type=EmbedderType.NOMIC_CODE,
-        dense_model="nomic-ai/nomic-embed-code",
-        dense_dimensions=768,
+        embedder_type=EmbedderType.FLAG,
+        dense_model="BAAI/bge-m3",
+        dense_dimensions=1024,
         batch_size=settings.embedding.batch_size,
         normalize=True,
+    )
+
+
+def jina_code_embedder_config() -> "EmbedderConfig":
+    """Return an EmbedderConfig configured for Jina Code Embeddings (494M, 896d)."""
+    from backend.src.domain.enums import EmbedderType
+    from backend.src.settings import EmbedderConfig, get_settings
+
+    settings = get_settings()
+    return EmbedderConfig(
+        embedder_type=EmbedderType.JINA_CODE,
+        dense_model="jinaai/jina-code-embeddings-0.5b",
+        dense_dimensions=896,
+        batch_size=settings.embedding.batch_size,
+        normalize=True,
+    )
+
+
+def qwen3_embedder_config() -> "EmbedderConfig":
+    """Return an EmbedderConfig configured for Qwen3 Embedding (0.6B, 1024d).
+
+    Qwen3-Embedding-0.6B outperforms JinaCode-0.5B on MTEB benchmarks
+    (64.33 vs 63.22 mean task score) with similar parameter count.
+    Uses 'query' prompt for queries (with instruct template) and no prompt for documents.
+    Supports Matryoshka Representation Learning for custom output dimensions.
+    """
+    from backend.src.domain.enums import EmbedderType
+    from backend.src.settings import EmbedderConfig, get_settings
+
+    settings = get_settings()
+    return EmbedderConfig(
+        embedder_type=EmbedderType.QWEN3_EMBEDDING,
+        dense_model="Qwen/Qwen3-Embedding-0.6B",
+        dense_dimensions=1024,
+        batch_size=8,
+        normalize=True,
+        cuda_enabled=True,
     )

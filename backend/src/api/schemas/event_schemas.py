@@ -252,14 +252,34 @@ class EventQuestionRejected(BaseModel):
 # ---- TODO EVENTS ----
 
 
+class EventTodoCreatedProperties(BaseModel):
+    sessionID: str
+    todo: Any  # Todo — avoid circular
+
+
+class EventTodoCreated(BaseModel):
+    type: Literal["todo.created"]
+    properties: EventTodoCreatedProperties
+
+
 class EventTodoUpdatedProperties(BaseModel):
     sessionID: str
-    todos: List[Any]  # Todo — avoid circular
+    todo: Any  # Todo — avoid circular
 
 
 class EventTodoUpdated(BaseModel):
     type: Literal["todo.updated"]
     properties: EventTodoUpdatedProperties
+
+
+class EventTodoDeletedProperties(BaseModel):
+    sessionID: str
+    todo: Any  # Todo — avoid circular
+
+
+class EventTodoDeleted(BaseModel):
+    type: Literal["todo.deleted"]
+    properties: EventTodoDeletedProperties
 
 
 # ---- VCS / LSP EVENTS ----

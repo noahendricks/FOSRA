@@ -29,9 +29,13 @@ from backend.src.api.dependencies import (
     get_db_session,
     get_session_factory,
 )
-from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.routes.oc.state import (
     cleanup_session,
+    get_persisted_session_state,
+    pending_permissions,
+    pending_questions,
+    permission_requests,
+    question_requests,
     running_tasks,
     session_diffs,
     session_status,
@@ -60,6 +64,7 @@ from backend.src.api.schemas.tui_schemas import (
     message_to_tui,
 )
 from backend.src.services.conversation.conversation_service import ConversationService
+from backend.src.services.session.event_emitter import get_event_emitter
 
 router = APIRouter(prefix="/oc", tags=["TUI"])
 event_emitter = get_event_emitter()
@@ -114,15 +119,18 @@ async def sse_endpoint(
         )
 
         while True:
-            ev = await queue.get()
-            yield ServerSentEvent(
-                data={"type": ev.type, "properties": ev.properties},
-                event=ev.type,
-                id=str(ev.sequence_nr),
-                retry=5000,
-            )
-    except asyncio.CancelledError:
-        pass
+            try:
+                ev = await asyncio.wait_for(queue.get(), timeout=15.0)
+                yield ServerSentEvent(
+                    data={"type": ev.type, "properties": ev.properties},
+                    event=ev.type,
+                    id=str(ev.sequence_nr),
+                    retry=5000,
+                )
+            except asyncio.TimeoutError:
+                yield ServerSentEvent(comment="keepalive")
+            except asyncio.CancelledError:
+                break
     finally:
         event_emitter.unsubscribe(sub_id)
 
@@ -137,7 +145,16 @@ async def list_sessions(
         session=session,
         user_id=user_id,
     )
-    return [convo_list_item_to_session(item) for item in items]
+    results = [convo_list_item_to_session(item) for item in items]
+
+    for item, result in zip(items, results):
+        persisted = await get_persisted_session_state(item.convo_id)
+        if persisted and persisted.get("metadata"):
+            from backend.src.api.schemas.session_schemas import SessionMetadataModel
+
+            result.metadata = SessionMetadataModel(**persisted["metadata"])
+
+    return results
 
 
 @router.get("/session/status")
@@ -157,7 +174,15 @@ async def get_session(
         user_id=user_id,
         convo_id=session_id,
     )
-    return convo_full_to_session(convo)
+    result = convo_full_to_session(convo)
+
+    persisted = await get_persisted_session_state(session_id)
+    if persisted and persisted.get("metadata"):
+        from backend.src.api.schemas.session_schemas import SessionMetadataModel
+
+        result.metadata = SessionMetadataModel(**persisted["metadata"])
+
+    return result
 
 
 @router.post("/session")
@@ -278,8 +303,6 @@ async def list_messages(
 
 
 # PROMPT (fire-and-forget — events come via sse)
-
-
 @router.post("/session/{session_id}/prompt")
 async def prompt(
     session_id: str,
@@ -291,14 +314,54 @@ async def prompt(
     # import here to avoid circular imports
     from backend.src.services.conversation.agent_runner import run_agent_with_events
 
-    task = asyncio.create_task(
-        run_agent_with_events(
-            session_id=session_id,
-            user_id=user_id,
-            prompt_request=body,
-            session_factory=session_factory,
+    # resolve providerID and modelID from body
+    provider_id = body.providerID or (body.model.providerID if body.model else None)
+    model_id = body.modelID or (body.model.modelID if body.model else None)
+
+    # store model info in session metadata synchronously
+    if provider_id and model_id:
+        from backend.src.api.routes.oc.state import (
+            get_model_info_for_session,
+            update_persisted_session_state,
         )
-    )
+
+        model_info = get_model_info_for_session(provider_id, model_id)
+
+        if model_info:
+            await update_persisted_session_state(
+                session_id=session_id,
+                metadata={"model": model_info},
+            )
+            # emit session.updated so TUI refreshes session with new metadata
+            updated_session = await get_persisted_session_state(session_id)
+            if updated_session:
+                from backend.src.api.schemas.session_schemas import SessionMetadataModel
+
+                session_data = {"id": session_id}
+                if updated_session.get("metadata"):
+                    session_data["metadata"] = SessionMetadataModel(
+                        model=updated_session["metadata"].get("model")
+                    ).model_dump()
+                await event_emitter.emit_session_updated(session_data)
+
+    async def _run():
+        try:
+            async with asyncio.timeout(300):
+                await run_agent_with_events(
+                    session_id=session_id,
+                    user_id=user_id,
+                    prompt_request=body,
+                    session_factory=session_factory,
+                )
+        except asyncio.TimeoutError:
+            await event_emitter.emit_session_error(
+                session_id, "Agent execution timed out after 300 seconds"
+            )
+        except Exception as exc:
+            await event_emitter.emit_session_error(session_id, str(exc))
+
+    # could be taskiq instead
+    task = asyncio.create_task(_run())
     running_tasks[session_id] = task
 
     # clean up when done
@@ -313,13 +376,42 @@ async def prompt(
 # ABORT
 @router.post("/session/{session_id}/abort")
 async def abort_session(session_id: str):
+    logger.info(
+        "abort_session started",
+        session_id=session_id,
+        task_found=session_id in running_tasks,
+    )
+
     task = running_tasks.get(session_id)
+
     if task and not task.done():
+        permission_reqs = permission_requests.pop(session_id, [])
+        question_reqs = question_requests.pop(session_id, [])
+
+        for req in permission_reqs:
+            fut = pending_permissions.pop(req["id"], None)
+            if fut and not fut.done():
+                fut.set_result("reject")
+
+        for req in question_reqs:
+            fut = pending_questions.pop(req["id"], None)
+            if fut and not fut.done():
+                fut.set_result("reject")
+
         task.cancel()
         running_tasks.pop(session_id, None)
         session_status[session_id] = {"type": "idle"}
         await event_emitter.emit_session_status(session_id, {"type": "idle"})
+
+        logger.info(
+            "abort_session completed",
+            session_id=session_id,
+            permission_requests_resolved=len(permission_reqs),
+            question_requests_resolved=len(question_reqs),
+        )
         return True
+
+    logger.info("abort_session no active task", session_id=session_id)
     return False
 
 
@@ -329,6 +421,100 @@ async def abort_session(session_id: str):
 @router.get("/session/{session_id}/todo")
 async def get_todos(session_id: str):
     return session_todos.get(session_id, [])
+
+
+@router.post("/session/{session_id}/todo")
+async def create_todo(
+    session_id: str,
+    body: dict[str, Any],
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    session=Depends(get_db_session),
+):
+    """create a todo for a session."""
+    from backend.src.api.schemas.tui_control_schemas import Todo
+
+    # check if the session exists
+    if not await session_exists(session_id, session):
+        return {"error": "session not found"}, 404
+
+    # check if the user is authorized to create a todo for this session
+    if not await is_user_authorized(session_id, user_id, session):
+        return {"error": "user not authorized"}, 403
+
+    # create the todo and add it to the session todos list
+    todo = Todo(**body)
+    session_todos.setdefault(session_id, []).append(todo.model_dump())
+    await event_emitter.emit_todo_created(
+        session_id=session_id,
+        todo=todo.model_dump(),
+    )
+    return todo
+
+
+@router.patch("/session/{session_id}/todo")
+async def update_todo(
+    session_id: str,
+    todo_id: str,
+    body: dict[str, Any],
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    session=Depends(get_db_session),
+):
+    """update a todo for a session."""
+    from backend.src.api.schemas.tui_control_schemas import Todo
+
+    todos = session_todos.get(session_id, [])
+    for i, todo in enumerate(todos):
+        if todo.get("id") == todo_id:
+            updated = Todo(**{**todo, **body})
+            todos[i] = updated.model_dump()
+            await event_emitter.emit_todo_updated(
+                session_id=session_id,
+                todo=updated.model_dump(),
+            )
+            return updated
+    raise HTTPException(status_code=404, detail="Todo not found")
+
+
+@router.delete("/session/{session_id}/todo/{todo_id}")
+async def delete_todo(
+    session_id: str,
+    todo_id: str,
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    session=Depends(get_db_session),
+):
+    """delete a todo for a session."""
+    todos = session_todos.get(session_id, [])
+    for i, todo in enumerate(todos):
+        if todo.get("id") == todo_id:
+            deleted = todos.pop(i)
+            await event_emitter.emit_todo_deleted(
+                session_id=session_id,
+                todo=deleted,
+            )
+            return deleted
+    raise HTTPException(status_code=404, detail="Todo not found")
+
+
+@router.post("/session/{session_id}/todos")
+async def create_todos(
+    session_id: str,
+    body: list[dict[str, Any]],
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    session=Depends(get_db_session),
+):
+    """create multiple todos for a session."""
+    from backend.src.api.schemas.tui_control_schemas import Todo
+
+    created = []
+    for todo_body in body:
+        todo = Todo(**todo_body)
+        session_todos.setdefault(session_id, []).append(todo.model_dump())
+        created.append(todo.model_dump())
+        await event_emitter.emit_todo_created(
+            session_id=session_id,
+            todo=todo.model_dump(),
+        )
+    return {"todos": created}
 
 
 # DIFFS
@@ -347,7 +533,6 @@ async def get_config():
     return get_default_config()
 
 
-@router.get("/config/provider")
 @router.get("/config/providers")
 async def get_config_providers():
     return get_config_providers_response()
@@ -363,7 +548,65 @@ async def list_providers():
 
 @router.get("/provider/auth")
 async def provider_auth():
-    return {}
+    """return which providers have API keys configured."""
+    from backend.src.api.schemas.provider_registry import _build_providers
+
+    result = {}
+    for p in _build_providers():
+        if p.env:
+            result[p.id] = any(os.environ.get(var) for var in p.env)
+        else:
+            result[p.id] = True
+    return result
+
+
+@router.post("/provider/auth")
+async def set_provider_auth(body: dict[str, Any]):
+    """store an API key for a provider in .env and os.environ."""
+    provider_id = body.get("providerID")
+    auth = body.get("auth", {})
+    key = auth.get("key")
+    if not provider_id or not key:
+        raise HTTPException(status_code=400, detail="providerID and auth.key required")
+
+    from backend.src.api.schemas.provider_registry import _build_providers
+
+    provider = next((p for p in _build_providers() if p.id == provider_id), None)
+    if not provider or not provider.env:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Provider {provider_id} not found or has no env vars",
+        )
+
+    env_var = provider.env[0]
+
+    # set in current process
+    os.environ[env_var] = key
+
+    # persist to .env file
+    env_path = os.path.join(PROJECT_DIR, ".env")
+    _update_env_file(env_path, env_var, key)
+
+    return True
+
+
+def _update_env_file(env_path: str, key: str, value: str) -> None:
+    """add or update a key=value pair in a .env file."""
+    lines: list[str] = []
+    found = False
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith(f"{key}=") or stripped.startswith(f"{key} ="):
+                    lines.append(f"{key}={value}\n")
+                    found = True
+                else:
+                    lines.append(line)
+    if not found:
+        lines.append(f"{key}={value}\n")
+    with open(env_path, "w") as f:
+        f.writelines(lines)
 
 
 # AGENTS

@@ -50,11 +50,11 @@ PROVIDER_TO_LITELLM_MAP: dict[str, str] = {
 # =============================================================================
 
 
-def filter_none_values(d: dict[str, Any]) -> dict[str, Any]:
+def _filter_none_values(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
-def build_model_string(
+def _build_model_string(
     provider: str,
     model_name: str,
     custom_provider: str | None = None,
@@ -86,7 +86,7 @@ def build_model_string(
 # =============================================================================
 
 
-async def validate_config(
+async def _validate_config(
     llm_config: LLMConfig,
     timeout: int = 30,
 ):
@@ -101,7 +101,7 @@ async def validate_config(
         if not llm_config.api_key:
             raise ValueError("No LLM Config API Key provided")
 
-        model_string = build_model_string(
+        model_string = _build_model_string(
             provider=llm_config.provider,
             model_name=llm_config.model,
             custom_provider=llm_config.custom_provider,
@@ -150,7 +150,7 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
     """Create a ChatLiteLLM instance from configuration."""
 
     try:
-        model_string = build_model_string(
+        model_string = _build_model_string(
             provider=config.provider,
             model_name=config.model,
             custom_provider=config.custom_provider,
@@ -170,7 +170,7 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
         if config.litellm_params:
             kwargs.update(config.litellm_params)
 
-        llm = ChatLiteLLM(**filter_none_values(kwargs))  # pyright: ignore
+        llm = ChatLiteLLM(**_filter_none_values(kwargs))  # pyright: ignore
 
         logger.debug(f"Created LLM instance: {model_string}")
 
@@ -195,7 +195,7 @@ async def test_connection(
     logger.info(f"Testing connection to {provider}/{model}")
 
     try:
-        model_string = build_model_string(
+        model_string = _build_model_string(
             provider=provider,
             model_name=model,
         )
@@ -209,7 +209,7 @@ async def test_connection(
         if api_base:
             kwargs["api_base"] = api_base
 
-        llm: ChatLiteLLM = ChatLiteLLM(**filter_none_values(kwargs))  # pyright: ignore
+        llm: ChatLiteLLM = ChatLiteLLM(**_filter_none_values(kwargs))  # pyright: ignore
 
         response = await llm.ainvoke([HumanMessage(content="test")])
 

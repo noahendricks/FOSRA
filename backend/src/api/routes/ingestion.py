@@ -11,20 +11,21 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Annotated, Any
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from loguru import logger
 
 from backend.src.api.dependencies import get_db_session
 from backend.src.api.lifecycle import global_infra
 from backend.src.domain.enums import FileSourceType, VectorStoreType
-from backend.src.storage.models import ulid_factory
+from backend.src.domain.schemas.doc import Doc, DocMetadata
 from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
     VectorStoreConfig,
+    settings,
 )
-from backend.src.domain.schemas.doc import Doc, DocMetadata
-from backend.src.settings import settings
+from backend.src.storage.models import ulid_factory
 
 router = APIRouter(prefix="/ingest", tags=["Ingestion"])
 
@@ -192,22 +193,14 @@ async def ingest_documents(
 
     docs: list[Doc] = []
     for p in paths:
-        content = p.read_text(encoding="utf-8", errors="replace")
-        mime = _guess_mime(p)
-        doc_id = ulid_factory()
+        from backend.src.services.processing.docling_loader import (
+            DoclingLoader,
+        )
 
-        doc = Doc(
-            id=doc_id,
-            page_content=content,
-            metadata=DocMetadata(
-                source=str(p.absolute()),
-                mime_type=mime,
-                doc_id=doc_id,
-                doc_title=p.name,
-                source_type=FileSourceType.DOC
-                if source_type == "doc"
-                else FileSourceType.CODEBASE,
-            ),
+        mime = _guess_mime(p)
+        doc = DoclingLoader.parse_file_sync(str(p.absolute()), mime_type=mime)
+        doc.metadata.source_type = (
+            FileSourceType.DOC if source_type == "doc" else FileSourceType.CODEBASE
         )
         docs.append(doc)
 
@@ -247,14 +240,13 @@ async def get_ingestion_status(
     Returns:
         Counts from PostgreSQL, Qdrant, and FalkorDB
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
 
-    from backend.src.storage.models import DocORM
     from backend.src.services.retrieval.vector_service import (
-        VectorService,
-        PARENTS_COLLECTION,
         CHUNKS_COLLECTION,
+        VectorService,
     )
+    from backend.src.storage.models import DocORM
 
     postgres_count = await session.scalar(select(func.count(DocORM.doc_id)))
 
@@ -266,7 +258,7 @@ async def get_ingestion_status(
         try:
             embedder_config = _default_embedder_config()
             qdrant_parents = await VectorService.count_points(
-                qdrant_client, PARENTS_COLLECTION
+                qdrant_client, CHUNKS_COLLECTION
             )
             qdrant_chunks = await VectorService.count_points(
                 qdrant_client, CHUNKS_COLLECTION

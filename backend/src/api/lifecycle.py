@@ -23,9 +23,9 @@ class Infrastructure:
         self.checkpointer = None
 
     def init(self):
-        from backend.src.settings.fosra_dirs import fosra_dirs
+        from backend.src.settings.fosra_paths import fosra_paths
 
-        _ = fosra_dirs.fosra
+        _ = fosra_paths.fosra
 
         self.session_factory = async_sessionmaker(
             self.engine,

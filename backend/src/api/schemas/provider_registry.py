@@ -7,17 +7,22 @@ priority providers (minimax-coding-plan, ollama-cloud) are hardcoded as fallback
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
+
+import httpx
 
 from backend.src.api.schemas.tui_schemas import (
     Model,
     ModelApi,
     ModelCapabilities,
     ModelCapabilitiesInput,
-    ModelCapabilitiesOutput,
     ModelCapabilitiesInterleaved,
+    ModelCapabilitiesOutput,
     ModelCost,
     ModelCostCache,
     ModelLimit,
@@ -27,9 +32,127 @@ from backend.src.api.schemas.tui_schemas import (
 logger = logging.getLogger(__name__)
 
 
-# PROVIDER ORDERING
+# =========================================================================
+# MODELS.DEV CONFIGURATION
+# =========================================================================
+
+MODELS_DEV_URL = os.environ.get("MODELS_DEV_URL", "https://models.dev/api.json")
+MODELS_CACHE_DIR = Path.home() / ".cache" / "fosra"
+MODELS_CACHE_PATH = MODELS_CACHE_DIR / "models.json"
+MODELS_FETCH_TIMEOUT = 10.0
+MODELS_REFRESH_INTERVAL = 60 * 60  # 1 hour
+
+
+# =========================================================================
+# MODELS.DEV CACHE
+# =========================================================================
+
+
+def _ensure_cache_dir() -> None:
+    MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _read_models_cache() -> dict[str, Any] | None:
+    """Read cached models.dev data if available."""
+    if not MODELS_CACHE_PATH.exists():
+        return None
+    try:
+        with open(MODELS_CACHE_PATH) as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("Failed to read models cache: %s", e)
+        return None
+
+
+def _write_models_cache(data: dict[str, Any]) -> None:
+    """Write models.dev data to cache."""
+    try:
+        _ensure_cache_dir()
+        with open(MODELS_CACHE_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.warning("Failed to write models cache: %s", e)
+
+
+async def _fetch_models_from_api() -> dict[str, Any] | None:
+    """Fetch models.dev data from the API endpoint."""
+    try:
+        async with httpx.AsyncClient(timeout=MODELS_FETCH_TIMEOUT) as client:
+            response = await client.get(
+                MODELS_DEV_URL,
+                headers={"User-Agent": "fosra-backend/1.0"},
+            )
+            if response.status_code == 200:
+                return response.json()
+            logger.warning(
+                "models.dev API returned status {}: {}",
+                response.status_code,
+                response.text[:200],
+            )
+    except Exception as e:
+        logger.warning("Failed to fetch models.dev: %s", e)
+    return None
+
+
+async def _get_models_dev_data() -> dict[str, Any]:
+    """
+    Get models.dev data: cache first, then fallback to API.
+
+    Priority providers from _PROVIDER_DATA are merged on top of fetched data.
+    """
+    # try cache first
+    cached = _read_models_cache()
+    if cached:
+        logger.info("Using cached models.dev data")
+        return cached
+
+    # try API
+    logger.info("Fetching models.dev data from API...")
+    data = await _fetch_models_from_api()
+    if data:
+        _write_models_cache(data)
+        return data
+
+    # fallback to hardcoded data
+    logger.warning("Using hardcoded fallback provider data")
+    return {}
+
+
+async def refresh_models_cache() -> bool:
+    """Force refresh models.dev data from API. Returns True on success."""
+    logger.info("Refreshing models.dev cache...")
+    data = await _fetch_models_from_api()
+    if data:
+        _write_models_cache(data)
+        # invalidate the providers cache so it rebuilds with new data
+        global _providers_cache
+        _providers_cache = None
+        logger.info("models.dev cache refreshed successfully")
+        return True
+    logger.warning("models.dev cache refresh failed")
+    return False
+
+
+_refresh_task: asyncio.Task | None = None
+
+
+def _start_models_refresh_task() -> None:
+    """Start background task to periodically refresh models.dev data."""
+    global _refresh_task
+    if _refresh_task is not None and not _refresh_task.done():
+        return
+
+    async def _periodic_refresh():
+        while True:
+            await asyncio.sleep(MODELS_REFRESH_INTERVAL)
+            await refresh_models_cache()
+
+    _refresh_task = asyncio.create_task(_periodic_refresh())
+    logger.info("Started models.dev periodic refresh task")
+
+
 # first provider is the default when no selection is persisted
-PRIORITY_PROVIDERS = ["minimax-coding-plan", "ollama-cloud"]
+PRIORITY_PROVIDERS = ["ollama", "local", "ollama-cloud"]
 
 
 def _modalities_to_bools(
@@ -138,11 +261,33 @@ def _transform_provider(
 # =========================================================================
 
 _PROVIDER_DATA: dict[str, dict[str, Any]] = {
+    "local": {
+        "id": "local",
+        "env": [],
+        "npm": "@ai-sdk/openai-compatible",
+        "api": "http://localhost:8045/v1",
+        "name": "Local (localhost:8045)",
+        "models": {
+            "local-model": {
+                "id": "local-model",
+                "name": "Local Model",
+                "family": "local",
+                "attachment": False,
+                "reasoning": False,
+                "tool_call": True,
+                "temperature": True,
+                "release_date": "2025-01-01",
+                "modalities": {"input": ["text"], "output": ["text"]},
+                "cost": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
+                "limit": {"context": 128000, "output": 4096},
+            },
+        },
+    },
     "minimax-coding-plan": {
         "id": "minimax-coding-plan",
         "env": ["MINIMAX_API_KEY"],
         "npm": "@ai-sdk/anthropic",
-        "api": "https://api.minimax.io/anthropic/v1",
+        "api": "https://api.minimax.io/v1",
         "name": "MiniMax Coding Plan (minimax.io)",
         "models": {
             "MiniMax-M2.7": {
@@ -503,6 +648,212 @@ _PROVIDER_DATA: dict[str, dict[str, Any]] = {
 }
 
 # =========================================================================
+# MODELS.DEV DATA (sync cache for runtime use)
+# =========================================================================
+
+_models_dev_data: dict[str, Any] = {}
+
+
+def _load_models_dev_data() -> dict[str, Any]:
+    """
+    Load models.dev data: cache → _PROVIDER_DATA fallback.
+    Called synchronously at module load time.
+    """
+    cached = _read_models_cache()
+    if cached:
+        return cached
+    # use hardcoded fallback
+    return {}
+
+
+async def _init_models_dev() -> None:
+    """
+    Initialize models.dev data. Called on app startup.
+    1. Try cache first (sync)
+    2. If no cache, try API fetch
+    3. Start background refresh task
+    """
+    global _models_dev_data, _providers_cache
+
+    # load cache synchronously first
+    _models_dev_data = _load_models_dev_data()
+
+    # invalidate providers cache since data may have changed
+    _providers_cache = None
+
+    # if no cache, try to fetch from API
+    if not _models_dev_data:
+        logger.info("No cache found, fetching models.dev from API...")
+        data = await _fetch_models_from_api()
+        if data:
+            _models_dev_data = data
+            _write_models_cache(data)
+            _providers_cache = None
+
+    # start background refresh task
+    _start_models_refresh_task()
+
+    # initialize local Ollama provider
+    await _init_local_ollama()
+
+    logger.info("models.dev initialization complete")
+
+
+def _build_providers_from_data(data: dict[str, Any]) -> list[Provider]:
+    """Build Provider list from raw models.dev data, merging priority providers on top."""
+    providers = []
+
+    # first, add all providers from fetched data
+    for pid, provider_data in data.items():
+        if provider_data.get("models"):
+            providers.append(_transform_provider(provider_data))
+
+    # then, merge/override with priority providers from _PROVIDER_DATA
+    for pid in PRIORITY_PROVIDERS:
+        override = _PROVIDER_DATA.get(pid)
+        if override:
+            # find if this provider already exists from fetched data
+            existing = next((p for p in providers if p.id == pid), None)
+            if existing:
+                # merge: override existing provider's data
+                existing_dict = existing.model_dump()
+                existing_dict.update(override)
+                providers = [p for p in providers if p.id != pid]
+                providers.append(_transform_provider(existing_dict))
+            else:
+                # add priority provider that wasn't in fetched data
+                providers.append(_transform_provider(override))
+
+    return providers
+
+
+# =========================================================================
+# LOCAL OLLAMA PROVIDER
+# =========================================================================
+
+OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
+OLLAMA_MODEL_FETCH_TIMEOUT = 10.0
+
+_ollama_provider: Provider | None = None
+
+
+async def _fetch_local_ollama_models() -> tuple[list[dict[str, Any]], list[str]] | None:
+    """Fetch available models from local Ollama instance."""
+    try:
+        async with httpx.AsyncClient(timeout=OLLAMA_MODEL_FETCH_TIMEOUT) as client:
+            response = await client.get(f"{OLLAMA_API_URL}/v1/models")
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            model_ids = [m["id"] for m in data.get("data", [])]
+            if not model_ids:
+                return None
+
+            show_tasks = [
+                client.post(
+                    f"{OLLAMA_API_URL}/api/show",
+                    json={"name": mid},
+                    follow_redirects=True,
+                )
+                for mid in model_ids
+            ]
+            show_results = await asyncio.gather(*show_tasks)
+
+            models = []
+            for m in show_results:
+                import json
+
+                models.append(json.loads(m.content))
+
+            return (models, model_ids)
+    except Exception as e:
+        logger.warning("Failed to fetch local Ollama models: %s", e)
+        return None
+    return None
+
+
+def _serialize_local_ollama(
+    models: list[dict[str, Any]], model_ids: list[str]
+) -> dict[str, Model]:
+    """Serialize Ollama model data into Model dict, filtering embedding models."""
+    serialized = {}
+
+    for m, mid in zip(models, model_ids):
+        c = m.get("capabilities", [])
+        if "embedding" in c or "completion" not in c:
+            continue
+
+        family = m.get("details", {}).get("family")
+        if family is None:
+            family = m.get("model_info", {}).get("general.architecture")
+
+        model = Model(
+            id=mid,
+            providerID="ollama",
+            api=ModelApi(id="ollama", url=OLLAMA_API_URL, npm=""),
+            name=m.get("model_info", {}).get("general.basename", mid.split(":")[0]),
+            family=family,
+            capabilities=ModelCapabilities(
+                temperature="completion" in c,
+                reasoning="thinking" in c,
+                attachment=False,
+                toolcall="tools" in c,
+                input=ModelCapabilitiesInput(
+                    text=True, audio=False, image=False, video=False, pdf=False
+                ),
+                output=ModelCapabilitiesOutput(
+                    text=True, audio=False, image=False, video=False, pdf=False
+                ),
+                interleaved=False,
+            ),
+            cost=ModelCost(
+                input=0,
+                output=0,
+                cache=ModelCostCache(read=0, write=0),
+            ),
+            limit=ModelLimit(
+                context=m.get("model_info", {}).get("llama.context_length", 4096),
+                output=m.get("model_info", {}).get("llama.vocab_size", 0),
+            ),
+            status="active",
+            options={},
+            headers={},
+            releaseDate=m.get("modified_at", "2025-01-01"),
+        )
+        serialized[mid] = model
+
+    return serialized
+
+
+async def _init_local_ollama() -> None:
+    """Initialize local Ollama provider if instance is running."""
+    global _ollama_provider, _providers_cache
+
+    result = await _fetch_local_ollama_models()
+    if result is None:
+        logger.info("Local Ollama not available, skipping")
+        return
+
+    models, model_ids = result
+    serialized = _serialize_local_ollama(models, model_ids)
+    if not serialized:
+        logger.info("No valid Ollama models found (all embedding/completion-only)")
+        return
+
+    _ollama_provider = Provider(
+        id="ollama",
+        name="Local Ollama",
+        source="env",
+        env=[],
+        options={},
+        models=serialized,
+    )
+
+    _providers_cache = None
+    logger.info("Local Ollama provider initialized with %s models", len(serialized))
+
+
+# =========================================================================
 # PUBLIC API
 # =========================================================================
 
@@ -514,11 +865,21 @@ def _build_providers() -> list[Provider]:
     if _providers_cache is not None:
         return _providers_cache
 
-    providers = []
-    for pid in PRIORITY_PROVIDERS:
-        raw = _PROVIDER_DATA.get(pid)
-        if raw:
-            providers.append(_transform_provider(raw))
+    providers = _build_providers_from_data(_models_dev_data)
+
+    # if no data from anywhere, fall back to hardcoded priority providers
+    if not providers:
+        for pid in PRIORITY_PROVIDERS:
+            raw = _PROVIDER_DATA.get(pid)
+            if raw:
+                providers.append(_transform_provider(raw))
+
+    # add local Ollama provider if available
+    if _ollama_provider is not None:
+        existing = next((p for p in providers if p.id == "ollama"), None)
+        if existing:
+            providers = [p for p in providers if p.id != "ollama"]
+        providers.insert(0, _ollama_provider)
 
     _providers_cache = providers
     return providers
