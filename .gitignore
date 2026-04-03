@@ -233,3 +233,4 @@ tui/node_modules/
 /node_modules
 .zed/debug.json
 tui/ARCHITECTURE.md
+backend/src/settings/test_loader.py
