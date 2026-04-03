@@ -13,6 +13,7 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { log } from "@/util/log"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -153,7 +154,7 @@ function AutoMethod(props: AutoMethodProps) {
     try {
       await (api.fosra.instance.dispose as (p: any, o?: any) => Promise<any>)({})
     } catch (e: unknown) {
-      console.error("oauth callback error", e)
+      log.error.error("OAUTH_CALLBACK_FAILED", { providerID: props.providerID, error: String(e) })
     }
     dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
@@ -207,7 +208,7 @@ function CodeMethod(props: CodeMethodProps) {
           try {
             await (api.fosra.instance.dispose as (p: any, o?: any) => Promise<any>)({})
           } catch (e: unknown) {
-            console.error("oauth confirm error", e)
+            log.error.error("OAUTH_CONFIRM_FAILED", { providerID: props.providerID, error: String(e) })
           }
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
@@ -279,7 +280,7 @@ function ApiMethod(props: ApiMethodProps) {
         try {
           await (api.fosra.instance.dispose as (p: any, o?: any) => Promise<any>)({})
         } catch (e: unknown) {
-          console.error("auth set error", e)
+          log.error.error("AUTH_SET_FAILED", { providerID: props.providerID, error: String(e) })
         }
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}

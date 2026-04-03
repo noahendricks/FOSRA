@@ -28,7 +28,7 @@ import {
 
 import { Flag } from "@/flag/flag";
 import { Installation } from "@/installation";
-import { Log } from "@/util/log";
+import { log } from "@/util/log";
 import { DialogProvider, useDialog } from "@tui/ui/dialog";
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider";
 import { ApiProvider, useApi } from "@tui/context/api";
@@ -143,10 +143,12 @@ export function tui(input: {
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
+    log.startup.info("TUI_STARTED", { url: input.url, directory: input.directory });
     const unguard = win32InstallCtrlCGuard();
     win32DisableProcessedInput();
 
     const mode = await getTerminalBackgroundColor();
+    log.startup.debug("BG_MODE_DETECTED", { mode });
 
     // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
     // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
@@ -257,7 +259,7 @@ function App() {
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      Log.Default.debug("CTRL_C_DETECTED", { selection: !!renderer.getSelection() });
+      log.keybind.debug("CTRL_C_DETECTED", { selection: !!renderer.getSelection() });
       if (
         Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT &&
         renderer.getSelection()
@@ -267,7 +269,7 @@ function App() {
           return;
         }
       } else {
-        Log.Default.debug("EXITING VIA CTRL_C");
+        log.keybind.debug("EXITING_VIA_CTRL_C");
         exit();
       }
       evt.preventDefault();
@@ -304,9 +306,7 @@ function App() {
     kv.get("terminal_title_enabled", true),
   );
 
-  createEffect(() => {
-    Log.Default.debug("route data", route.data);
-  });
+
 
   // Update terminal window title based on current route and session
   createEffect(() => {

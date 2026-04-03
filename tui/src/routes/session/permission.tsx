@@ -16,6 +16,7 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { log } from "@/util/log"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -185,7 +186,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               reply: "always",
               requestID: props.request.id,
             }).catch((e: unknown) => {
-              console.error("permission reply error", e)
+              log.error.error("PERMISSION_REPLY_FAILED", { requestID: props.request.id, error: String(e) })
             })
           }}
         />
@@ -198,7 +199,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               requestID: props.request.id,
               message: message || undefined,
             }).catch((e: unknown) => {
-              console.error("permission reject error", e)
+              log.error.error("PERMISSION_REJECT_FAILED", { requestID: props.request.id, error: String(e) })
             })
           }}
           onCancel={() => {

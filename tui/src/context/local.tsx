@@ -13,6 +13,7 @@ import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import { log } from "@/util/log"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -70,6 +71,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               duration: 3000,
             })
           setAgentStore("current", name)
+          log.provider.info("AGENT_SET", { name, agents: agents().map((x) => x.name) })
         },
         move(direction: 1 | -1) {
           batch(() => {
@@ -267,6 +269,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const curr = agent.current()
           if (!curr) return
           setModelStore("model", curr.name, { ...val })
+          log.provider.info("MODEL_CYCLED", { direction, model: current, recent: modelStore.recent })
         },
         cycleFavorite(direction: 1 | -1) {
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
@@ -302,6 +305,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
           )
           save()
+          log.provider.info("MODEL_FAVORITE_CYCLED", { direction, model: next, favorites: modelStore.favorite })
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
@@ -326,6 +330,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             save()
           })
+          log.provider.info("MODEL_SET", { model, options, recent: modelStore.recent })
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
@@ -349,6 +354,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             )
             save()
           })
+          log.provider.info("MODEL_FAVORITE_TOGGLED", { model, favorited: !modelStore.favorite.some((x) => x.providerID === model.providerID && x.modelID === model.modelID), favorites: modelStore.favorite })
         },
         variant: {
           current() {
@@ -372,6 +378,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const key = `${m.providerID}/${m.modelID}`
             setModelStore("variant", key, value)
             save()
+            log.provider.debug("MODEL_VARIANT_SET", { variant: value, model: m })
           },
           cycle() {
             const variants = this.list()
@@ -379,14 +386,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const current = this.current()
             if (!current) {
               this.set(variants[0])
+              log.provider.debug("MODEL_VARIANT_CYCLED", { variant: variants[0], model: currentModel(), variants })
               return
             }
             const index = variants.indexOf(current)
             if (index === -1 || index === variants.length - 1) {
               this.set(undefined)
+              log.provider.debug("MODEL_VARIANT_CYCLED", { variant: undefined, model: currentModel(), variants })
               return
             }
             this.set(variants[index + 1])
+            log.provider.debug("MODEL_VARIANT_CYCLED", { variant: variants[index + 1], model: currentModel(), variants })
           },
         },
       }
@@ -399,13 +409,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
       async toggle(name: string) {
         const status = store.state.mcp.get(name)
+        const willEnable = status?.status !== "connected"
         if (status?.status === "connected") {
-          // Disable: disconnect the MCP
           await (api.fosra.mcp as any).disconnect({ name })
         } else {
-          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
           await (api.fosra.mcp as any).connect({ name })
         }
+        log.mcp.info("MCP_TOGGLED", { name, enabled: willEnable, status: store.state.mcp.get(name) })
       },
     }
 

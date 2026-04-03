@@ -6,6 +6,7 @@ import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@/flag/flag"
 import { Selection } from "@tui/util/selection"
+import { log } from "@/util/log"
 
 export function Dialog(
   props: ParentProps<{
@@ -72,6 +73,7 @@ function init() {
     if (evt.defaultPrevented) return
     if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && renderer.getSelection()?.getSelectedText()) return
     if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
+      log.ui.info("DIALOG_KEYBOARD_CLOSED", { stackSize: store.stack.length, key: evt.name })
       const current = store.stack.at(-1)!
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
@@ -101,6 +103,7 @@ function init() {
 
   return {
     clear() {
+      log.ui.info("DIALOG_CLOSED", { stackSize: store.stack.length })
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
@@ -111,6 +114,7 @@ function init() {
       refocus()
     },
     replace(input: any, onClose?: () => void) {
+      log.ui.info("DIALOG_OPENED", { stackSize: store.stack.length + 1 })
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()

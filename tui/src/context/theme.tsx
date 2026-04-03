@@ -1,143 +1,148 @@
-import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
-import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
-import { createSimpleContext } from "./helper"
-import { Glob } from "@/util/glob"
-import { Log } from "@/util/log"
-import aura from "./theme/aura.json" with { type: "json" }
-import ayu from "./theme/ayu.json" with { type: "json" }
-import catppuccin from "./theme/catppuccin.json" with { type: "json" }
-import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" }
-import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
-import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
-import cursor from "./theme/cursor.json" with { type: "json" }
-import dracula from "./theme/dracula.json" with { type: "json" }
-import everforest from "./theme/everforest.json" with { type: "json" }
-import flexoki from "./theme/flexoki.json" with { type: "json" }
-import github from "./theme/github.json" with { type: "json" }
-import gruvbox from "./theme/gruvbox.json" with { type: "json" }
-import kanagawa from "./theme/kanagawa.json" with { type: "json" }
-import material from "./theme/material.json" with { type: "json" }
-import matrix from "./theme/matrix.json" with { type: "json" }
-import mercury from "./theme/mercury.json" with { type: "json" }
-import monokai from "./theme/monokai.json" with { type: "json" }
-import nightowl from "./theme/nightowl.json" with { type: "json" }
-import nord from "./theme/nord.json" with { type: "json" }
-import osakaJade from "./theme/osaka-jade.json" with { type: "json" }
-import onedark from "./theme/one-dark.json" with { type: "json" }
-import opencode from "./theme/opencode.json" with { type: "json" }
-import orng from "./theme/orng.json" with { type: "json" }
-import lucentOrng from "./theme/lucent-orng.json" with { type: "json" }
-import palenight from "./theme/palenight.json" with { type: "json" }
-import rosepine from "./theme/rosepine.json" with { type: "json" }
-import solarized from "./theme/solarized.json" with { type: "json" }
-import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
-import tokyonight from "./theme/tokyonight.json" with { type: "json" }
-import vercel from "./theme/vercel.json" with { type: "json" }
-import vesper from "./theme/vesper.json" with { type: "json" }
-import zenburn from "./theme/zenburn.json" with { type: "json" }
-import carbonfox from "./theme/carbonfox.json" with { type: "json" }
-import { useKV } from "./kv"
-import { useRenderer } from "@opentui/solid"
-import { createStore, produce } from "solid-js/store"
-import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
-import { useTuiConfig } from "./tui-config"
+import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core";
+import path from "path";
+import { createEffect, createMemo, onMount } from "solid-js";
+import { createSimpleContext } from "./helper";
+import { Glob } from "@/util/glob";
+import { log } from "@/util/log";
+import aura from "./theme/aura.json" with { type: "json" };
+import ayu from "./theme/ayu.json" with { type: "json" };
+import catppuccin from "./theme/catppuccin.json" with { type: "json" };
+import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" };
+import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" };
+import cobalt2 from "./theme/cobalt2.json" with { type: "json" };
+import cursor from "./theme/cursor.json" with { type: "json" };
+import dracula from "./theme/dracula.json" with { type: "json" };
+import everforest from "./theme/everforest.json" with { type: "json" };
+import flexoki from "./theme/flexoki.json" with { type: "json" };
+import github from "./theme/github.json" with { type: "json" };
+import gruvbox from "./theme/gruvbox.json" with { type: "json" };
+import kanagawa from "./theme/kanagawa.json" with { type: "json" };
+import material from "./theme/material.json" with { type: "json" };
+import matrix from "./theme/matrix.json" with { type: "json" };
+import mercury from "./theme/mercury.json" with { type: "json" };
+import monokai from "./theme/monokai.json" with { type: "json" };
+import nightowl from "./theme/nightowl.json" with { type: "json" };
+import nord from "./theme/nord.json" with { type: "json" };
+import osakaJade from "./theme/osaka-jade.json" with { type: "json" };
+import onedark from "./theme/one-dark.json" with { type: "json" };
+import opencode from "./theme/opencode.json" with { type: "json" };
+import orng from "./theme/orng.json" with { type: "json" };
+import lucentOrng from "./theme/lucent-orng.json" with { type: "json" };
+import palenight from "./theme/palenight.json" with { type: "json" };
+import rosepine from "./theme/rosepine.json" with { type: "json" };
+import solarized from "./theme/solarized.json" with { type: "json" };
+import synthwave84 from "./theme/synthwave84.json" with { type: "json" };
+import tokyonight from "./theme/tokyonight.json" with { type: "json" };
+import vercel from "./theme/vercel.json" with { type: "json" };
+import vesper from "./theme/vesper.json" with { type: "json" };
+import zenburn from "./theme/zenburn.json" with { type: "json" };
+import carbonfox from "./theme/carbonfox.json" with { type: "json" };
+import { useKV } from "./kv";
+import { useRenderer } from "@opentui/solid";
+import { createStore, produce } from "solid-js/store";
+import { Global } from "@/global";
+import { Filesystem } from "@/util/filesystem";
+import { useTuiConfig } from "./tui-config";
 
 type ThemeColors = {
-  primary: RGBA
-  secondary: RGBA
-  accent: RGBA
-  error: RGBA
-  warning: RGBA
-  success: RGBA
-  info: RGBA
-  text: RGBA
-  textMuted: RGBA
-  selectedListItemText: RGBA
-  background: RGBA
-  backgroundPanel: RGBA
-  backgroundElement: RGBA
-  backgroundMenu: RGBA
-  border: RGBA
-  borderActive: RGBA
-  borderSubtle: RGBA
-  diffAdded: RGBA
-  diffRemoved: RGBA
-  diffContext: RGBA
-  diffHunkHeader: RGBA
-  diffHighlightAdded: RGBA
-  diffHighlightRemoved: RGBA
-  diffAddedBg: RGBA
-  diffRemovedBg: RGBA
-  diffContextBg: RGBA
-  diffLineNumber: RGBA
-  diffAddedLineNumberBg: RGBA
-  diffRemovedLineNumberBg: RGBA
-  markdownText: RGBA
-  markdownHeading: RGBA
-  markdownLink: RGBA
-  markdownLinkText: RGBA
-  markdownCode: RGBA
-  markdownBlockQuote: RGBA
-  markdownEmph: RGBA
-  markdownStrong: RGBA
-  markdownHorizontalRule: RGBA
-  markdownListItem: RGBA
-  markdownListEnumeration: RGBA
-  markdownImage: RGBA
-  markdownImageText: RGBA
-  markdownCodeBlock: RGBA
-  syntaxComment: RGBA
-  syntaxKeyword: RGBA
-  syntaxFunction: RGBA
-  syntaxVariable: RGBA
-  syntaxString: RGBA
-  syntaxNumber: RGBA
-  syntaxType: RGBA
-  syntaxOperator: RGBA
-  syntaxPunctuation: RGBA
-}
+  primary: RGBA;
+  secondary: RGBA;
+  accent: RGBA;
+  f_rappe: RGBA;
+  warning: RGBA;
+  success: RGBA;
+  info: RGBA;
+  text: RGBA;
+  textMuted: RGBA;
+  selectedListItemText: RGBA;
+  background: RGBA;
+  backgroundPanel: RGBA;
+  backgroundElement: RGBA;
+  backgroundMenu: RGBA;
+  border: RGBA;
+  borderActive: RGBA;
+  borderSubtle: RGBA;
+  diffAdded: RGBA;
+  diffRemoved: RGBA;
+  diffContext: RGBA;
+  diffHunkHeader: RGBA;
+  diffHighlightAdded: RGBA;
+  diffHighlightRemoved: RGBA;
+  diffAddedBg: RGBA;
+  diffRemovedBg: RGBA;
+  diffContextBg: RGBA;
+  diffLineNumber: RGBA;
+  diffAddedLineNumberBg: RGBA;
+  diffRemovedLineNumberBg: RGBA;
+  markdownText: RGBA;
+  markdownHeading: RGBA;
+  markdownLink: RGBA;
+  markdownLinkText: RGBA;
+  markdownCode: RGBA;
+  markdownBlockQuote: RGBA;
+  markdownEmph: RGBA;
+  markdownStrong: RGBA;
+  markdownHorizontalRule: RGBA;
+  markdownListItem: RGBA;
+  markdownListEnumeration: RGBA;
+  markdownImage: RGBA;
+  markdownImageText: RGBA;
+  markdownCodeBlock: RGBA;
+  syntaxComment: RGBA;
+  syntaxKeyword: RGBA;
+  syntaxFunction: RGBA;
+  syntaxVariable: RGBA;
+  syntaxString: RGBA;
+  syntaxNumber: RGBA;
+  syntaxType: RGBA;
+  syntaxOperator: RGBA;
+  syntaxPunctuation: RGBA;
+};
 
 type Theme = ThemeColors & {
-  _hasSelectedListItemText: boolean
-  thinkingOpacity: number
-}
+  _hasSelectedListItemText: boolean;
+  thinkingOpacity: number;
+};
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
-  // If theme explicitly defines selectedListItemText, use it
+  // if theme explicitly defines selectedListItemText, use it
   if (theme._hasSelectedListItemText) {
-    return theme.selectedListItemText
+    return theme.selectedListItemText;
   }
 
-  // For transparent backgrounds, calculate contrast based on the actual bg (or fallback to primary)
+  // for transparent backgrounds, calculate contrast based on the actual bg (or fallback to primary)
   if (theme.background.a === 0) {
-    const targetColor = bg ?? theme.primary
-    const { r, g, b } = targetColor
-    const luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+    const targetColor = bg ?? theme.primary;
+    const { r, g, b } = targetColor;
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    return luminance > 0.5
+      ? RGBA.fromInts(0, 0, 0)
+      : RGBA.fromInts(255, 255, 255);
   }
 
-  // Fall back to background color
-  return theme.background
+  // fall back to background color
+  return theme.background;
 }
 
-type HexColor = `#${string}`
-type RefName = string
+type HexColor = `#${string}`;
+type RefName = string;
 type Variant = {
-  dark: HexColor | RefName
-  light: HexColor | RefName
-}
-type ColorValue = HexColor | RefName | Variant | RGBA
+  dark: HexColor | RefName;
+  light: HexColor | RefName;
+};
+type ColorValue = HexColor | RefName | Variant | RGBA;
 type ThemeJson = {
-  $schema?: string
-  defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
-    selectedListItemText?: ColorValue
-    backgroundMenu?: ColorValue
-    thinkingOpacity?: number
-  }
-}
+  $schema?: string;
+  defs?: Record<string, HexColor | RefName>;
+  theme: Omit<
+    Record<keyof ThemeColors, ColorValue>,
+    "selectedListItemText" | "backgroundMenu"
+  > & {
+    selectedListItemText?: ColorValue;
+    backgroundMenu?: ColorValue;
+    thinkingOpacity?: number;
+  };
+};
 
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
@@ -173,64 +178,72 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vercel,
   zenburn,
   carbonfox,
-}
+};
 
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
-  const defs = theme.defs ?? {}
+  const defs = theme.defs ?? {};
   function resolveColor(c: ColorValue): RGBA {
-    if (c instanceof RGBA) return c
+    if (c instanceof RGBA) return c;
     if (typeof c === "string") {
-      if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0)
+      if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0);
 
-      if (c.startsWith("#")) return RGBA.fromHex(c)
+      if (c.startsWith("#")) return RGBA.fromHex(c);
 
       if (defs[c] != null) {
-        return resolveColor(defs[c])
+        return resolveColor(defs[c]);
       } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
-        return resolveColor(theme.theme[c as keyof ThemeColors]!)
+        return resolveColor(theme.theme[c as keyof ThemeColors]!);
       } else {
-        throw new Error(`Color reference "${c}" not found in defs or theme`)
+        throw new Error(`Color reference "${c}" not found in defs or theme`);
       }
     }
     if (typeof c === "number") {
-      return ansiToRgba(c)
+      return ansiToRgba(c);
     }
-    return resolveColor(c[mode])
+    return resolveColor(c[mode]);
   }
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
+      .filter(
+        ([key]) =>
+          key !== "selectedListItemText" &&
+          key !== "backgroundMenu" &&
+          key !== "thinkingOpacity",
+      )
       .map(([key, value]) => {
-        return [key, resolveColor(value as ColorValue)]
+        return [key, resolveColor(value as ColorValue)];
       }),
-  ) as Partial<ThemeColors>
+  ) as Partial<ThemeColors>;
 
   // Handle selectedListItemText separately since it's optional
-  const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
+  const hasSelectedListItemText =
+    theme.theme.selectedListItemText !== undefined;
   if (hasSelectedListItemText) {
-    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
+    resolved.selectedListItemText = resolveColor(
+      theme.theme.selectedListItemText!,
+    );
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
-    resolved.selectedListItemText = resolved.background
+    resolved.selectedListItemText = resolved.background;
   }
 
   // Handle backgroundMenu - optional with fallback to backgroundElement
   if (theme.theme.backgroundMenu !== undefined) {
-    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
+    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu);
   } else {
-    resolved.backgroundMenu = resolved.backgroundElement
+    resolved.backgroundMenu = resolved.backgroundElement;
   }
 
   // Handle thinkingOpacity - optional with default of 0.6
-  const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
+  const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6;
 
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
     thinkingOpacity,
-  } as Theme
+  } as Theme;
 }
 
 function ansiToRgba(code: number): RGBA {
@@ -253,144 +266,159 @@ function ansiToRgba(code: number): RGBA {
       "#ff00ff", // Bright Magenta
       "#00ffff", // Bright Cyan
       "#ffffff", // Bright White
-    ]
-    return RGBA.fromHex(ansiColors[code] ?? "#000000")
+    ];
+    return RGBA.fromHex(ansiColors[code] ?? "#000000");
   }
 
   // 6x6x6 Color Cube (16-231)
   if (code < 232) {
-    const index = code - 16
-    const b = index % 6
-    const g = Math.floor(index / 6) % 6
-    const r = Math.floor(index / 36)
+    const index = code - 16;
+    const b = index % 6;
+    const g = Math.floor(index / 6) % 6;
+    const r = Math.floor(index / 36);
 
-    const val = (x: number) => (x === 0 ? 0 : x * 40 + 55)
-    return RGBA.fromInts(val(r), val(g), val(b))
+    const val = (x: number) => (x === 0 ? 0 : x * 40 + 55);
+    return RGBA.fromInts(val(r), val(g), val(b));
   }
 
   // Grayscale Ramp (232-255)
   if (code < 256) {
-    const gray = (code - 232) * 10 + 8
-    return RGBA.fromInts(gray, gray, gray)
+    const gray = (code - 232) * 10 + 8;
+    return RGBA.fromInts(gray, gray, gray);
   }
 
   // Fallback for invalid codes
-  return RGBA.fromInts(0, 0, 0)
+  return RGBA.fromInts(0, 0, 0);
 }
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
-    const config = useTuiConfig()
-    const kv = useKV()
+    const config = useTuiConfig();
+    const kv = useKV();
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
-      active: (config.theme ?? kv.get("theme", "opencode")) as string,
+      mode: props.mode,
+      active: "opencode",
       ready: false,
-    })
+    });
+
+    // react to kv loading — kv reads are async so the store is empty
+    // on first render; this effect re-runs once the file is loaded
+    createEffect(() => {
+      const savedMode = kv.get("theme_mode");
+      if (savedMode) setStore("mode", savedMode);
+    });
 
     createEffect(() => {
-      const theme = config.theme
-      if (theme) setStore("active", theme)
-    })
+      const configTheme = config.theme;
+      if (configTheme && configTheme !== "default") {
+        setStore("active", configTheme);
+        return;
+      }
+      const saved = kv.get("theme");
+      if (saved) setStore("active", saved);
+    });
 
     function init() {
-      resolveSystemTheme()
+      resolveSystemTheme();
       getCustomThemes()
         .then((custom) => {
           setStore(
             produce((draft) => {
-              Object.assign(draft.themes, custom)
+              Object.assign(draft.themes, custom);
             }),
-          )
+          );
         })
         .catch(() => {
-          setStore("active", "opencode")
+          setStore("active", "opencode");
         })
         .finally(() => {
           if (store.active !== "system") {
-            setStore("ready", true)
+            setStore("ready", true);
           }
-        })
+        });
     }
 
-    onMount(init)
+    onMount(init);
 
     function resolveSystemTheme() {
-      Log.Default.debug("resolveSystemTheme")
+      log.theme.debug("THEME_RESOLVE_SYSTEM");
       renderer
         .getPalette({
           size: 16,
         })
         .then((colors) => {
-          Log.Default.debug("theme palette", colors.palette)
+          log.theme.debug("THEME_PALETTE_DETECTED", { palette: colors.palette });
           if (!colors.palette[0]) {
             if (store.active === "system") {
               setStore(
                 produce((draft) => {
-                  draft.active = "opencode"
-                  draft.ready = true
+                  draft.active = "opencode";
+                  draft.ready = true;
                 }),
-              )
+              );
             }
-            return
+            return;
           }
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
+              draft.themes.system = generateSystem(colors, store.mode);
               if (store.active === "system") {
-                draft.ready = true
+                draft.ready = true;
               }
             }),
-          )
-        })
+          );
+        });
     }
 
-    const renderer = useRenderer()
+    const renderer = useRenderer();
     process.on("SIGUSR2", async () => {
-      renderer.clearPaletteCache()
-      init()
-    })
+      renderer.clearPaletteCache();
+      init();
+    });
 
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
-    })
+      return resolveTheme(
+        store.themes[store.active] ?? store.themes.opencode,
+        store.mode,
+      );
+    });
 
-    const syntax = createMemo(() => generateSyntax(values()))
-    const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
+    const syntax = createMemo(() => generateSyntax(values()));
+    const subtleSyntax = createMemo(() => generateSubtleSyntax(values()));
 
     return {
       theme: new Proxy(values(), {
         get(_target, prop) {
-                    return values()[prop]
+          return values()[prop];
         },
       }),
       get selected() {
-        return store.active
+        return store.active;
       },
       all() {
-        return store.themes
+        return store.themes;
       },
       syntax,
       subtleSyntax,
       mode() {
-        return store.mode
+        return store.mode;
       },
       setMode(mode: "dark" | "light") {
-        setStore("mode", mode)
-        kv.set("theme_mode", mode)
+        setStore("mode", mode);
+        kv.set("theme_mode", mode);
       },
       set(theme: string) {
-        setStore("active", theme)
-        kv.set("theme", theme)
+        setStore("active", theme);
+        kv.set("theme", theme);
       },
       get ready() {
-        return store.ready
+        return store.ready;
       },
-    }
+    };
   },
-})
+});
 
 async function getCustomThemes() {
   const directories = [
@@ -401,9 +429,9 @@ async function getCustomThemes() {
         start: process.cwd(),
       }),
     )),
-  ]
+  ];
 
-  const result: Record<string, ThemeJson> = {}
+  const result: Record<string, ThemeJson> = {};
   for (const dir of directories) {
     for (const item of await Glob.scan("themes/*.json", {
       cwd: dir,
@@ -411,35 +439,42 @@ async function getCustomThemes() {
       dot: true,
       symlink: true,
     })) {
-      const name = path.basename(item, ".json")
-      result[name] = await Filesystem.readJson(item)
+      const name = path.basename(item, ".json");
+      result[name] = await Filesystem.readJson(item);
     }
   }
-  return result
+  return result;
 }
 
 export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
-  const r = base.r + (overlay.r - base.r) * alpha
-  const g = base.g + (overlay.g - base.g) * alpha
-  const b = base.b + (overlay.b - base.b) * alpha
-  return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
+  const r = base.r + (overlay.r - base.r) * alpha;
+  const g = base.g + (overlay.g - base.g) * alpha;
+  const b = base.b + (overlay.b - base.b) * alpha;
+  return RGBA.fromInts(
+    Math.round(r * 255),
+    Math.round(g * 255),
+    Math.round(b * 255),
+  );
 }
 
-function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
-  const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
-  const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const transparent = RGBA.fromInts(0, 0, 0, 0)
-  const isDark = mode == "dark"
+function generateSystem(
+  colors: TerminalColors,
+  mode: "dark" | "light",
+): ThemeJson {
+  const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!);
+  const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!);
+  const transparent = RGBA.fromInts(0, 0, 0, 0);
+  const isDark = mode == "dark";
 
   const col = (i: number) => {
-    const value = colors.palette[i]
-    if (value) return RGBA.fromHex(value)
-    return ansiToRgba(i)
-  }
+    const value = colors.palette[i];
+    if (value) return RGBA.fromHex(value);
+    return ansiToRgba(i);
+  };
 
   // Generate gray scale based on terminal background
-  const grays = generateGrayScale(bg, isDark)
-  const textMuted = generateMutedTextColor(bg, isDark)
+  const grays = generateGrayScale(bg, isDark);
+  const textMuted = generateMutedTextColor(bg, isDark);
 
   // ANSI color references
   const ansiColors = {
@@ -453,13 +488,13 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
     white: col(7),
     redBright: col(9),
     greenBright: col(10),
-  }
+  };
 
-  const diffAlpha = isDark ? 0.22 : 0.14
-  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
-  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
-  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
-  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
+  const diffAlpha = isDark ? 0.22 : 0.14;
+  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha);
+  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha);
+  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha);
+  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha);
 
   return {
     theme: {
@@ -531,104 +566,108 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       syntaxOperator: ansiColors.cyan,
       syntaxPunctuation: fg,
     },
-  }
+  };
 }
 
 function generateGrayScale(bg: RGBA, isDark: boolean): Record<number, RGBA> {
-  const grays: Record<number, RGBA> = {}
+  const grays: Record<number, RGBA> = {};
 
   // RGBA stores floats in range 0-1, convert to 0-255
-  const bgR = bg.r * 255
-  const bgG = bg.g * 255
-  const bgB = bg.b * 255
+  const bgR = bg.r * 255;
+  const bgG = bg.g * 255;
+  const bgB = bg.b * 255;
 
-  const luminance = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB
+  const luminance = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB;
 
   for (let i = 1; i <= 12; i++) {
-    const factor = i / 12.0
+    const factor = i / 12.0;
 
-    let grayValue: number
-    let newR: number
-    let newG: number
-    let newB: number
+    let grayValue: number;
+    let newR: number;
+    let newG: number;
+    let newB: number;
 
     if (isDark) {
       if (luminance < 10) {
-        grayValue = Math.floor(factor * 0.4 * 255)
-        newR = grayValue
-        newG = grayValue
-        newB = grayValue
+        grayValue = Math.floor(factor * 0.4 * 255);
+        newR = grayValue;
+        newG = grayValue;
+        newB = grayValue;
       } else {
-        const newLum = luminance + (255 - luminance) * factor * 0.4
+        const newLum = luminance + (255 - luminance) * factor * 0.4;
 
-        const ratio = newLum / luminance
-        newR = Math.min(bgR * ratio, 255)
-        newG = Math.min(bgG * ratio, 255)
-        newB = Math.min(bgB * ratio, 255)
+        const ratio = newLum / luminance;
+        newR = Math.min(bgR * ratio, 255);
+        newG = Math.min(bgG * ratio, 255);
+        newB = Math.min(bgB * ratio, 255);
       }
     } else {
       if (luminance > 245) {
-        grayValue = Math.floor(255 - factor * 0.4 * 255)
-        newR = grayValue
-        newG = grayValue
-        newB = grayValue
+        grayValue = Math.floor(255 - factor * 0.4 * 255);
+        newR = grayValue;
+        newG = grayValue;
+        newB = grayValue;
       } else {
-        const newLum = luminance * (1 - factor * 0.4)
+        const newLum = luminance * (1 - factor * 0.4);
 
-        const ratio = newLum / luminance
-        newR = Math.max(bgR * ratio, 0)
-        newG = Math.max(bgG * ratio, 0)
-        newB = Math.max(bgB * ratio, 0)
+        const ratio = newLum / luminance;
+        newR = Math.max(bgR * ratio, 0);
+        newG = Math.max(bgG * ratio, 0);
+        newB = Math.max(bgB * ratio, 0);
       }
     }
 
-    grays[i] = RGBA.fromInts(Math.floor(newR), Math.floor(newG), Math.floor(newB))
+    grays[i] = RGBA.fromInts(
+      Math.floor(newR),
+      Math.floor(newG),
+      Math.floor(newB),
+    );
   }
 
-  return grays
+  return grays;
 }
 
 function generateMutedTextColor(bg: RGBA, isDark: boolean): RGBA {
   // RGBA stores floats in range 0-1, convert to 0-255
-  const bgR = bg.r * 255
-  const bgG = bg.g * 255
-  const bgB = bg.b * 255
+  const bgR = bg.r * 255;
+  const bgG = bg.g * 255;
+  const bgB = bg.b * 255;
 
-  const bgLum = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB
+  const bgLum = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB;
 
-  let grayValue: number
+  let grayValue: number;
 
   if (isDark) {
     if (bgLum < 10) {
       // Very dark/black background
-      grayValue = 180 // #b4b4b4
+      grayValue = 180; // #b4b4b4
     } else {
       // Scale up for lighter dark backgrounds
-      grayValue = Math.min(Math.floor(160 + bgLum * 0.3), 200)
+      grayValue = Math.min(Math.floor(160 + bgLum * 0.3), 200);
     }
   } else {
     if (bgLum > 245) {
       // Very light/white background
-      grayValue = 75 // #4b4b4b
+      grayValue = 75; // #4b4b4b
     } else {
       // Scale down for darker light backgrounds
-      grayValue = Math.max(Math.floor(100 - (255 - bgLum) * 0.2), 60)
+      grayValue = Math.max(Math.floor(100 - (255 - bgLum) * 0.2), 60);
     }
   }
 
-  return RGBA.fromInts(grayValue, grayValue, grayValue)
+  return RGBA.fromInts(grayValue, grayValue, grayValue);
 }
 
 function generateSyntax(theme: Theme) {
-  return SyntaxStyle.fromTheme(getSyntaxRules(theme))
+  return SyntaxStyle.fromTheme(getSyntaxRules(theme));
 }
 
 function generateSubtleSyntax(theme: Theme) {
-  const rules = getSyntaxRules(theme)
+  const rules = getSyntaxRules(theme);
   return SyntaxStyle.fromTheme(
     rules.map((rule) => {
       if (rule.style.foreground) {
-        const fg = rule.style.foreground
+        const fg = rule.style.foreground;
         return {
           ...rule,
           style: {
@@ -640,11 +679,11 @@ function generateSubtleSyntax(theme: Theme) {
               Math.round(theme.thinkingOpacity * 255),
             ),
           },
-        }
+        };
       }
-      return rule
+      return rule;
     }),
-  )
+  );
 }
 
 function getSyntaxRules(theme: Theme) {
@@ -716,7 +755,12 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
-      scope: ["keyword.return", "keyword.conditional", "keyword.repeat", "keyword.coroutine"],
+      scope: [
+        "keyword.return",
+        "keyword.conditional",
+        "keyword.repeat",
+        "keyword.coroutine",
+      ],
       style: {
         foreground: theme.syntaxKeyword,
         italic: true,
@@ -762,7 +806,12 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
-      scope: ["variable", "variable.parameter", "function.method.call", "function.call"],
+      scope: [
+        "variable",
+        "variable.parameter",
+        "function.method.call",
+        "function.call",
+      ],
       style: {
         foreground: theme.syntaxVariable,
       },
@@ -810,7 +859,13 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
-      scope: ["variable.builtin", "type.builtin", "function.builtin", "module.builtin", "constant.builtin"],
+      scope: [
+        "variable.builtin",
+        "type.builtin",
+        "function.builtin",
+        "module.builtin",
+        "constant.builtin",
+      ],
       style: {
         foreground: theme.error,
       },
@@ -1148,5 +1203,5 @@ function getSyntaxRules(theme: Theme) {
         foreground: theme.textMuted,
       },
     },
-  ]
+  ];
 }

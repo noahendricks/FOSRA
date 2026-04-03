@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import type { Setter } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import type {
   Session,
@@ -17,6 +18,7 @@ import type {
   Command,
   Workspace,
 } from "../fosra/sdk-types";
+import { log } from "@/util/log";
 
 // REACTIVE RECORD
 export interface ReactiveRecord<V> {
@@ -40,6 +42,30 @@ type Collections = {
   mcp: Record<string, McpStatus>;
 };
 
+export function snapshotState(state: ReturnType<typeof createAppState>) {
+  return {
+    sessions: state.sessions.size,
+    messages: state.messages.size,
+    parts: state.parts.size,
+    todos: Object.values(state.messages.values()).reduce(
+      (n, msgs) => n + ((msgs as Message[] | undefined) ?? []).length,
+      0,
+    ),
+    mcp: state.mcp.size,
+    loadedSessions: state.loadedSessions.size,
+    sessionsArray: state.sessionsArray().length,
+    providers: state.providers().length,
+    agents: state.agents().length,
+    config: state.config() !== null,
+    lsp: state.lsp().length,
+    formatter: state.formatter().length,
+    workspaceList: state.workspaceList().length,
+    command: state.command().length,
+    directory: state.directory(),
+    providerConnected: state.providerConnected(),
+  };
+}
+
 export function createAppState() {
   const [collections, setCollections] = createStore<Collections>({
     sessions: {},
@@ -57,11 +83,25 @@ export function createAppState() {
     read: () => Record<string, V>,
     write: (id: string, value: V) => void,
     remove: (id: string) => void,
+    collectionName: string,
   ): ReactiveRecord<V> {
     return {
       get: (id) => read()[id],
-      set: write,
-      delete: remove,
+      set: (id, value) => {
+        write(id, value);
+        log.store.debug("STATE_SET", {
+          collection: collectionName,
+          id,
+          size: Object.keys(read()).length,
+        });
+      },
+      delete: (id) => {
+        remove(id);
+        log.store.debug("STATE_DELETE", {
+          collection: collectionName,
+          id,
+        });
+      },
       has: (id) => read()[id] !== undefined,
       values: () => Object.values(read()),
       entries: () => Object.entries(read()),
@@ -81,6 +121,7 @@ export function createAppState() {
           delete d[id];
         }),
       ),
+    "sessions",
   );
 
   const messages = makeRecord<Message[]>(
@@ -93,6 +134,7 @@ export function createAppState() {
           delete d[id];
         }),
       ),
+    "messages",
   );
 
   const parts = makeRecord<Part[]>(
@@ -105,6 +147,7 @@ export function createAppState() {
           delete d[id];
         }),
       ),
+    "parts",
   );
 
   const todos = makeRecord<Todo[]>(
@@ -117,6 +160,7 @@ export function createAppState() {
           delete d[id];
         }),
       ),
+    "todos",
   );
 
   const permissions = makeRecord<PermissionRequest[]>(
@@ -129,6 +173,7 @@ export function createAppState() {
           delete d[id];
         }),
       ),
+    "permissions",
   );
 
   const questions = makeRecord<QuestionRequest[]>(
@@ -141,6 +186,7 @@ export function createAppState() {
           delete d[id];
         }),
       ),
+    "questions",
   );
 
   const mcp = makeRecord<McpStatus>(
@@ -153,6 +199,7 @@ export function createAppState() {
           delete d[id];
         }),
       ),
+    "mcp",
   );
 
   const [systemState, setSystemState] = createStore<{
@@ -187,11 +234,103 @@ export function createAppState() {
 
   const loadedSessions = new Set<string>();
 
-  const [sessionsArray, setSessionsArray] = createSignal<Session[]>([]);
-  const [providerDefault, setProviderDefault] = createSignal<
+  const [sessionsArray, baseSetSessionsArray] = createSignal<Session[]>([]);
+  const [providerDefault, baseSetProviderDefault] = createSignal<
     Record<string, string>
   >({});
-  const [providerConnected, setProviderConnected] = createSignal<string[]>([]);
+  const [providerConnected, baseSetProviderConnected] = createSignal<string[]>(
+    [],
+  );
+
+  const setSessionsArray = ((val: Session[]) => {
+    baseSetSessionsArray(val);
+    log.store.debug("STATE_SET_SIGNAL", {
+      signal: "sessionsArray",
+      length: val.length,
+    });
+  }) as unknown as Setter<Session[]>;
+
+  const setProviderDefault = ((val: Record<string, string>) => {
+    baseSetProviderDefault(val);
+    log.store.debug("STATE_SET_SIGNAL", {
+      signal: "providerDefault",
+      keys: Object.keys(val),
+    });
+  }) as unknown as Setter<Record<string, string>>;
+
+  const setProviderConnected = ((val: string[]) => {
+    baseSetProviderConnected(val);
+    log.store.debug("STATE_SET_SIGNAL", {
+      signal: "providerConnected",
+      count: val.length,
+    });
+  }) as unknown as Setter<string[]>;
+
+  // system state setters with mutation logging
+  const setLsp = (data: LspStatus[]) => {
+    setSystemState("lsp", data);
+    log.store.debug("STATE_SET_SYSTEM", { field: "lsp", count: data.length });
+  };
+  const setFormatter = (data: FormatterStatus[]) => {
+    setSystemState("formatter", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "formatter",
+      count: data.length,
+    });
+  };
+  const setVcs = (data: VcsInfo | undefined) => {
+    setSystemState("vcs", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "vcs",
+      hasData: data !== undefined,
+    });
+  };
+  const setPath = (data: typeof systemState.path) => {
+    setSystemState("path", data);
+    log.store.debug("STATE_SET_SYSTEM", { field: "path", keys: Object.keys(data) });
+  };
+  const setCommand = (data: Command[]) => {
+    setSystemState("command", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "command",
+      count: data.length,
+    });
+  };
+  const setWorkspaceList = (data: Workspace[]) => {
+    setSystemState("workspaceList", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "workspaceList",
+      count: data.length,
+    });
+  };
+  const setProviders = (data: Provider[]) => {
+    setSystemState("providers", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "providers",
+      count: data.length,
+    });
+  };
+  const setAgents = (data: Agent[]) => {
+    setSystemState("agents", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "agents",
+      count: data.length,
+    });
+  };
+  const setConfig = (data: Config | null) => {
+    setSystemState("config", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "config",
+      hasData: data !== null,
+    });
+  };
+  const setDirectory = (data: string) => {
+    setSystemState("directory", data);
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "directory",
+      value: data,
+    });
+  };
 
   return {
     sessions,
@@ -206,29 +345,27 @@ export function createAppState() {
     mcp,
 
     lsp: () => systemState.lsp,
-    setLsp: (data: LspStatus[]) => setSystemState("lsp", data),
+    setLsp,
     formatter: () => systemState.formatter,
-    setFormatter: (data: FormatterStatus[]) =>
-      setSystemState("formatter", data),
+    setFormatter,
     vcs: () => systemState.vcs,
-    setVcs: (data: VcsInfo | undefined) => setSystemState("vcs", data),
+    setVcs,
     path: () => systemState.path,
-    setPath: (data: typeof systemState.path) => setSystemState("path", data),
+    setPath,
     command: () => systemState.command,
-    setCommand: (data: Command[]) => setSystemState("command", data),
+    setCommand,
     workspaceList: () => systemState.workspaceList,
-    setWorkspaceList: (data: Workspace[]) =>
-      setSystemState("workspaceList", data),
+    setWorkspaceList,
 
     providers: () => systemState.providers,
-    setProviders: (data: Provider[]) => setSystemState("providers", data),
+    setProviders,
     agents: () => systemState.agents,
-    setAgents: (data: Agent[]) => setSystemState("agents", data),
+    setAgents,
     config: () => systemState.config,
-    setConfig: (data: Config | null) => setSystemState("config", data),
+    setConfig,
 
     directory: () => systemState.directory,
-    setDirectory: (data: string) => setSystemState("directory", data),
+    setDirectory,
 
     loadedSessions,
 

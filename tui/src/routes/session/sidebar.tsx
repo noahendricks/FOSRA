@@ -12,6 +12,7 @@ import { useKeybind } from "../../context/keybind";
 import { useDirectory } from "../../context/directory";
 import { useKV } from "../../context/kv";
 import { TodoItem } from "../../component/todo-item";
+import { Log } from "@/util/log";
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const store = useStore();
@@ -19,11 +20,35 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const isCodingMode = createMemo(
     () => local.agent.current().name === "FOSRA CODING",
   );
+  Log.Default.info(
+    "[STORE] Accessing store state in Sidebar:",
+    JSON.parse(JSON.stringify(store)),
+  );
   const { theme } = useTheme();
-  const session = createMemo(() => store.state.sessions.get(props.sessionID)!);
+  Log.Default.info(
+    "Store State at Sidebar render:",
+    JSON.parse(JSON.stringify(store.state)),
+  );
+  const session = createMemo(
+    () =>
+      store.state.sessions.get(props.sessionID) ?? {
+        title: "Unknown Session",
+        metadata: {},
+      },
+  );
+  Log.Default.info(
+    "[SIDEBAR] Render session sidebar for session:",
+    props.sessionID,
+    "title:",
+    session().title,
+    "metadata:",
+    session().metadata,
+  );
   const diff = createMemo(() => []);
   const todo = createMemo(() => store.state.todos.get(props.sessionID) ?? []);
-  const messages = createMemo(() => store.state.messages.get(props.sessionID) ?? []);
+  const messages = createMemo(
+    () => store.state.messages.get(props.sessionID) ?? [],
+  );
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -34,7 +59,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() =>
-    Object.entries(Object.fromEntries([...store.state.mcp.entries()])).sort(([a], [b]) => a.localeCompare(b)),
+    Object.entries(Object.fromEntries([...store.state.mcp.entries()])).sort(
+      ([a], [b]) => a.localeCompare(b),
+    ),
   );
 
   // Count connected and error MCP servers for collapsed header display
@@ -92,11 +119,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const kv = useKV();
 
   const hasProviders = createMemo(() =>
-    store.state.providers().some(
-      (x: any) =>
-        x.id !== "opencode" ||
-        Object.values(x.models as any).some((y: any) => y.cost?.input !== 0),
-    ),
+    store.state
+      .providers()
+      .some(
+        (x: any) =>
+          x.id !== "opencode" ||
+          Object.values(x.models as any).some((y: any) => y.cost?.input !== 0),
+      ),
   );
   const gettingStartedDismissed = createMemo(() =>
     kv.get("dismissed_getting_started", false),
@@ -142,9 +171,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </text>
               <Show
                 when={pricing()}
-                fallback={
-                  <text fg={theme.textMuted}>Pricing unavailable</text>
-                }
+                fallback={<text fg={theme.textMuted}>Pricing unavailable</text>}
               >
                 {(p) => (
                   <>
@@ -245,9 +272,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <box
                     flexDirection="row"
                     gap={1}
-                    onMouseDown={() =>
-                      setExpanded("lsp", !expanded.lsp)
-                    }
+                    onMouseDown={() => setExpanded("lsp", !expanded.lsp)}
                   >
                     <Show when={expanded.lsp}>
                       <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
@@ -257,9 +282,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     </text>
                   </box>
                   <Show when={expanded.lsp}>
-                    <text fg={theme.textMuted}>
-                      LSP status not available
-                    </text>
+                    <text fg={theme.textMuted}>LSP status not available</text>
                   </Show>
                 </box>
               </Show>

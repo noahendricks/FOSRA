@@ -8,7 +8,7 @@ import type {
 } from "../fosra/sdk-types";
 import type { ReactiveRecord } from "./state";
 import { Accessor, Setter } from "solid-js";
-import { Log } from "@/util/log";
+import { log } from "@/util/log";
 
 export type EntityKey = "sessions" | "messages" | "parts" | "todos";
 
@@ -49,10 +49,10 @@ export function createStoreActions(state: {
         const updated = [...current];
         updated[idx] = message;
         state.messages.set(sessionId, updated);
-        Log.Default.info("[STORE] setMessage UPDATE:", message.role, "id:", message.id, "session:", sessionId, "total:", current.length)
+        log.store.debug("STORE_SET_MESSAGE", { operation: "update", sessionId, messageId: message.id, role: message.role, total: current.length });
       } else {
         state.messages.set(sessionId, [...current, message]);
-        Log.Default.info("[STORE] setMessage INSERT:", message.role, "id:", message.id, "session:", sessionId, "total:", current.length + 1)
+        log.store.debug("STORE_SET_MESSAGE", { operation: "insert", sessionId, messageId: message.id, role: message.role, total: current.length + 1 });
       }
     },
 
@@ -62,6 +62,11 @@ export function createStoreActions(state: {
         sessionId,
         current.filter((m) => m.id !== messageId),
       );
+      log.store.debug("STORE_REMOVE_MESSAGE", {
+        sessionId,
+        messageId,
+        remaining: current.length - 1,
+      });
     },
 
     setPart(messageId: string, part: Part) {
@@ -71,8 +76,20 @@ export function createStoreActions(state: {
         const updated = [...current];
         updated[idx] = part;
         state.parts.set(messageId, updated);
+        log.store.debug("STORE_SET_PART", {
+          messageId,
+          partId: part.id,
+          operation: "update",
+          total: current.length,
+        });
       } else {
         state.parts.set(messageId, [...current, part]);
+        log.store.debug("STORE_SET_PART", {
+          messageId,
+          partId: part.id,
+          operation: "insert",
+          total: current.length + 1,
+        });
       }
     },
 
@@ -82,6 +99,11 @@ export function createStoreActions(state: {
         messageId,
         current.filter((p) => p.id !== partId),
       );
+      log.store.debug("STORE_REMOVE_PART", {
+        messageId,
+        partId,
+        remaining: current.length - 1,
+      });
     },
 
     setTodo(sessionId: string, todo: Todo) {
@@ -92,8 +114,18 @@ export function createStoreActions(state: {
         const updated = [...current];
         updated[idx] = todo;
         state.todos.set(sessionId, updated);
+        log.store.debug("STORE_SET_TODO", {
+          sessionId,
+          operation: "update",
+          total: current.length,
+        });
       } else {
         state.todos.set(sessionId, [...current, todo]);
+        log.store.debug("STORE_SET_TODO", {
+          sessionId,
+          operation: "insert",
+          total: current.length + 1,
+        });
       }
     },
 
@@ -103,6 +135,11 @@ export function createStoreActions(state: {
         sessionId,
         current.filter((t) => t.content !== todoContent),
       );
+      log.store.debug("STORE_REMOVE_TODO", {
+        sessionId,
+        todoContent,
+        remaining: current.length - 1,
+      });
     },
 
     setPermission(sessionId: string, request: PermissionRequest) {
@@ -113,21 +150,39 @@ export function createStoreActions(state: {
         const updated = [...current];
         updated[idx] = request;
         state.permission.set(sessionId, updated);
+        log.store.debug("STORE_SET_PERMISSION", {
+          sessionId,
+          permissionId: request.id,
+          operation: "update",
+          total: current.length,
+        });
       } else {
         state.permission.set(sessionId, [...current, request]);
+        log.store.debug("STORE_SET_PERMISSION", {
+          sessionId,
+          permissionId: request.id,
+          operation: "insert",
+          total: current.length + 1,
+        });
       }
     },
 
     clearPermission(sessionId: string) {
       state.permission.delete(sessionId);
+      log.store.debug("STORE_CLEAR_PERMISSION", { sessionId });
     },
 
     setQuestion(sessionId: string, request: QuestionRequest) {
       state.question.set(sessionId, [request]);
+      log.store.debug("STORE_SET_QUESTION", {
+        sessionId,
+        questionId: request.id,
+      });
     },
 
     clearQuestion(sessionId: string) {
       state.question.delete(sessionId);
+      log.store.debug("STORE_CLEAR_QUESTION", { sessionId });
     },
 
     applyDelta(
@@ -136,6 +191,7 @@ export function createStoreActions(state: {
       partId: string,
       delta: string,
       field: string = "text",
+      partType: string = "text",
     ) {
       let parts = state.parts.get(messageId);
 
@@ -146,19 +202,26 @@ export function createStoreActions(state: {
       let idx = parts.findIndex((p) => p.id === partId);
 
       if (idx < 0) {
-        const newPart: Part = {
+        const newPart = {
           id: partId,
           sessionID: sessionId,
           messageID: messageId,
-          type: "text",
+          type: partType,
           text: field === "text" ? delta : "",
           time: { start: Date.now() },
-        };
+        } as Part;
         if (field !== "text") {
           (newPart as any)[field] = delta;
         }
         parts = [...parts, newPart];
-        Log.Default.info("[STORE] applyDelta: created new part", { messageId, partId, field, delta });
+        log.store.debug("STORE_APPLY_DELTA", {
+          messageId,
+          partId,
+          field,
+          partType,
+          operation: "create",
+          resultLength: delta.length,
+        });
         state.parts.set(messageId, parts);
         return;
       }
@@ -169,7 +232,13 @@ export function createStoreActions(state: {
       const updatedPart = { ...part, [field]: (existing ?? "") + delta };
       const newParts = [...parts];
       newParts[idx] = updatedPart;
-      Log.Default.info("[STORE] applyDelta: updated part", { messageId, partId, field, newText: updatedPart[field]?.slice(0, 50) });
+      log.store.debug("STORE_APPLY_DELTA", {
+        messageId,
+        partId,
+        field,
+        operation: "update",
+        resultLength: (updatedPart[field] as string)?.length ?? 0,
+      });
       state.parts.set(messageId, newParts);
     },
   };

@@ -6,6 +6,7 @@ import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import z from "zod"
 import { TuiEvent } from "../event"
+import { log } from "@/util/log"
 
 export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
 
@@ -58,6 +59,7 @@ function init() {
     show(options: ToastOptions) {
       const parsedOptions = TuiEvent.ToastShow.properties.parse(options)
       const { duration, ...currentToast } = parsedOptions
+      log.ui.info("TOAST_SHOWN", { ...currentToast, duration })
       setStore("currentToast", currentToast)
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {

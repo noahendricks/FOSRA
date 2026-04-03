@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   Match,
   on,
   onMount,
@@ -13,7 +14,7 @@ import {
   useContext,
 } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { Log } from "@/util/log";
+import { log } from "@/util/log";
 import path from "path";
 import { useRoute, useRouteData } from "@tui/context/route";
 import { useStore } from "@tui/context/store";
@@ -153,7 +154,6 @@ export function Session() {
         return 0;
       },
     );
-    Log.Default.info("[SESSION] messages memo re-evaluated:", msgs.length, "messages for session:", route.sessionID)
     return msgs;
   });
   const permissions = createMemo(() => {
@@ -243,9 +243,9 @@ export function Session() {
       .then(() => {
         if (scroll) scroll.scrollBy(100_000);
       })
-      .catch((e) => {
-        console.error(e);
-        toast.show({
+        .catch((e) => {
+          log.session.error("SESSION_LOAD_FAILED", { sessionID: route.sessionID, error: String(e) });
+          toast.show({
           message: `Session not found: ${route.sessionID}`,
           variant: "error",
         });
@@ -593,7 +593,7 @@ export function Session() {
             toBottom();
           })
           .catch((e: unknown) => {
-            console.error("revert error", e);
+            log.session.error("SESSION_REVERT_FAILED", { sessionID: route.sessionID, error: String(e) });
           });
         const parts = store.state.parts.get(message.id) ?? [];
         prompt.set(
@@ -1318,7 +1318,7 @@ export function Session() {
                 ref={(r) => {
                   prompt = r;
                   promptRef.set(r);
-                  // Apply initial prompt when prompt component mounts (e.g., from fork)
+                  // apply initial prompt when prompt component mounts (e.g., from fork)
                   if (route.initialPrompt) {
                     r.set(route.initialPrompt);
                   }
@@ -1375,31 +1375,17 @@ function UserMessage(props: {
   pending?: string;
 }) {
   const store = useStore();
-  
 
   const parts = createMemo(() => {
     return store.state.parts.get(props.message.id) ?? [];
   });
 
-  Log.Default.debug("[UserMessage] Rendering", {
-    messageId: props.message.id,
-    role: props.message.role,
-    partCount: parts().length,
-    index: props.index,
-    agent: props.message.agent,
-    timestamp: props.message.time.created,
-  });
   const ctx = use();
   const local = useLocal();
   const text = createMemo(() => {
     const t = parts().flatMap((x) =>
       x.type === "text" && !x.synthetic ? [x] : [],
     )[0];
-    Log.Default.debug("[UserMessage text memo]", {
-      messageId: props.message.id,
-      hasText: !!t,
-      textLength: t?.text?.length,
-    });
     return t;
   });
   const files = createMemo(() =>
@@ -1545,29 +1531,27 @@ function AssistantMessage(props: { message: AssistantMessage; last: boolean }) {
     return props.message.time.completed - user.time.created;
   });
 
-  console.log("Duration:", duration());
-
   const keybind = useKeybind();
 
   return (
     <>
-      <For each={parts()}>
+      <Index each={parts()}>
         {(part, index) => {
           const component = createMemo(
-            () => PART_MAPPING[part.type as keyof typeof PART_MAPPING],
+            () => PART_MAPPING[part().type as keyof typeof PART_MAPPING],
           );
           return (
             <Show when={component()}>
               <Dynamic
-                last={index() === parts().length - 1}
+                last={index === parts().length - 1}
                 component={component()}
-                part={part as any}
+                part={part() as any}
                 message={props.message}
               />
             </Show>
           );
         }}
-      </For>
+      </Index>
       <Show when={parts().some((x) => x.type === "tool" && x.tool === "task")}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
@@ -1616,7 +1600,7 @@ function AssistantMessage(props: { message: AssistantMessage; last: boolean }) {
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>
-                {Locale.titlecase(props.message.mode)}
+                {Locale.titlecase(props.message.agent)}
               </span>
               <span style={{ fg: theme.textMuted }}>
                 {" "}
@@ -1653,8 +1637,8 @@ function ReasoningPart(props: {
   const { theme, subtleSyntax } = useTheme();
   const ctx = use();
   const content = createMemo(() => {
-    // Filter out redacted reasoning chunks from OpenRouter
-    // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
+    // filter out redacted reasoning chunks from OpenRouter
+    // openRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim();
   });
   return (

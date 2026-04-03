@@ -7,6 +7,7 @@ import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tu
 import { useTheme } from "../context/theme"
 import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
+import { log } from "@/util/log"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
@@ -55,7 +56,7 @@ export function DialogMcp() {
         try {
           await local.mcp.toggle(option.value)
         } catch (error) {
-          console.error("Failed to toggle MCP:", error)
+          log.mcp.error("MCP_TOGGLE_FAILED", { name: option.value, error: String(error) })
         } finally {
           setLoading(null)
         }

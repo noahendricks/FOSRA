@@ -21,18 +21,7 @@ import {
 } from "solid-js";
 import "opentui-spinner/solid";
 import path from "path";
-import * as fs from "fs";
-import { Log } from "@/util/log";
-
-const KB_LOG =
-  process.env.FOSRA_LOG_FILE ??
-  path.join(process.env.HOME ?? "/tmp", ".fosra-tui.log");
-function kbLog(action: string, data?: Record<string, unknown>) {
-  fs.appendFileSync(
-    KB_LOG,
-    JSON.stringify({ t: new Date().toISOString(), action, ...data }) + "\n",
-  );
-}
+import { log } from "@/util/log";
 import { Filesystem } from "@/util/filesystem";
 import { useLocal } from "@tui/context/local";
 import { useTheme } from "@tui/context/theme";
@@ -40,11 +29,9 @@ import { EmptyBorder } from "@tui/component/border";
 import { useApi } from "../../context/api";
 import { useRoute } from "@tui/context/route";
 import { useStore } from "../../context/store";
-import { MessageID, PartID } from "@/session/schema";
 import { createStore, produce } from "solid-js/store";
 import { useKeybind } from "@tui/context/keybind";
 import { usePromptHistory, type PromptInfo } from "./history";
-import { assign } from "./part";
 import { usePromptStash } from "./stash";
 import { DialogStash } from "../dialog-stash";
 import { type AutocompleteRef, Autocomplete } from "./autocomplete";
@@ -230,10 +217,6 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         onSelect: (dialog) => {
-          kbLog("PROMPT_SUBMIT_CMD", {
-            inputFocused: input?.focused,
-            inputDestroyed: input?.isDestroyed,
-          });
           if (!input.focused) return;
           submit();
           dialog.clear();
@@ -580,61 +563,52 @@ export function Prompt(props: PromptProps) {
   ]);
 
   async function submit() {
+    log.prompt.info("SUBMIT_START", {
+      disabled: props.disabled,
+      sessionID: props.sessionID,
+      inputLength: promptUIStore.prompt.input?.length,
+    });
     try {
-      kbLog("SUBMIT_CALLED", {
-        disabled: props.disabled,
-        autocomplete: autocomplete?.visible,
-        input: promptUIStore.prompt.input?.slice(0, 50),
-      });
-      Log.Default.debug("[submit] START", {
-        disabled: props.disabled,
-        sessionID: props.sessionID,
-        inputLength: promptUIStore.prompt.input?.length,
-        inputPreview: promptUIStore.prompt.input?.slice(0, 100),
-      });
       if (props.disabled) {
-        Log.Default.debug("[submit] EARLY_EXIT: disabled");
+        log.prompt.debug("SUBMIT_EARLY_EXIT", { reason: "disabled" });
         return;
       }
       if (autocomplete?.visible) {
-        Log.Default.debug("[submit] EARLY_EXIT: autocomplete visible");
+        log.prompt.debug("SUBMIT_EARLY_EXIT", { reason: "autocomplete_visible" });
         return;
       }
       if (!promptUIStore.prompt.input) {
-        Log.Default.debug("[submit] EARLY_EXIT: no input");
+        log.prompt.debug("SUBMIT_EARLY_EXIT", { reason: "no_input" });
         return;
       }
       const trimmed = promptUIStore.prompt.input.trim();
       if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
-        Log.Default.debug("[submit] EARLY_EXIT: exit command");
+        log.prompt.info("SUBMIT_EXIT_COMMAND", {});
         exit();
         return;
       }
       const selectedModel = local.model.current();
       if (!selectedModel) {
-        Log.Default.debug("[submit] EARLY_EXIT: no model selected");
+        log.prompt.debug("SUBMIT_EARLY_EXIT", { reason: "no_model_selected" });
         promptModelWarning();
         return;
       }
-      Log.Default.debug("[submit] Model selected", {
-        providerID: selectedModel.providerID,
-        modelID: selectedModel.modelID,
-      });
-      kbLog("MODEL_OK", {
+      log.prompt.info("SUBMIT_MODEL_SELECTED", {
         providerID: selectedModel.providerID,
         modelID: selectedModel.modelID,
       });
 
       let sessionID = props.sessionID;
       if (sessionID == null) {
-        Log.Default.debug("[submit] Creating new session");
+        log.prompt.info("SUBMIT_SESSION_CREATE", {
+          workspaceID: props.workspaceID,
+        });
         const res = await api.fosra.session.create({
           workspaceID: props.workspaceID,
         });
 
         if (res.error) {
-          Log.Default.debug("[submit] SESSION_CREATE_ERROR:", res.error);
-          kbLog("SESSION_CREATE_ERROR", { error: JSON.stringify(res.error) });
+          log.prompt.error("SUBMIT_SESSION_CREATE_ERROR", { error: res.error });
           toast.show({
             message:
               "Creating a session failed. Open console for more details.",
@@ -645,22 +619,17 @@ export function Prompt(props: PromptProps) {
         }
 
         sessionID = (res.data as { id: string }).id;
-        Log.Default.debug("[submit] Session created", { sessionID });
-        kbLog("SESSION_CREATED", { sessionID });
+        log.prompt.info("SUBMIT_SESSION_CREATED", {
+          sessionID,
+          route: { type: "session", sessionID },
+        });
+        route.navigate({ type: "session", sessionID });
       } else {
-        Log.Default.debug("[submit] Using existing session", { sessionID });
+        log.prompt.debug("SUBMIT_EXISTING_SESSION", { sessionID });
       }
 
-      const messageID = MessageID.generate(); // fix this, needs to be server side only
-
-      Log.Default.debug("[submit] Generated messageID", { messageID });
       let inputText = promptUIStore.prompt.input;
-      Log.Default.debug("[submit] Input text", {
-        inputLength: inputText.length,
-        preview: inputText.slice(0, 200),
-      });
 
-      // expand pasted text inline before submitting
       const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId);
       const sortedExtmarks = allExtmarks.sort(
         (a: { start: number }, b: { start: number }) => b.start - a.start,
@@ -678,25 +647,29 @@ export function Prompt(props: PromptProps) {
         }
       }
 
-      // filter out text parts (pasted content) since they're now expanded inline
       const nonTextParts = promptUIStore.prompt.parts.filter(
         (part) => part.type !== "text",
       );
-      Log.Default.debug("[submit] nonTextParts", {
-        count: nonTextParts.length,
-        types: nonTextParts.map((p) => p.type),
-      });
 
-      // capture mode before it gets reset
       const currentMode = promptUIStore.mode;
       const variant = local.model.variant.current();
-      Log.Default.debug("[submit] Mode and variant", {
+      log.prompt.debug("SUBMIT_PARTS", {
+        nonTextPartsCount: nonTextParts.length,
+        nonTextTypes: nonTextParts.map((p) => p.type),
         mode: currentMode,
         variant,
       });
 
       if (promptUIStore.mode === "shell") {
-        Log.Default.debug("[submit] SHELL mode - calling session.shell");
+        log.prompt.info("SUBMIT_SHELL", {
+          sessionID,
+          agent: local.agent.current().name,
+          model: {
+            providerID: selectedModel.providerID,
+            modelID: selectedModel.modelID,
+          },
+          commandLength: inputText.length,
+        });
         api.fosra.session.shell({
           sessionID,
           agent: local.agent.current().name,
@@ -715,7 +688,6 @@ export function Prompt(props: PromptProps) {
           return command.slashes().some((x: any) => x.name === commandName);
         })
       ) {
-        // parse command from first line, preserve multi-line content in arguments
         const firstLineEnd = inputText.indexOf("\n");
         const firstLine =
           firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd);
@@ -724,6 +696,12 @@ export function Prompt(props: PromptProps) {
           firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1);
         const args =
           firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "");
+        log.prompt.info("SUBMIT_SLASH_COMMAND", {
+          sessionID,
+          command,
+          argumentsLength: args.length,
+          agent: local.agent.current().name,
+        });
 
         api.fosra.session.command({
           sessionID,
@@ -731,55 +709,38 @@ export function Prompt(props: PromptProps) {
           arguments: args,
           agent: local.agent.current().name,
           model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-          messageID,
           variant,
-          parts: nonTextParts
-            .filter((x) => x.type === "file")
-            .map((x) => ({
-              id: PartID.generate(),
-              ...x,
-            })),
+          parts: nonTextParts.filter((x) => x.type === "file"),
         });
       } else {
-        Log.Default.debug("[submit] PROMPT mode - calling session.prompt", {
+        log.prompt.info("SUBMIT_PROMPT", {
           sessionID,
           agent: local.agent.current().name,
           modelID: selectedModel.modelID,
-          messageID,
           inputLength: inputText.length,
-        });
-        kbLog("SENDING_PROMPT", {
-          sessionID,
-          agent: local.agent.current().name,
-          modelID: selectedModel.modelID,
-          inputLen: inputText.length,
+          nonTextPartsCount: nonTextParts.length,
         });
 
         api.fosra.session
           .prompt({
             sessionID,
             ...selectedModel,
-            messageID,
             agent: local.agent.current().name,
             model: selectedModel,
             variant,
             parts: [
               {
-                id: PartID.generate(),
                 type: "text",
                 text: inputText,
               },
-              ...nonTextParts.map(assign),
+              ...nonTextParts,
             ],
           })
           .catch((err) => {
-            Log.Default.debug("[submit] PROMPT_ERROR:", err);
-            kbLog("PROMPT_ERROR", { error: String(err) });
+            log.prompt.error("SUBMIT_PROMPT_ERROR", { error: String(err) });
           });
       }
-      Log.Default.debug(
-        "[submit] Clearing prompt state, calling onSubmit callback",
-      );
+      log.prompt.debug("SUBMIT_COMPLETE", { sessionID });
       history.append({
         ...promptUIStore.prompt,
         mode: currentMode,
@@ -792,19 +753,9 @@ export function Prompt(props: PromptProps) {
       setPromptUIStore("extmarkToPartIndex", new Map());
       props.onSubmit?.();
 
-      //temporary hack to make sure the message is sent
-      if (!props.sessionID)
-        setTimeout(() => {
-          route.navigate({
-            type: "session",
-            sessionID,
-          });
-        }, 50);
-
       input.clear();
-      kbLog("SUBMIT_DONE", { sessionID });
     } catch (e) {
-      kbLog("SUBMIT_ERROR", {
+      log.prompt.error("SUBMIT_ERROR", {
         error: String(e),
         stack: (e as Error)?.stack?.split("\n").slice(0, 3).join("\n"),
       });
@@ -994,20 +945,11 @@ export function Prompt(props: PromptProps) {
               }}
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
-                kbLog("KEYDOWN", {
-                  name: e.name,
-                  ctrl: e.ctrl,
-                  input: promptUIStore.prompt.input?.slice(0, 20),
-                });
                 if (props.disabled) {
                   e.preventDefault();
                   return;
                 }
                 if (e.name === "return" && !e.ctrl && !e.meta && !e.shift) {
-                  kbLog("ENTER_PRESSED", {
-                    autocomplete: autocomplete?.visible,
-                    input: promptUIStore.prompt.input?.slice(0, 20),
-                  });
                   if (!autocomplete?.visible && promptUIStore.prompt.input) {
                     e.preventDefault();
                     submit();
@@ -1110,7 +1052,6 @@ export function Prompt(props: PromptProps) {
                     input.cursorOffset = input.plainText.length;
                 }
               }}
-              onSubmit={submit}
               onPaste={async (event: PasteEvent) => {
                 if (props.disabled) {
                   event.preventDefault();

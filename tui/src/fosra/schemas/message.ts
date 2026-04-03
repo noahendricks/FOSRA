@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { Log } from "@/util/log"
+import { log } from "@/util/log"
 
 const UserMessageTimeSchema = z.object({
   created: z.number(),
@@ -361,10 +361,9 @@ export function parseMessages(
     if (parsed.success) {
       result.push(parsed.data)
     } else {
-      Log.Default.warn(
-        "[schema] dropping malformed message",
-        parsed.error.format(),
-        item,
+      log.error.warn(
+        "MALFORMED_MESSAGE_DROPPED",
+        { error: parsed.error.format(), item },
       )
     }
   }

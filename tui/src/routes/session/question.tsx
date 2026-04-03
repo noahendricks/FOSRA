@@ -9,6 +9,7 @@ import { useApi } from "../../context/api"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { log } from "@/util/log"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const api = useApi()
@@ -49,7 +50,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       requestID: props.request.id,
       answers,
     }).catch((e: unknown) => {
-      console.error("question reply error", e)
+      log.error.error("QUESTION_REPLY_FAILED", { requestID: props.request.id, error: String(e) })
     })
   }
 
@@ -57,7 +58,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     api.fosra.question.reject({
       requestID: props.request.id,
     }).catch((e: unknown) => {
-      console.error("question reject error", e)
+      log.error.error("QUESTION_REJECT_FAILED", { requestID: props.request.id, error: String(e) })
     })
   }
 

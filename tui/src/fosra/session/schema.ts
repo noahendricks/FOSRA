@@ -30,11 +30,9 @@ export const SessionID = {
   zod: z.string() as unknown as z.ZodType<SessionID>,
 }
 export const MessageID = {
-  generate: () => generateULID() as MessageID,
   zod: z.string() as unknown as z.ZodType<MessageID>,
 }
 export const PartID = {
-  generate: () => generateULID() as PartID,
   ascending: (a: PartID, b: PartID) => a.localeCompare(b),
   zod: z.string() as unknown as z.ZodType<PartID>,
 }

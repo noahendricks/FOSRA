@@ -2,6 +2,7 @@ import { useRenderer } from "@opentui/solid";
 import { createSimpleContext } from "./helper";
 import { FormatError, FormatUnknownError } from "@/cli/error";
 import { win32FlushInputBuffer } from "../win32";
+import { log } from "@/util/log";
 type Exit = ((reason?: unknown) => Promise<void>) & {
   message: {
     set: (value?: string) => () => void;
@@ -31,6 +32,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
     };
     const exit: Exit = Object.assign(
       (reason?: unknown) => {
+        log.startup.info("EXIT_CALLED", { reason });
         if (task) return task;
         task = (async () => {
           // reset window title before destroying renderer
