@@ -302,9 +302,9 @@ async def list_messages(
     return result
 
 
-# PROMPT (fire-and-forget — events come via sse)
-@router.post("/session/{session_id}/prompt")
-async def prompt(
+# CREATE MESSAGE (fire-and-forget — events come via sse)
+@router.post("/session/{session_id}/message")
+async def create_message(
     session_id: str,
     body: PromptRequest,
     background_tasks: BackgroundTasks,
@@ -313,6 +313,15 @@ async def prompt(
 ):
     # import here to avoid circular imports
     from backend.src.services.conversation.agent_runner import run_agent_with_events
+
+    logger.info(
+        "create_message started",
+        session_id=session_id,
+        providerID=body.providerID,
+        modelID=body.modelID,
+        body_model_providerID=body.model.providerID if body.model else None,
+        body_model_modelID=body.model.modelID if body.model else None,
+    )
 
     # resolve providerID and modelID from body
     provider_id = body.providerID or (body.model.providerID if body.model else None)
@@ -337,7 +346,6 @@ async def prompt(
             if updated_session:
                 from backend.src.api.schemas.session_schemas import SessionMetadataModel
 
-                session_data = {"id": session_id}
                 if updated_session.get("metadata"):
                     session_data["metadata"] = SessionMetadataModel(
                         model=updated_session["metadata"].get("model")
@@ -418,103 +426,103 @@ async def abort_session(session_id: str):
 # TODOS
 
 
-@router.get("/session/{session_id}/todo")
-async def get_todos(session_id: str):
-    return session_todos.get(session_id, [])
+# @router.get("/session/{session_id}/todo")
+# async def get_todos(session_id: str):
+#     return session_todos.get(session_id, [])
 
 
-@router.post("/session/{session_id}/todo")
-async def create_todo(
-    session_id: str,
-    body: dict[str, Any],
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
-):
-    """create a todo for a session."""
-    from backend.src.api.schemas.tui_control_schemas import Todo
+# @router.post("/session/{session_id}/todo")
+# async def create_todo(
+#     session_id: str,
+#     body: dict[str, Any],
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session=Depends(get_db_session),
+# ):
+#     """create a todo for a session."""
+#     from backend.src.api.schemas.tui_control_schemas import Todo
 
-    # check if the session exists
-    if not await session_exists(session_id, session):
-        return {"error": "session not found"}, 404
+#     # check if the session exists
+#     if not await session_exists(session_id, session):
+#         return {"error": "session not found"}, 404
 
-    # check if the user is authorized to create a todo for this session
-    if not await is_user_authorized(session_id, user_id, session):
-        return {"error": "user not authorized"}, 403
+#     # check if the user is authorized to create a todo for this session
+#     if not await is_user_authorized(session_id, user_id, session):
+#         return {"error": "user not authorized"}, 403
 
-    # create the todo and add it to the session todos list
-    todo = Todo(**body)
-    session_todos.setdefault(session_id, []).append(todo.model_dump())
-    await event_emitter.emit_todo_created(
-        session_id=session_id,
-        todo=todo.model_dump(),
-    )
-    return todo
-
-
-@router.patch("/session/{session_id}/todo")
-async def update_todo(
-    session_id: str,
-    todo_id: str,
-    body: dict[str, Any],
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
-):
-    """update a todo for a session."""
-    from backend.src.api.schemas.tui_control_schemas import Todo
-
-    todos = session_todos.get(session_id, [])
-    for i, todo in enumerate(todos):
-        if todo.get("id") == todo_id:
-            updated = Todo(**{**todo, **body})
-            todos[i] = updated.model_dump()
-            await event_emitter.emit_todo_updated(
-                session_id=session_id,
-                todo=updated.model_dump(),
-            )
-            return updated
-    raise HTTPException(status_code=404, detail="Todo not found")
+#     # create the todo and add it to the session todos list
+#     todo = Todo(**body)
+#     session_todos.setdefault(session_id, []).append(todo.model_dump())
+#     await event_emitter.emit_todo_created(
+#         session_id=session_id,
+#         todo=todo.model_dump(),
+#     )
+#     return todo
 
 
-@router.delete("/session/{session_id}/todo/{todo_id}")
-async def delete_todo(
-    session_id: str,
-    todo_id: str,
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
-):
-    """delete a todo for a session."""
-    todos = session_todos.get(session_id, [])
-    for i, todo in enumerate(todos):
-        if todo.get("id") == todo_id:
-            deleted = todos.pop(i)
-            await event_emitter.emit_todo_deleted(
-                session_id=session_id,
-                todo=deleted,
-            )
-            return deleted
-    raise HTTPException(status_code=404, detail="Todo not found")
+# @router.patch("/session/{session_id}/todo")
+# async def update_todo(
+#     session_id: str,
+#     todo_id: str,
+#     body: dict[str, Any],
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session=Depends(get_db_session),
+# ):
+#     """update a todo for a session."""
+#     from backend.src.api.schemas.tui_control_schemas import Todo
+
+#     todos = session_todos.get(session_id, [])
+#     for i, todo in enumerate(todos):
+#         if todo.get("id") == todo_id:
+#             updated = Todo(**{**todo, **body})
+#             todos[i] = updated.model_dump()
+#             await event_emitter.emit_todo_updated(
+#                 session_id=session_id,
+#                 todo=updated.model_dump(),
+#             )
+#             return updated
+#     raise HTTPException(status_code=404, detail="Todo not found")
 
 
-@router.post("/session/{session_id}/todos")
-async def create_todos(
-    session_id: str,
-    body: list[dict[str, Any]],
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
-):
-    """create multiple todos for a session."""
-    from backend.src.api.schemas.tui_control_schemas import Todo
+# @router.delete("/session/{session_id}/todo/{todo_id}")
+# async def delete_todo(
+#     session_id: str,
+#     todo_id: str,
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session=Depends(get_db_session),
+# ):
+#     """delete a todo for a session."""
+#     todos = session_todos.get(session_id, [])
+#     for i, todo in enumerate(todos):
+#         if todo.get("id") == todo_id:
+#             deleted = todos.pop(i)
+#             await event_emitter.emit_todo_deleted(
+#                 session_id=session_id,
+#                 todo=deleted,
+#             )
+#             return deleted
+#     raise HTTPException(status_code=404, detail="Todo not found")
 
-    created = []
-    for todo_body in body:
-        todo = Todo(**todo_body)
-        session_todos.setdefault(session_id, []).append(todo.model_dump())
-        created.append(todo.model_dump())
-        await event_emitter.emit_todo_created(
-            session_id=session_id,
-            todo=todo.model_dump(),
-        )
-    return {"todos": created}
+
+# @router.post("/session/{session_id}/todos")
+# async def create_todos(
+#     session_id: str,
+#     body: list[dict[str, Any]],
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session=Depends(get_db_session),
+# ):
+#     """create multiple todos for a session."""
+#     from backend.src.api.schemas.tui_control_schemas import Todo
+
+#     created = []
+#     for todo_body in body:
+#         todo = Todo(**todo_body)
+#         session_todos.setdefault(session_id, []).append(todo.model_dump())
+#         created.append(todo.model_dump())
+#         await event_emitter.emit_todo_created(
+#             session_id=session_id,
+#             todo=todo.model_dump(),
+#         )
+#     return {"todos": created}
 
 
 # DIFFS

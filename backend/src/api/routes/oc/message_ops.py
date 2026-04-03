@@ -15,7 +15,6 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.dependencies import get_current_user_id, get_db_session
-from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_MODEL_ID,
     DEFAULT_PROVIDER_ID,
@@ -37,6 +36,7 @@ from backend.src.api.schemas.tui_schemas import (
     UserMessageTime,
     message_to_tui,
 )
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.storage.models import ConvoORM, MessageORM
 from backend.src.storage.utils.converters import ulid_factory
 

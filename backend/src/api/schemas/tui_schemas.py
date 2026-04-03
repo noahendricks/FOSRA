@@ -399,6 +399,7 @@ def message_to_tui(msg: MessageResponse, session_id: str) -> dict[str, Any]:
                 reasoning=0,
                 cache=AssistantMessageTokensCache(read=0, write=0),
             ),
+            finish="stop",
         )
 
     parts: list[dict[str, Any]] = []

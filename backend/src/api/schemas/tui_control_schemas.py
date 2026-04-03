@@ -249,7 +249,6 @@ class AgentModel(BaseModel):
 
 class PromptRequest(BaseModel):
     sessionID: Optional[str] = None
-    messageID: Optional[str] = None
     parts: List[
         Union[TextPartInput, FilePartInput, AgentPartInput, SubtaskPartInput]
     ] = Field(default_factory=list)

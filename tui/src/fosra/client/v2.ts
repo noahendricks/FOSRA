@@ -6,6 +6,7 @@ import type {
   ProviderAuthAuthorization,
   ProviderListResponse,
 } from "../sdk-types";
+import { log } from "../util/log";
 export * from "../sdk-types";
 
 type Result<T> = {
@@ -43,6 +44,7 @@ export const createFosraClient = (options: {
   ): Promise<Result<T>> {
     const headers: Record<string, string> = { ...baseHeaders };
     if (init?.body) headers["Content-Type"] = "application/json";
+    const start = Date.now();
 
     let res: Response;
     try {
@@ -53,12 +55,24 @@ export const createFosraClient = (options: {
         signal: init?.signal ?? signal,
       });
     } catch (e) {
+      log.api.error("API_FETCH_ERROR", {
+        method: init?.method ?? "GET",
+        path,
+        error: String(e),
+      });
       if (init?.throwOnError) throw new Error(String(e));
       return { error: { code: "NETWORK", message: String(e) } };
     }
 
     if (!res.ok) {
       const msg = await res.text().catch(() => res.statusText);
+      log.api.debug("API_RESPONSE", {
+        method: init?.method ?? "GET",
+        path,
+        status: res.status,
+        durationMs: Date.now() - start,
+        bodyPreview: msg.slice(0, 200),
+      });
       if (init?.throwOnError) throw new Error(msg);
       return {
         error: { code: String(res.status), message: msg },
@@ -67,17 +81,39 @@ export const createFosraClient = (options: {
     }
 
     const text = await res.text();
-    if (!text) return { data: undefined as T, response: res };
+    if (!text) {
+      log.api.debug("API_RESPONSE", {
+        method: init?.method ?? "GET",
+        path,
+        status: res.status,
+        durationMs: Date.now() - start,
+        bodyEmpty: true,
+      });
+      return { data: undefined as T, response: res };
+    }
     try {
       const data = JSON.parse(text) as T;
+      log.api.debug("API_RESPONSE", {
+        method: init?.method ?? "GET",
+        path,
+        status: res.status,
+        durationMs: Date.now() - start,
+        dataKeys: Object.keys(data as object),
+      });
       return { data, response: res };
     } catch {
+      const parseError = `JSON parse error: ${text.slice(0, 100)}`;
+      log.api.error("API_PARSE_ERROR", {
+        method: init?.method ?? "GET",
+        path,
+        error: parseError,
+      });
       if (init?.throwOnError)
-        throw new Error(`JSON parse error: ${text.slice(0, 100)}`);
+        throw new Error(parseError);
       return {
         error: {
           code: "PARSE",
-          message: `JSON parse error: ${text.slice(0, 100)}`,
+          message: parseError,
         },
         response: res,
       };
@@ -106,7 +142,7 @@ export const createFosraClient = (options: {
 
         async function* parseSSE(): AsyncGenerator<Event> {
           if (!res.body) {
-            console.error("[SSE PARSE] res.body is null - SSE stream unavailable");
+            log.sse.error("SSE_BODY_NULL", {});
             return;
           }
           const reader = res.body.getReader();
@@ -116,7 +152,6 @@ export const createFosraClient = (options: {
           while (true) {
             const { done, value } = await reader.read();
             if (done) {
-              console.debug("[SSE PARSE] Stream ended (done=true)");
               break;
             }
             buffer += decoder.decode(value, { stream: true });
@@ -136,7 +171,10 @@ export const createFosraClient = (options: {
                 try {
                   yield JSON.parse(data.trim()) as Event;
                 } catch (e) {
-                  console.error("[SSE PARSE] JSON parse failed:", data.slice(0, 100), e);
+                  log.sse.error("SSE_JSON_PARSE_ERROR", {
+                    dataPreview: data.slice(0, 200),
+                    error: String(e),
+                  });
                 }
               }
             }
@@ -259,7 +297,7 @@ export const createFosraClient = (options: {
         }),
       prompt: async (p: any, o?: any) => {
         const { sessionID, ...body } = p;
-        return api<any>(`/session/${sessionID}/prompt`, {
+        return api<any>(`/session/${sessionID}/message`, {
           method: "POST",
           body: JSON.stringify(body),
           ...opts(o),
