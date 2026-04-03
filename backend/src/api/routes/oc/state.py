@@ -15,8 +15,6 @@ session_todos, session_diffs.
 from __future__ import annotations
 
 import asyncio
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import loguru
@@ -32,19 +30,7 @@ if TYPE_CHECKING:
         SessionStateManager,
     )
 
-_LOG_TIME_FORMAT = os.environ.get("FOSRA_LOG_TIME_FORMAT", "full")
-_TIME_FMT = "HH:mm:ss" if _LOG_TIME_FORMAT == "short" else "YYYY-MM-DD HH:mm:ss.SSS"
-
 _state_logger = loguru.logger.bind(backend="state")
-_log_path = Path.home() / ".fosra-back-state.log"
-_state_logger.add(
-    _log_path,
-    format=f"{_TIME_FMT} | {{level: <8}} | {{name}}:{{function}}:{{line}} | {{message}}",
-    level="DEBUG",
-    rotation="10 MB",
-    retention="7 days",
-    enqueue=True,
-)
 
 
 def _restart_marker(reason: str) -> None:
@@ -54,7 +40,9 @@ def _restart_marker(reason: str) -> None:
     _state_logger.info(f"{sep}")
 
 
-_restart_marker("process start")
+def log_process_start() -> None:
+    """Call from app lifespan after setup_logging() so the marker uses the configured format."""
+    _restart_marker("process start")
 
 
 class StateDict(dict):
@@ -75,16 +63,16 @@ class StateDict(dict):
             )
             for k, v in self.items()
         }
-        extra = {"op": op, "dict": self._name}
+        structured = {"op": op, "dict": self._name}
         if key is not None:
-            extra["key"] = key
+            structured["key"] = key
         if value is not None:
-            extra["value"] = str(value)[:100]
+            structured["value"] = str(value)[:100]
         if note:
-            extra["note"] = note
-        self._logger.log(
-            self._log_level,
-            f"[{self._name}] {op} — {json.dumps(extra)} — snapshot: {json.dumps(snapshot, default=str)[:500]}",
+            structured["note"] = note
+        structured["snapshot"] = snapshot
+        self._logger.bind(_structured=structured).log(
+            self._log_level, f"[{self._name}] {op}"
         )
 
     def __setitem__(self, key, value):
@@ -119,8 +107,6 @@ class StateDict(dict):
         super().__getitem__(key).append(value)
         self._log("list_append", key, value)
 
-
-import json
 
 session_status: StateDict = StateDict("session_status", _state_logger, "DEBUG")
 running_tasks: StateDict = StateDict("running_tasks", _state_logger, "DEBUG")

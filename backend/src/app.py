@@ -17,6 +17,8 @@ from backend.src.api.lifecycle import global_infra
 from backend.src.api.routes.ingestion import router as ingestion_router
 from backend.src.api.routes.tui import router as tui_router
 from backend.src.api.routes.workspace import router as workspace_router
+from backend.src.logging_config import setup_logging
+from backend.src.api.routes.oc.state import log_process_start
 from backend.src.settings.observe import setup_telemetry
 from backend.src.tasks.broker import broker
 from backend.src.settings import settings
@@ -41,9 +43,11 @@ async def lifespan(app: FastAPI):
     try:
         logger.info("Starting application...")
 
-        global_infra.init()
-
+        setup_logging()
+        log_process_start()
         setup_telemetry()
+
+        global_infra.init()
 
         await global_infra.init_models()
 

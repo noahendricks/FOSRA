@@ -56,11 +56,24 @@ class EventEmitter:
         await self.emit("message.part.updated", {"part": part})
 
     async def emit_message_part_delta(
-        self, session_id: str, message_id: str, part_id: str, field: str, delta: str
+        self,
+        session_id: str,
+        message_id: str,
+        part_id: str,
+        field: str,
+        delta: str,
+        part_type: str = "text",
     ) -> None:
-        logger.debug(
-            f"[EVENT EMITTER] emit_message_part_delta: session_id={session_id}, message_id={message_id}, part_id={part_id}, field={field}, delta_len={len(delta)}, delta_preview='{delta[:50] if delta else ''}'"
-        )
+        logger.bind(
+            _structured={
+                "session_id": session_id,
+                "message_id": message_id,
+                "part_id": part_id,
+                "field": field,
+                "delta_len": len(delta),
+                "delta_preview": delta[:50] if delta else "",
+            }
+        ).debug("[EVENT EMITTER] emit_message_part_delta")
         await self.emit(
             "message.part.delta",
             {
@@ -69,6 +82,7 @@ class EventEmitter:
                 "partID": part_id,
                 "field": field,
                 "delta": delta,
+                "partType": part_type,
             },
         )
 

@@ -338,8 +338,12 @@ class VectorService:
                             points=points,
                         )
 
-                        logger.info(f"exec_info: {exec_info}")
-                        logger.info(f"Points len: {len(points)}")
+                        logger.bind(
+                            _structured={
+                                "exec_info": exec_info,
+                                "points_len": len(points),
+                            }
+                        ).info("Qdrant upsert complete")
                         return points
 
                 except Exception as e:
