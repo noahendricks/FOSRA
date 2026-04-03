@@ -24,7 +24,7 @@ class TestShortName:
     def test_short_name_three_parts(self):
         record = {"name": "api.routes.oc.session_ops", "extra": {}}
         _process_record(record)
-        assert record["extra"]["short_name"] == "session_ops"
+        assert record["extra"]["short_name"] == "oc.session_ops"
 
 
 class TestStructuredRendering:
