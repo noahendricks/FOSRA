@@ -82,7 +82,7 @@ class ConvoRepo:
     @staticmethod
     async def create(session: AsyncSession, new_convo: NewConvoRequest) -> NewConvo:
         try:
-            logger.info(f"Creating conversation for user {new_convo.user_id}")
+            logger.info("Creating conversation for user {}", new_convo.user_id)
 
             db_chat: ConvoORM = ConvoORM(
                 user_id=new_convo.user_id,
@@ -96,13 +96,13 @@ class ConvoRepo:
 
             await session.refresh(db_chat)
 
-            logger.success(f"Created conversation {db_chat.convo_id}")
+            logger.success("Created conversation {}", db_chat.convo_id)
 
             return orm_to_domain(db_chat, NewConvo)
 
         except Exception as e:
             await session.rollback()
-            logger.error(f"Error creating conversation: {e}")
+            logger.opt(exception=True).error("Error creating conversation")
             raise RuntimeError(f"Failed to create conversation: {e}")
 
     @staticmethod
@@ -113,7 +113,7 @@ class ConvoRepo:
     ) -> ConvoFull:
         try:
             logger.info(
-                f"Retrieving conversation: user_id={user_id}, convo_id={convo_id}"
+                "Retrieving conversation: user_id={}, convo_id={}", user_id, convo_id
             )
             db_chat = await ConvoRepo._get_convo_orm(
                 session,
@@ -129,7 +129,9 @@ class ConvoRepo:
         except ConvoError:
             raise
         except Exception as e:
-            logger.error(f"Error retrieving conversation {convo_id}: {e}")
+            logger.opt(exception=True).error(
+                "Error retrieving conversation {}", convo_id
+            )
             raise ConvoError(f"Failed to retrieve conversation: {e}")
 
     @staticmethod
@@ -154,7 +156,7 @@ class ConvoRepo:
             return [orm_to_domain(c, Convo) for c in conversations]
 
         except Exception as e:
-            logger.error(f"Error listing conversations: {e}")
+            logger.opt(exception=True).error("Error listing conversations")
             raise RuntimeError(f"Failed to list conversations: {e}")
 
     @staticmethod
@@ -185,7 +187,7 @@ class ConvoRepo:
             await session.commit()
             await session.refresh(chat)
 
-            logger.success(f"Updated conversation {convo_update.convo_id}")
+            logger.success("Updated conversation {}", convo_update.convo_id)
 
             return orm_to_domain(chat, Convo)
 
@@ -193,7 +195,7 @@ class ConvoRepo:
             raise
         except Exception as e:
             await session.rollback()
-            logger.error(f"Error updating conversation: {e}")
+            logger.opt(exception=True).error("Error updating conversation")
             raise ConvoError(f"Failed to update conversation: {e}")
 
     @staticmethod
@@ -216,14 +218,14 @@ class ConvoRepo:
             await session.delete(db_chat)
             await session.commit()
 
-            logger.info(f"Deleted conversation {convo_request.convo_id}")
+            logger.info("Deleted conversation {}", convo_request.convo_id)
             return True
 
         except ConvoError:
             raise
         except Exception as e:
             await session.rollback()
-            logger.error(f"Error deleting conversation: {e}")
+            logger.opt(exception=True).error("Error deleting conversation")
             raise ConvoError(f"Failed to delete conversation: {e}")
 
     @staticmethod
@@ -288,14 +290,16 @@ class ConvoRepo:
             await session.commit()
             await session.refresh(db_message)
 
-            logger.debug(f"Added {new_message.role} message to {new_message.convo_id}")
+            logger.debug(
+                "Added {} message to {}", new_message.role, new_message.convo_id
+            )
             return db_message
 
         except ValueError:
             raise
         except Exception as e:
             await session.rollback()
-            logger.error(f"Error adding message: {e}")
+            logger.opt(exception=True).error("Error adding message")
             raise RuntimeError(f"Failed to add message: {e}")
 
     @staticmethod
@@ -348,7 +352,7 @@ class ConvoRepo:
             await session.refresh(existing_msg)
 
             logger.debug(
-                f"Updated {message_update.role} message in {message_update.convo_id}"
+                "Updated {} message in {}", message_update.role, message_update.convo_id
             )
             return orm_to_domain(existing_msg, Message)
 
@@ -356,5 +360,5 @@ class ConvoRepo:
             raise
         except Exception as e:
             await session.rollback()
-            logger.error(f"Error updating message: {e}")
+            logger.opt(exception=True).error("Error updating message")
             raise RuntimeError(f"Failed to update message: {e}")

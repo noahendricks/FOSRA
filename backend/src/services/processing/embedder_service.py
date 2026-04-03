@@ -138,7 +138,9 @@ class FlagProvider:
         model_name = config.dense_model
         if model_name not in self._cache:
             devices = ["cuda"] if config.cuda_enabled else ["cpu"]
-            logger.info(f"Initializing FlagEmbedding model: {model_name} on {devices}")
+            logger.info(
+                "Initializing FlagEmbedding model: {} on {}", model_name, devices
+            )
             self._cache[model_name] = BGEM3FlagModel(
                 model_name,
                 use_fp16=False,
@@ -224,7 +226,7 @@ class HuggingFaceProvider:
     def _get_model(self, config: EmbedderConfig) -> SentenceTransformer:
         model_name = config.dense_model
         if model_name not in self._cache:
-            logger.info(f"Initializing HuggingFace model: {model_name}")
+            logger.info("Initializing HuggingFace model: {}", model_name)
             self._cache[model_name] = SentenceTransformer(
                 model_name,
                 cache_folder=config.cache_dir.as_posix(),
@@ -338,7 +340,7 @@ class NomicCodeProvider:
     def _get_model(self, config: EmbedderConfig) -> SentenceTransformer:
         model_name = config.dense_model
         if model_name not in self._cache:
-            logger.info(f"Initializing NomicCode model: {model_name}")
+            logger.info("Initializing NomicCode model: {}", model_name)
             self._cache[model_name] = SentenceTransformer(
                 model_name,
                 cache_folder=config.cache_dir.as_posix(),
@@ -447,7 +449,9 @@ class Qwen3EmbeddingProvider:
         model_name = config.dense_model
         if model_name not in self._cache:
             device = "cuda" if config.cuda_enabled else "cpu"
-            logger.info(f"Initializing Qwen3 Embedding model: {model_name} on {device}")
+            logger.info(
+                "Initializing Qwen3 Embedding model: {} on {}", model_name, device
+            )
             self._cache[model_name] = SentenceTransformer(
                 model_name,
                 cache_folder=config.cache_dir.as_posix(),
@@ -515,7 +519,7 @@ class JinaCodeProvider:
         model_name = config.dense_model
         if model_name not in self._cache:
             device = "cuda" if config.cuda_enabled else "cpu"
-            logger.info(f"Initializing JinaCode model: {model_name} on {device}")
+            logger.info("Initializing JinaCode model: {} on {}", model_name, device)
             self._cache[model_name] = SentenceTransformer(
                 model_name,
                 cache_folder=config.cache_dir.as_posix(),
@@ -577,25 +581,25 @@ class EmbedderService:
             logger.warning("No chunks provided for embedding")
             return chunks
 
-        logger.info(f"Embedding {len(chunks)} chunks with {config.embedder_type}")
+        logger.info("Embedding {} chunks with {}", len(chunks), config.embedder_type)
 
         try:
             provider = _resolve_provider(config)
             return await provider.embed_chunks(chunks, config)
         except Exception as e:
-            logger.warning(f"Batch embedding failed: {e}")
+            logger.opt(exception=True).warning("Batch embedding failed")
             raise RuntimeError(f"Embedding Failed: {e}")
 
     async def embed_query(
         self, query: str, config: EmbedderConfig
     ) -> EmbeddedQueries | None:
-        logger.debug(f"Embedding query with {config.embedder_type}")
+        logger.debug("Embedding query with {}", config.embedder_type)
 
         try:
             provider = _resolve_provider(config)
             return await provider.embed_query(query, config)
         except Exception as e:
-            logger.error(f"Query embedding failed: {e}")
+            logger.opt(exception=True).error("Query embedding failed")
             return None
 
 

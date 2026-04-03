@@ -63,7 +63,7 @@ async def ingest_codebase(
         raise ValueError(f"Directory not found: {directory_path}")
 
     files = _collect_code_files(directory, recursive)
-    logger.info(f"Found {len(files)} code files in {directory_path}")
+    logger.info("Found {} code files in {}", len(files), directory_path)
 
     async with session_factory() as session:
         for file_path in files:
@@ -83,15 +83,12 @@ async def ingest_codebase(
                 stats["total_call_edges"] += file_stats.get("edges_created", 0)
 
             except Exception as e:
-                logger.error(f"Failed to process {file_path}: {e}")
+                logger.opt(exception=True).error("Failed to process {}", file_path)
                 stats["errors"].append({"file": str(file_path), "error": str(e)})
 
         await session.commit()
 
-    logger.info(
-        f"Codebase ingestion complete: {stats['files_processed']} files, "
-        f"{stats['total_nodes']} nodes, {stats['total_call_edges']} edges"
-    )
+    logger.bind(_structured=stats).info("Codebase ingestion complete")
     return stats
 
 
@@ -144,7 +141,7 @@ async def _process_file(
     """
     language = LANGUAGE_EXTENSIONS.get(file_path.suffix)
     if not language:
-        logger.warning(f"Skipping unsupported file type: {file_path}")
+        logger.warning("Skipping unsupported file type: {}", file_path)
         return {"nodes_created": 0, "edges_created": 0}
 
     source_code = file_path.read_text()
@@ -167,7 +164,7 @@ async def _process_file(
     existing_doc = existing.scalar_one_or_none()
 
     if existing_doc and existing_doc.checksum == checksum:
-        logger.debug(f"File unchanged, skipping: {relative_path}")
+        logger.debug("File unchanged, skipping: {}", relative_path)
         return {"nodes_created": 0, "edges_created": 0, "skipped": True}
 
     if existing_doc:
@@ -204,7 +201,9 @@ async def _process_file(
         embedder_config=embedder_config,
     )
 
-    logger.info(f"Processed {relative_path}: {upsert_stats}")
+    logger.bind(_structured={"path": relative_path, **upsert_stats}).info(
+        "Processed file"
+    )
     return upsert_stats
 
 

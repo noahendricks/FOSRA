@@ -20,13 +20,13 @@ broker.add_middlewares(
 
 class TaskiqObserverMiddleware(TaskiqMiddleware):
     async def pre_execute(self, receiver, task) -> None:
-        logger.debug(f"[taskiq] task queued: {task.task_name}")
+        logger.debug("[taskiq] task queued: {}", task.task_name)
 
     async def on_error(self, receiver, task, error) -> None:
-        logger.error(f"[taskiq] task failed: {task.task_name} | error: {error}")
+        logger.opt(exception=True).error("[taskiq] task failed: {}", task.task_name)
 
     async def post_execute(self, receiver, task) -> None:
-        logger.debug(f"[taskiq] task completed: {task.task_name}")
+        logger.debug("[taskiq] task completed: {}", task.task_name)
 
 
 broker.add_middlewares(TaskiqObserverMiddleware())
@@ -53,7 +53,7 @@ async def shutdown(state: TaskiqState):
             await state.infra.close()
             logger.info("Infrastructure closed successfully")
         except Exception as e:
-            logger.error(f"Error closing infrastructure: {e}")
+            logger.opt(exception=True).error("Error closing infrastructure")
     else:
         logger.debug("No infrastructure to close")
 

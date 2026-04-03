@@ -79,7 +79,7 @@ async def ingest_docs(
             await session.commit()
 
     # step 2: chunk all docs
-    logger.info(f"Chunking {len(docs)} documents")
+    logger.info("Chunking {} documents", len(docs))
     chunks_per_doc = await ChunkerService.chunk_documents(docs, chunker_config)
 
     # step 3: flatten
@@ -87,7 +87,7 @@ async def ingest_docs(
     for doc_chunks in chunks_per_doc:
         all_chunks.extend(doc_chunks)
 
-    logger.info(f"Chunked {len(docs)} docs into {len(all_chunks)} chunks")
+    logger.info("Chunked {} docs into {} chunks", len(docs), len(all_chunks))
 
     # step 4: embed all chunks
     embedder = EmbedderService()
@@ -99,7 +99,9 @@ async def ingest_docs(
         points = await VectorService.upsert_chunks(client, all_chunks, embedder_config)
         chunks_upserted = len(points)
 
-    logger.info(f"Doc ingestion complete: {len(docs)} docs, {chunks_upserted} chunks")
+    logger.bind(_structured={"docs": len(docs), "chunks": chunks_upserted}).info(
+        "Doc ingestion complete"
+    )
 
     return {
         "docs_processed": len(docs),

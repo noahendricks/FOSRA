@@ -46,7 +46,7 @@ class ChunkerService:
 
         start_time = time.time()
 
-        logger.info(f"Starting chunking of {len(docs)} documents")
+        logger.info("Starting chunking of {} documents", len(docs))
 
         tasks: list[Task[list[Chunk]]] = []
 
@@ -55,7 +55,7 @@ class ChunkerService:
                 # !hack: NOT MAINTAINING TEXT LOCATION IN END CHUNKS - NEED OPTION THAT DOES
                 doc_type = "PDF" if doc.is_pdf else "code" if doc.is_code else "text"
 
-                logger.debug(f"Processing {doc_type} document: {doc.id}")
+                logger.debug("Processing {} document: {}", doc_type, doc.id)
                 try:
                     if doc.is_code:
                         ccode_task = group.create_task(
@@ -90,7 +90,7 @@ class ChunkerService:
         for t in tasks:
             chunks.append(t.result())
 
-        logger.info(f"Completed chunking {len(docs)} documents")
+        logger.info("Completed chunking {} documents", len(docs))
 
         return chunks
 

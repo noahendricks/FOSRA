@@ -43,14 +43,14 @@ class ConversationService:
         session: AsyncSession,
         new_convo: NewConvoRequest,
     ) -> NewConvoResponse:
-        logger.info(f"Creating conversation for user {new_convo.user_id}")
+        logger.info("Creating conversation for user {}", new_convo.user_id)
 
         conversation: NewConvo = await ConvoRepo().create(
             session=session,
             new_convo=new_convo,
         )
 
-        logger.success(f"Created conversation: {conversation.convo_id}")
+        logger.success("Created conversation: {}", conversation.convo_id)
 
         return domain_to_response(
             conversation,
@@ -63,10 +63,10 @@ class ConversationService:
         user_id: str,
         convo_id: str,
     ) -> ConvoFullResponse:
-        logger.info(f"Retrieving conversation: {convo_id}")
+        logger.info("Retrieving conversation: {}", convo_id)
 
-        logger.info(
-            f"user id and convo_id get_conversation_by_id entrance : user_id: {user_id}, convo_id: {convo_id}"
+        logger.bind(_structured={"user_id": user_id, "convo_id": convo_id}).debug(
+            "get_conversation_by_id"
         )
 
         conversation: Convo = await ConvoRepo.get_by_id(
@@ -87,7 +87,7 @@ class ConversationService:
         session: AsyncSession,
         user_id: str,
     ) -> list[ConvoListItemResponse]:
-        logger.debug(f"Listing conversations for user {user_id}")
+        logger.debug("Listing conversations for user {}", user_id)
 
         conversations: list[Convo] = await ConvoRepo().get_all_by_user_id(
             session=session,
@@ -95,7 +95,7 @@ class ConversationService:
         )
 
         logger.success(
-            f"Retrieved {len(conversations)} conversations for user {user_id}"
+            "Retrieved {} conversations for user {}", len(conversations), user_id
         )
         return [domain_to_response(c, ConvoListItemResponse) for c in conversations]
 
@@ -104,14 +104,14 @@ class ConversationService:
         session: AsyncSession,
         convo_update: ConvoUpdateRequest,
     ) -> ConvoFullResponse:
-        logger.info(f"Updating conversation: {convo_update.convo_id}")
+        logger.info("Updating conversation: {}", convo_update.convo_id)
 
         conversation: Convo = await ConvoRepo.update(
             session=session,
             convo_update=convo_update,
         )
 
-        logger.success(f"Updated conversation: {convo_update.convo_id}")
+        logger.success("Updated conversation: {}", convo_update.convo_id)
 
         return domain_to_response(conversation, ConvoFullResponse)
 
@@ -120,7 +120,7 @@ class ConversationService:
         session: AsyncSession,
         convo_request: ConvoDeleteRequest,
     ) -> bool:
-        logger.info(f"Deleting conversation: {convo_request.convo_id}")
+        logger.info("Deleting conversation: {}", convo_request.convo_id)
 
         deleted = await ConvoRepo.delete(
             session=session,
@@ -128,9 +128,9 @@ class ConversationService:
         )
 
         if deleted:
-            logger.success(f"Deleted conversation: {convo_request.convo_id}")
+            logger.success("Deleted conversation: {}", convo_request.convo_id)
         else:
-            logger.warning(f"Conversation not found: {convo_request.convo_id}")
+            logger.warning("Conversation not found: {}", convo_request.convo_id)
 
         return deleted
 
@@ -183,7 +183,9 @@ class ConversationService:
         user_id: str,
         message: UIMessage | MessageResponse,
     ) -> MessageResponse:
-        logger.info("processing user message with RAG for conversation ")
+        logger.bind(_structured={"convo_id": convo_id, "user_id": user_id}).info(
+            "processing user message for conversation"
+        )
 
         if isinstance(message, UIMessage):
             msg: Message = await ConversationService.unpack_message(

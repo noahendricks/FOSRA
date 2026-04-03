@@ -78,9 +78,8 @@ class GraphService:
                 self._upsert_import_edge(graph, imp)
                 stats["edges_created"] += 1
 
-        logger.info(
-            f"Upserted file {graph_result.file_path}: "
-            f"{stats['nodes_created']} nodes, {stats['edges_created']} edges"
+        logger.bind(_structured={"file_path": graph_result.file_path, **stats}).info(
+            "Upserted file"
         )
         return stats
 
@@ -326,7 +325,9 @@ class GraphService:
                 graph.create_node_range_index(label, prop)
             except Exception as e:
                 if "already indexed" not in str(e).lower():
-                    logger.warning(f"Index creation warning for {label}.{prop}: {e}")
+                    logger.warning(
+                        "Index creation warning for {}.{}: {}", label, prop, e
+                    )
 
         for label, prop, dim in [
             ("Function", "embedding", 896),
@@ -343,7 +344,7 @@ class GraphService:
             except Exception as e:
                 if "already indexed" not in str(e).lower():
                     logger.warning(
-                        f"Vector index creation warning for {label}.{prop}: {e}"
+                        "Vector index creation warning for {}.{}: {}", label, prop, e
                     )
 
         for label in ("Function", "Method", "Class"):
@@ -353,9 +354,11 @@ class GraphService:
                 )
             except Exception as e:
                 if "already indexed" not in str(e).lower():
-                    logger.warning(f"Fulltext index creation warning for {label}: {e}")
+                    logger.warning(
+                        "Fulltext index creation warning for {}: {}", label, e
+                    )
 
-        logger.info(f"Ensured indexes for graph '{self._graph_name}'")
+        logger.info("Ensured indexes for graph '{}'", self._graph_name)
 
     async def semantic_search(
         self,
@@ -770,4 +773,4 @@ class GraphService:
         """delete all nodes and edges in the graph."""
         graph = self._get_graph()
         graph.query("MATCH (n) DETACH DELETE n")
-        logger.info(f"Cleared graph '{self._graph_name}'")
+        logger.info("Cleared graph '{}'", self._graph_name)

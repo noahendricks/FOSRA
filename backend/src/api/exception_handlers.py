@@ -7,7 +7,9 @@ from loguru import logger
 async def validation_exception_handler(
     request: Request, exc: Exception
 ) -> JSONResponse:
-    logger.warning(f"Validation error: {exc}")
+    logger.bind(
+        _structured={"path": str(request.url.path), "method": request.method}
+    ).opt(exception=True).warning("Validation error")
     return JSONResponse(
         status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
@@ -30,7 +32,9 @@ async def not_found_exception_handler(request: Request, exc: Exception) -> JSONR
 
 
 async def service_unavailable_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error(f"Service unavailable: {exc}")
+    logger.bind(
+        _structured={"path": str(request.url.path), "method": request.method}
+    ).opt(exception=True).error("Service unavailable")
     return JSONResponse(
         status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
         content={
@@ -42,7 +46,9 @@ async def service_unavailable_handler(request: Request, exc: Exception) -> JSONR
 
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception(f"Unexpected error: {exc}")
+    logger.bind(
+        _structured={"path": str(request.url.path), "method": request.method}
+    ).opt(exception=True).error("Unexpected error")
     return JSONResponse(
         status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

@@ -72,7 +72,7 @@ async def reply_permission(
 
     message = body.get("message", "")
     if message:
-        logger.info(f"Permission reject with feedback: {message}")
+        logger.info("Permission reject with feedback: {}", message)
 
     await event_emitter.emit_permission_replied(
         body.get("sessionID", ""), request_id, reply

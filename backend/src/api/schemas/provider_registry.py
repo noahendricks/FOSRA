@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+
+from loguru import logger as _loguru
 import os
 from pathlib import Path
 from typing import Any
@@ -29,7 +31,8 @@ from backend.src.api.schemas.tui_schemas import (
     Provider,
 )
 
-logger = logging.getLogger(__name__)
+# Re-export loguru logger so existing logger.info/warning/error calls work
+logger = _loguru
 
 
 # =========================================================================
@@ -60,7 +63,7 @@ def _read_models_cache() -> dict[str, Any] | None:
         with open(MODELS_CACHE_PATH) as f:
             return json.load(f)
     except Exception as e:
-        logger.warning("Failed to read models cache: %s", e)
+        logger.warning("Failed to read models cache: {}", e)
         return None
 
 
@@ -71,7 +74,7 @@ def _write_models_cache(data: dict[str, Any]) -> None:
         with open(MODELS_CACHE_PATH, "w") as f:
             json.dump(data, f)
     except Exception as e:
-        logger.warning("Failed to write models cache: %s", e)
+        logger.warning("Failed to write models cache: {}", e)
 
 
 async def _fetch_models_from_api() -> dict[str, Any] | None:
@@ -90,7 +93,7 @@ async def _fetch_models_from_api() -> dict[str, Any] | None:
                 response.text[:200],
             )
     except Exception as e:
-        logger.warning("Failed to fetch models.dev: %s", e)
+        logger.warning("Failed to fetch models.dev: {}", e)
     return None
 
 
@@ -767,7 +770,7 @@ async def _fetch_local_ollama_models() -> tuple[list[dict[str, Any]], list[str]]
 
             return (models, model_ids)
     except Exception as e:
-        logger.warning("Failed to fetch local Ollama models: %s", e)
+        logger.opt(exception=True).warning("Failed to fetch local Ollama models")
         return None
     return None
 
@@ -850,7 +853,7 @@ async def _init_local_ollama() -> None:
     )
 
     _providers_cache = None
-    logger.info("Local Ollama provider initialized with %s models", len(serialized))
+    logger.info("Local Ollama provider initialized with {} models", len(serialized))
 
 
 # =========================================================================

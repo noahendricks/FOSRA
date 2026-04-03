@@ -64,20 +64,19 @@ def _build_model_string(
 
     if custom_provider:
         model_string = f"{custom_provider}/{model_name}"
-        logger.debug(f"Built custom model string: {model_string}")
+        logger.debug("Built custom model string: {}", model_string)
         return model_string
 
     provider_upper = provider.upper()
 
     if provider_upper == "OPENROUTER":
         model_string = f"openrouter/{model_name}"
-        logger.debug(f"Built OpenRouter model string: {model_string}")
+        logger.debug("Built OpenRouter model string: {}", model_string)
         return model_string
 
     prefix = PROVIDER_TO_LITELLM_MAP.get(provider_upper, provider.lower())
     model_string = f"{prefix}/{model_name}"
-
-    logger.debug(f"Built model string: {model_string} for provider {provider}")
+    logger.debug("Built model string: {} for provider {}", model_string, provider)
     return model_string
 
 
@@ -91,7 +90,7 @@ async def _validate_config(
     timeout: int = 30,
 ):
     logger.info(
-        f"Validating LLM configuration: {llm_config.provider}/{llm_config.model}"
+        "Validating LLM configuration: {}/{}", llm_config.provider, llm_config.model
     )
 
     try:
@@ -126,12 +125,12 @@ async def _validate_config(
         clean_content = str(response.content).strip()
 
         if not clean_content:
-            logger.info(f"LLM returned empty response for {llm_config.model}")
+            logger.info("LLM returned empty response for {}", llm_config.model)
             await logger.complete()
             return False
 
         logger.info(
-            f"LLM validation successful for {llm_config.provider}/{llm_config.model}"
+            "LLM validation successful for {}/{}", llm_config.provider, llm_config.model
         )
 
         result = True
@@ -140,8 +139,8 @@ async def _validate_config(
 
         return result
     except Exception as e:
-        logger.error(
-            f"LLM validation failed for {llm_config.provider}/{llm_config.model}: {e}"
+        logger.opt(exception=True).error(
+            "LLM validation failed for {}/{}", llm_config.provider, llm_config.model
         )
         raise ValueError(e) from e
 
@@ -172,12 +171,12 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
 
         llm = ChatLiteLLM(**_filter_none_values(kwargs))  # pyright: ignore
 
-        logger.debug(f"Created LLM instance: {model_string}")
+        logger.debug("Created LLM instance: {}", model_string)
 
         return llm
 
     except Exception as e:
-        logger.error(f"Failed to create LLM from config: {e}")
+        logger.opt(exception=True).error("Failed to create LLM from config")
         raise ValueError(e)
 
 
@@ -192,7 +191,7 @@ async def test_connection(
     api_base: str | None = None,
     timeout: int = 10,
 ) -> dict[str, Any]:
-    logger.info(f"Testing connection to {provider}/{model}")
+    logger.info("Testing connection to {}/{}", provider, model)
 
     try:
         model_string = _build_model_string(
@@ -214,7 +213,7 @@ async def test_connection(
         response = await llm.ainvoke([HumanMessage(content="test")])
 
         if response:
-            logger.success(f"Connection test successful for {provider}/{model}")
+            logger.success("Connection test successful for {}/{}", provider, model)
             return {
                 "success": True,
                 "provider": provider,
@@ -230,7 +229,9 @@ async def test_connection(
         }
 
     except Exception as e:
-        logger.error(f"Connection test failed for {provider}/{model}: {e}")
+        logger.opt(exception=True).error(
+            "Connection test failed for {}/{}", provider, model
+        )
         return {
             "success": False,
             "provider": provider,

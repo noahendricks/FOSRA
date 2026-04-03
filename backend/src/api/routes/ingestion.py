@@ -103,12 +103,13 @@ async def ingest_codebase(
             recursive=True,
         )
 
-        logger.info(
-            "Codebase ingestion complete: {} files, {} nodes, {} edges",
-            result.get("files_indexed", 0),
-            result.get("nodes_created", 0),
-            result.get("edges_created", 0),
-        )
+        logger.bind(
+            _structured={
+                "files_indexed": result.get("files_indexed", 0),
+                "nodes_created": result.get("nodes_created", 0),
+                "edges_created": result.get("edges_created", 0),
+            }
+        ).info("Codebase ingestion complete")
 
         return result
 
@@ -217,12 +218,13 @@ async def ingest_documents(
             session_factory=global_infra.session_factory,
         )
 
-        logger.info(
-            "Document ingestion complete: {} docs, {} parent chunks, {} child chunks",
-            result.get("docs_indexed", 0),
-            result.get("parent_chunks", 0),
-            result.get("child_chunks", 0),
-        )
+        logger.bind(
+            _structured={
+                "docs_indexed": result.get("docs_indexed", 0),
+                "parent_chunks": result.get("parent_chunks", 0),
+                "child_chunks": result.get("child_chunks", 0),
+            }
+        ).info("Document ingestion complete")
 
         return result
 

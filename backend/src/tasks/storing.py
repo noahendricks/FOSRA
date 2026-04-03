@@ -17,7 +17,7 @@ async def store_file_vectors(
     """Upsert source documents and their vectors into the store."""
 
     try:
-        logger.info(f"Starting vector upsert for {len(chunks)} chunks")
+        logger.info("Starting vector upsert for {} chunks", len(chunks))
         upserted = await VectorService().upsert(
             config=config, embed_config=embed_config, chunks=chunks
         )
@@ -26,9 +26,9 @@ async def store_file_vectors(
             logger.warning("Vector upsert returned None")
             return []
 
-        logger.info(f"Completed vector upsert for {len(upserted)} points")
+        logger.info("Completed vector upsert for {} points", len(upserted))
         return [str(p.id) for p in upserted]
 
     except Exception as e:
-        logger.error(f"Vector upsert failed: {e}")
+        logger.opt(exception=True).error("Vector upsert failed")
         raise

@@ -230,7 +230,7 @@ class RerankerService:
                 score_threshold=score_threshold,
             )
         except Exception as e:
-            logger.warning(f"Code node reranking failed: {e}")
+            logger.opt(exception=True).warning("Code node reranking failed")
             return nodes[:top_k]
 
         reranked_qns = {c.payload["qualified_name"] for c in reranked_chunks}

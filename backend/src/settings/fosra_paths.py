@@ -52,9 +52,13 @@ class FosraPaths:
                     path.touch()
                     created.append(str(path))
         if created:
-            logger.info(f"FOSRA directories created: {created}")
+            logger.bind(_structured={"created": created}).info(
+                "FOSRA directories created"
+            )
         if existing:
-            logger.debug(f"FOSRA directories already exist: {existing}")
+            logger.bind(_structured={"existing": existing}).debug(
+                "FOSRA directories already exist"
+            )
 
     @property
     def fosra(self) -> Path:

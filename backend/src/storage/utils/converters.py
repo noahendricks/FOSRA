@@ -39,7 +39,7 @@ def orm_to_domain(orm_instance: T_ORM, domain_cls: Type[T_Msgspec]) -> T_Msgspec
             strict=False,
         )
     except Exception as e:
-        logger.error(f"Error converting ORM to domain: {e}")
+        logger.opt(exception=True).error("Error converting ORM to domain")
         raise
 
 
@@ -60,7 +60,7 @@ def _orm_to_safe_dict(orm_instance: DeclarativeBase) -> dict[str, Any] | None:
     elif class_name == "MessageORM":
         pass
     else:
-        logger.debug(f"Skipping relationships for {class_name} to avoid lazy loading")
+        logger.debug("Skipping relationships for {} to avoid lazy loading", class_name)
 
     return data
 
@@ -107,10 +107,10 @@ def domain_to_response(
         data = msgspec.to_builtins(domain_obj)
         # logger.debug(f"Converted to builtins: {type(data)}")
     except Exception as e:
-        logger.error(f"Failed on field inspection:")
+        logger.error("Failed on field inspection:")
         for field_name in domain_obj.__struct_fields__:
             field_val = getattr(domain_obj, field_name)
-            logger.error(f"  {field_name}: {type(field_val)}")
+            logger.error("  {}: {}", field_name, type(field_val))
         raise HTTPException(
             status_code=500,
             detail=f"Error converting domain object: {e}",
