@@ -8,14 +8,14 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from backend.src.api.schemas.tui_schemas import (
+    DEFAULT_MODEL_ID,
+    DEFAULT_PROVIDER_ID,
+    PROJECT_DIR,
     AssistantMessage,
     AssistantMessagePath,
     AssistantMessageTime,
     AssistantMessageTokens,
     AssistantMessageTokensCache,
-    DEFAULT_MODEL_ID,
-    DEFAULT_PROVIDER_ID,
-    PROJECT_DIR,
     ReasoningPart,
     ReasoningPartTime,
     StepFinishPart,
@@ -36,6 +36,8 @@ from backend.src.api.schemas.tui_schemas import (
     UserMessageTime,
 )
 from backend.src.storage.utils.converters import ulid_factory
+
+from loguru import logger as log
 
 if TYPE_CHECKING:
     from backend.src.services.session.event_emitter import EventEmitter
@@ -182,6 +184,7 @@ class EventFormatter:
             reasoning_part_id,
             "text",
             text,
+            part_type="reasoning",
         )
 
     async def emit_tool_start(
@@ -285,13 +288,14 @@ class EventFormatter:
         reasoning_part_id: str,
         reasoning_start_time: int,
         end_time: int,
+        full_reasoning_text: str = "",
     ) -> None:
         part = ReasoningPart(
             id=reasoning_part_id,
             sessionID=self._session_id,
             messageID=assistant_msg_id,
             type="reasoning",
-            text="",
+            text=full_reasoning_text,
             time=ReasoningPartTime(start=reasoning_start_time, end=end_time),
         ).model_dump()
         await self._emitter.emit_message_part_updated(part)

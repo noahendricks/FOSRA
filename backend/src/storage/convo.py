@@ -260,7 +260,7 @@ class ConvoRepo:
                 computed_root_id = (
                     parent.root_id if parent.root_id else parent.message_id
                 )
-            db_message = MessageORM(
+            orm_kwargs: dict[str, Any] = dict(
                 user_id=new_message.user_id,
                 text=new_message.text,
                 convo_id=new_message.convo_id,
@@ -270,6 +270,11 @@ class ConvoRepo:
                 attached_files=None,
                 attached_sources=None,
             )
+            # preserve caller-supplied id so SSE and DB stay in sync
+            if new_message.message_id and new_message.message_id != "placeholder":
+                orm_kwargs["message_id"] = new_message.message_id
+
+            db_message = MessageORM(**orm_kwargs)
 
             if new_message.attached_files:
                 db_message.attached_files = [

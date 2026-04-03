@@ -231,6 +231,7 @@ async def run_agent_with_events(
             full_text = stats["full_text"]
             reasoning_part_id = stats["reasoning_part_id"]
             reasoning_start_time = stats["reasoning_start_time"]
+            full_reasoning_text = stats["full_reasoning_text"]
 
             slog.info(
                 "stream_completed",
@@ -250,6 +251,7 @@ async def run_agent_with_events(
                     reasoning_part_id,
                     reasoning_start_time,
                     end_time,
+                    full_reasoning_text,
                 )
 
             await formatter.emit_step_finish(assistant_msg_id, step_finish_id)
@@ -274,8 +276,10 @@ async def run_agent_with_events(
                 message=MessageResponse(
                     role=MessageRole.ASSISTANT,
                     text=full_text,
+                    message_id=assistant_msg_id,
                     user_id=user_id,
                     convo_id=session_id,
+                    parent_id=user_msg_id,
                     attached_sources=sources_as_dicts,
                 ),
                 convo_id=session_id,

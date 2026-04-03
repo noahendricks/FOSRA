@@ -122,15 +122,12 @@ class Infrastructure:
 
     async def _init_session_state_manager(self):
         try:
-            from backend.src.storage.repos.session_state_repo import SessionStateRepo
             from backend.src.services.session.session_state_manager import (
                 SessionStateManager,
             )
 
             manager = await SessionStateManager.get_instance()
-            async with self.session_factory() as session:
-                repo = SessionStateRepo(session)
-                manager.set_repo(repo)
+            manager.set_session_factory(self.session_factory)
             logger.info("SessionStateManager initialized with database persistence.")
         except Exception as e:
             logger.warning(

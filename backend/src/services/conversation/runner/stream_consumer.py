@@ -4,6 +4,7 @@ stream_consumer — consumes agent.astream() and emits events via EventFormatter
 
 from __future__ import annotations
 
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,7 @@ from backend.src.services.conversation.runner.permission_handler import (
     handle_question_request,
 )
 from backend.src.services.conversation.runner.utils import _parse_todo_output
+from backend.src.services.processing.loader_service import ulid_factory
 
 if TYPE_CHECKING:
     pass
@@ -28,14 +30,17 @@ async def consume_stream(
     assistant_msg_id: str,
     text_part_id: str,
 ) -> dict[str, Any]:
-    """Consume agent.astream() iterator, emit events, return stats."""
+    """consume agent.astream() iterator, emit events, return stats."""
     full_text = ""
     tool_call_parts: dict[str, dict[str, Any]] = {}
     handled_blocked_calls: set[str] = set()
     reasoning_part_id: str | None = None
     reasoning_start_time: int | None = None
+    full_reasoning_text = ""
     chunk_count = 0
     stream_abort = False
+    # tracks whether we're inside a <think> block in raw content strings
+    inside_think_block = False
 
     async for chunk_tuple in astream_iterator:
         if stream_abort:
@@ -49,7 +54,7 @@ async def consume_stream(
         )
 
         # stream_mode="messages" yields tuples of (AIMessageChunk, metadata) or similar
-        # Actual structure: ((), (AIMessageChunk(...),)) - AIMessageChunk at chunk_tuple[1][0]
+        # actual structure: ((), (AIMessageChunk(...),)) - AIMessageChunk at chunk_tuple[1][0]
         if isinstance(chunk_tuple, (list, tuple)) and len(chunk_tuple) > 0:
             msg = None
             for item in chunk_tuple:
@@ -74,7 +79,7 @@ async def consume_stream(
         else:
             msg = chunk_tuple
 
-        log.debug(
+        log.info(
             "stream_chunk_received parsed",
             msg_type=type(msg).__name__ if msg else "None",
             content_type=type(getattr(msg, "content", None)).__name__ if msg else "N/A",
@@ -90,29 +95,61 @@ async def consume_stream(
             continue
 
         if isinstance(msg, AIMessageChunk):
-            content_blocks = getattr(msg, "content_blocks", None)
-            if content_blocks:
-                for block in content_blocks:
-                    block_type = None
+            # CONTENT PARSING
+            # langchain_core's content_blocks property wraps unrecognized
+            # content types (like Anthropic's "thinking") as "non_standard",
+            # so we parse msg.content directly for reliable type detection.
+            content = msg.content
+            additional = msg.additional_kwargs or {}
+
+            # reasoning via additional_kwargs (some providers use this)
+            reasoning_from_kwargs = additional.get(
+                "reasoning_content", ""
+            ) or additional.get("reasoning_details", "")
+            if reasoning_from_kwargs:
+                now_ts = int(time.time())
+                if reasoning_part_id is None:
+                    reasoning_part_id = ulid_factory()
+                    reasoning_start_time = now_ts
+                    await formatter.emit_reasoning_start(
+                        assistant_msg_id,
+                        reasoning_part_id if reasoning_part_id else ulid_factory(),
+                        now_ts,
+                    )
+                # model is actively reasoning — mark so string content
+                # arriving without explicit <think> tags is also routed correctly
+                inside_think_block = True
+                full_reasoning_text += reasoning_from_kwargs
+                await formatter.emit_reasoning_delta(
+                    assistant_msg_id,
+                    reasoning_part_id,
+                    reasoning_from_kwargs,
+                )
+
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    block_type = block.get("type", "")
                     try:
-                        block_type = (
-                            block.get("type") if isinstance(block, dict) else None
-                        )
-                        if block_type == "reasoning":
-                            reasoning_text = block.get("reasoning", "") or ""
+                        if block_type in ("thinking", "reasoning"):
+                            # "thinking" = Anthropic, "reasoning" = other providers
+                            reasoning_text = (
+                                block.get("thinking", "")
+                                or block.get("reasoning", "")
+                                or ""
+                            )
                             if reasoning_text:
                                 now_ts = int(time.time())
                                 if reasoning_part_id is None:
-                                    reasoning_part_id = __import__(
-                                        "backend.src.storage.utils.converters",
-                                        fromlist=["ulid_factory"],
-                                    ).ulid_factory()
+                                    reasoning_part_id = ulid_factory()
                                     reasoning_start_time = now_ts
                                     await formatter.emit_reasoning_start(
                                         assistant_msg_id,
                                         reasoning_part_id,
                                         now_ts,
                                     )
+                                full_reasoning_text += reasoning_text
                                 await formatter.emit_reasoning_delta(
                                     assistant_msg_id,
                                     reasoning_part_id,
@@ -135,22 +172,70 @@ async def consume_stream(
                         )
                         raise
 
-            elif msg.content:
-                text_chunk = (
-                    msg.content if isinstance(msg.content, str) else str(msg.content)
-                )
-                if text_chunk:
-                    log.debug(
-                        "stream_text_chunk",
-                        content_type=type(msg.content).__name__,
-                        content=repr(msg.content)[:100],
-                    )
-                    full_text += text_chunk
-                    await formatter.emit_text_delta(
-                        assistant_msg_id,
-                        text_part_id,
-                        text_chunk,
-                    )
+            elif isinstance(content, str) and content:
+                # PARSE <think>/</think> TAGS
+                # ollama/qwen3 sends reasoning as raw <think>...</think>
+                # in the content string. route these to reasoning part.
+                remaining = content
+                while remaining:
+                    if inside_think_block:
+                        close_idx = remaining.find("</think>")
+                        if not reasoning_part_id:
+                            reasoning_part_id = ulid_factory()
+                        if close_idx != -1:
+                            # everything before </think> is reasoning
+                            reasoning_chunk = remaining[:close_idx]
+                            remaining = remaining[close_idx + len("</think>") :]
+                            inside_think_block = False
+                            if reasoning_chunk:
+                                full_reasoning_text += reasoning_chunk
+                                await formatter.emit_reasoning_delta(
+                                    assistant_msg_id,
+                                    reasoning_part_id,
+                                    reasoning_chunk,
+                                )
+                        else:
+                            # entire remaining is reasoning
+                            full_reasoning_text += remaining
+                            await formatter.emit_reasoning_delta(
+                                assistant_msg_id,
+                                reasoning_part_id,
+                                remaining,
+                            )
+                            remaining = ""
+                    else:
+                        open_idx = remaining.find("<think>")
+                        if open_idx != -1:
+                            # text before <think> is regular content
+                            text_before = remaining[:open_idx]
+                            remaining = remaining[open_idx + len("<think>") :]
+                            inside_think_block = True
+                            if text_before:
+                                full_text += text_before
+                                await formatter.emit_text_delta(
+                                    assistant_msg_id,
+                                    text_part_id,
+                                    text_before,
+                                )
+                            # ensure reasoning part exists
+                            if reasoning_part_id is None:
+                                now_ts = int(time.time())
+                                reasoning_part_id = ulid_factory()
+                                reasoning_start_time = now_ts
+                                await formatter.emit_reasoning_start(
+                                    assistant_msg_id,
+                                    reasoning_part_id,
+                                    now_ts,
+                                )
+                        else:
+                            # no tags — regular text
+                            full_text += remaining
+                            await formatter.emit_text_delta(
+                                assistant_msg_id,
+                                text_part_id,
+                                remaining,
+                            )
+                            remaining = ""
 
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
@@ -248,10 +333,14 @@ async def consume_stream(
                         formatter._session_id, metadata.get("todos", [])
                     )
 
+    # safety net: strip any stray <think>/</think> tags from saved text
+    full_text = re.sub(r"</?think>", "", full_text)
+
     return {
         "full_text": full_text,
         "tool_call_parts": tool_call_parts,
         "reasoning_part_id": reasoning_part_id,
         "reasoning_start_time": reasoning_start_time,
+        "full_reasoning_text": full_reasoning_text,
         "chunk_count": chunk_count,
     }
