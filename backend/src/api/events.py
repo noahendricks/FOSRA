@@ -10,16 +10,22 @@ from collections import deque
 from uuid import uuid4
 from loguru import logger
 from dataclasses import dataclass
-from typing import Any
+from typing import TypedDict
 
 MAX_QUEUE_SIZE = 1000
 MAX_RECENT_EVENTS = 100
 
 
+class BusEventProperties(TypedDict, total=False):
+    """Properties dict can have any string keys with arbitrary values."""
+
+    ...
+
+
 @dataclass
 class BusEvent:
     type: str
-    properties: dict[str, Any]
+    properties: BusEventProperties
     sequence_nr: int
 
 
@@ -40,9 +46,9 @@ class EventBus:
         return sub_id, queue
 
     def unsubscribe(self, sub_id: str) -> None:
-        self._subscribers.pop(sub_id, None)
+        _ = self._subscribers.pop(sub_id, None)
 
-    async def publish(self, event: dict[str, Any]) -> None:
+    async def publish(self, event: BusEventProperties) -> None:  # type: ignore[reportExplicitAny]
         async with self._lock:
             self._sequence += 1
             seq = self._sequence

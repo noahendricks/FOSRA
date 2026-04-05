@@ -8,9 +8,7 @@ import taskiq_fastapi
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from loguru import logger
-from rich.traceback import install
 
 from backend.src.api.exception_handlers import register_exception_handlers
 from backend.src.api.lifecycle import global_infra
@@ -117,8 +115,6 @@ app.add_middleware(
 )
 
 
-from rich.console import Console
-
 # from rich.traceback import Traceback
 #
 # console = Console()
@@ -152,4 +148,5 @@ if __name__ == "__main__":
         reload=True,
         reload_dirs=["./"],
         reload_delay=0.25,
+        log_config=None,
     )

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, AsyncGenerator
+from typing import Annotated
+
+from collections.abc import AsyncGenerator
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -13,8 +15,8 @@ DEV_USER_NAME = "Development User"
 
 
 async def get_infra(request: Request) -> Infrastructure:
-    if request.app.state and hasattr(request.app.state, "infra"):
-        return request.app.state.infra
+    if request.app.state and hasattr(request.app.state, "infra"):  # type: ignore[reportAny]
+        return request.app.state.infra  # type: ignore[reportAny]
     else:
         raise RuntimeError("Infrastructure not found in application state")
 

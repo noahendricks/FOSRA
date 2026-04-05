@@ -1,5 +1,4 @@
-import asyncio
-import os
+from typing import Any
 
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
@@ -12,15 +11,15 @@ from backend.src.storage.models import Base
 class Infrastructure:
     """Holds heavy singletons. Initialized ONCE at startup."""
 
-    def __init__(self, settings):
+    def __init__(self, settings: Any) -> None:  # type: ignore[reportExplicitAny]
         self.qdrant_client: AsyncQdrantClient | None = None
         self.session_factory: async_sessionmaker[AsyncSession] | None = None
-        self.engine = create_async_engine(settings.database.url, echo=False)
+        self.engine = create_async_engine(settings.database.url, echo=False)  # type: ignore[reportUnknownMemberType]
         self.falkordb_client: FalkorDB | None = None
-        self.falkordb_graph = None
-        self.model_registry = None
+        self.falkordb_graph: Any = None  # type: ignore[reportExplicitAny]
+        self.model_registry: Any = None  # type: ignore[reportExplicitAny]
         self._tables_created = False
-        self.checkpointer = None
+        self.checkpointer: Any = None  # type: ignore[reportExplicitAny]
 
     def init(self):
         from backend.src.settings.fosra_paths import fosra_paths
@@ -131,25 +130,28 @@ class Infrastructure:
             logger.info("SessionStateManager initialized with database persistence.")
         except Exception as e:
             logger.warning(
-                "SessionStateManager initialization failed: {}. "
-                "Session persistence will be in-memory only.",
+                "SessionStateManager initialization failed: {}. Session persistence will be in-memory only.",
                 e,
             )
 
     async def _init_checkpointer(self):
         try:
+            from psycopg import AsyncConnection
+            from psycopg.rows import dict_row
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
             conn_string = settings.database.url
             conn_string = conn_string.replace("+asyncpg", "").replace("+psycopg2", "")
-            saver = AsyncPostgresSaver.from_conn_string(conn_string)
+            conn = await AsyncConnection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            )
+            saver = AsyncPostgresSaver(conn=conn)
             await saver.setup()
             self.checkpointer = saver
             logger.info("LangGraph Postgres checkpointer initialized.")
         except Exception as e:
             logger.warning(
-                "Checkpointer initialization failed: {}. "
-                "Agent will be stateless per turn.",
+                "Checkpointer initialization failed: {}. Agent will be stateless per turn.",
                 e,
             )
             self.checkpointer = None
@@ -157,6 +159,13 @@ class Infrastructure:
     async def close(self):
         if self.qdrant_client:
             await self.qdrant_client.close()
+
+        if self.checkpointer is not None:
+            try:
+                await self.checkpointer.conn.close()
+                logger.info("Checkpointer connection closed.")
+            except Exception as e:
+                logger.warning("Error closing checkpointer connection: {}", e)
 
         if self.engine:
             await self.engine.dispose()
