@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStore
-from langchain_qdrant import QdrantVectorStore
+from langchain_core.vectorstores.base import VectorStore
 from loguru import logger
-from pydantic import StrictStr
-from qdrant_client.conversions.common_types import QueryResponse
-from qdrant_client.http.models.models import Vector
 from qdrant_client.models import ScoredPoint
 
-from backend.src.api.schemas.base import _BaseModelFlex
+from backend.src.api.schemas.base import BaseModelFlex
 from backend.src.domain.enums import RetrievalMode, VectorStoreType
 from backend.src.domain.schemas.doc import Chunk
 from backend.src.services.processing.embedder_service import EmbedderService
@@ -58,7 +53,7 @@ def _weighted_rrf_fuse(
     return [c for c, _ in fused[:top_k]]
 
 
-class RetrievedChunk(_BaseModelFlex):
+class RetrievedChunk(BaseModelFlex):
     text: str
     token_count: int
     start_char: int
@@ -72,7 +67,7 @@ class VectorService:
         client: AsyncQdrantClient, embedder_config: EmbedderConfig
     ) -> None:
         if not await client.collection_exists(CHUNKS_COLLECTION):
-            await client.create_collection(
+            _ = await client.create_collection(
                 collection_name=CHUNKS_COLLECTION,
                 vectors_config={
                     "dense": models.VectorParams(
@@ -91,7 +86,7 @@ class VectorService:
     ) -> list[models.PointStruct]:
         points = await VectorService.build_points(chunks, embed_config)
 
-        await client.upsert(collection_name=CHUNKS_COLLECTION, points=points)
+        _ = await client.upsert(collection_name=CHUNKS_COLLECTION, points=points)
 
         logger.info(f"Upserted {len(points)} leaf chunks to {CHUNKS_COLLECTION}")
         return points
@@ -265,7 +260,7 @@ class VectorService:
         client: AsyncQdrantClient, collection_name: str
     ) -> bool:
         if await client.collection_exists(collection_name):
-            await client.delete_collection(collection_name)
+            _ = await client.delete_collection(collection_name)
             logger.info(f"Deleted collection: {collection_name}")
             return True
         return False

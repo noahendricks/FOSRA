@@ -1,12 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-from loguru import logger
-
-if TYPE_CHECKING:
-    from backend.src.settings import EmbedderConfig
+from typing import Any
 
 import tree_sitter_go as tsgo
 import tree_sitter_javascript as tsjs
@@ -15,10 +10,7 @@ import tree_sitter_rust as tsrust
 import tree_sitter_typescript as tsts
 from code_chunker import (
     ChunkerConfig,
-    ChunkType,
-    CodeChunk,
     CodeChunker,
-    Import,
     ParseResult,
 )
 from tree_sitter import Language, Parser, Query, QueryCursor
@@ -221,7 +213,7 @@ class CallGraphService:
     @classmethod
     def _get_language(cls, language: str) -> Language:
         if language not in cls._languages:
-            cls._get_parser(language)
+            _ = cls._get_parser(language)
         return cls._languages[language]
 
     def extract_graph(

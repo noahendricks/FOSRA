@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from loguru import logger
 from qdrant_client.models import SparseVector
 
-from backend.src.api.schemas.base import _BaseModelFlex
+from backend.src.api.schemas.base import BaseModelFlex
 from backend.src.domain.schemas.doc import Chunk
 
 if TYPE_CHECKING:
@@ -23,7 +22,7 @@ class EmbedderProvider(Protocol):
     ) -> EmbeddedQueries | None: ...
 
 
-class EmbeddedQueries(_BaseModelFlex):
+class EmbeddedQueries(BaseModelFlex):
     dense: list[float] = []
     sparse: SparseVector | None = None
 
@@ -170,14 +169,14 @@ class FlagProvider:
 
         result = await asyncio.to_thread(_encode)
 
-        dense_vecs = result["dense_vecs"]
-        lexical_weights = result["lexical_weights"]
+        dense_vecs = cast("list[Any]", result["dense_vecs"])
+        lexical_weights = cast("list[dict[str, float]]", result["lexical_weights"])
 
         for chunk, dense, sparse_weights in zip(chunks, dense_vecs, lexical_weights):
-            chunk.metadata.dense_embedding = dense.tolist()
+            chunk.metadata.dense_embedding = cast("list[float]", dense.tolist())
             if sparse_weights:
                 chunk.metadata.sparse_embedding = SparseVector(
-                    indices=list(sparse_weights.keys()),
+                    indices=[int(k) for k in sparse_weights.keys()],
                     values=list(sparse_weights.values()),
                 )
 
@@ -198,16 +197,16 @@ class FlagProvider:
 
         result = await asyncio.to_thread(_encode)
 
-        dense_vecs = result["dense_vecs"]
-        lexical_weights = result["lexical_weights"]
+        dense_vecs = cast("list[Any]", result["dense_vecs"])
+        lexical_weights = cast("list[dict[str, float]]", result["lexical_weights"])
 
         embedded = EmbeddedQueries()
-        embedded.dense = dense_vecs[0].tolist()
+        embedded.dense = cast("list[float]", dense_vecs[0].tolist())
 
         if lexical_weights and lexical_weights[0]:
             lw = lexical_weights[0]
             embedded.sparse = SparseVector(
-                indices=list(lw.keys()),
+                indices=[int(k) for k in lw.keys()],
                 values=list(lw.values()),
             )
 
@@ -490,8 +489,8 @@ class JinaCodeProvider:
 
         embeddings = await asyncio.to_thread(_encode)
 
-        for chunk, embedding in zip(chunks, embeddings):
-            chunk.metadata.dense_embedding = embedding.tolist()
+        for chunk, embedding in zip(chunks, cast("Any", embeddings)):
+            chunk.metadata.dense_embedding = cast("list[float]", embedding.tolist())
 
         return chunks
 

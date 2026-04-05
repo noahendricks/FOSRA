@@ -22,7 +22,6 @@ from backend.src.domain.schemas.graph import (
     ResolvedImport,
     Signature,
 )
-from backend.src.services.processing.callgraph_service import CallGraphService
 from backend.src.services.processing.embedder_service import EmbedderService
 
 
@@ -226,7 +225,7 @@ class GraphService:
         SET n += $props
         RETURN n
         """
-        graph.query(
+        _ = graph.query(
             query, params={"qualified_name": node.qualified_name, "props": props}
         )
 
@@ -242,7 +241,7 @@ class GraphService:
             r.confidence = $confidence,
             r.is_cross_file = $is_cross_file
         """
-        graph.query(
+        _ = graph.query(
             query,
             params={
                 "caller_qualified": edge.caller_qualified,
@@ -266,7 +265,7 @@ class GraphService:
         SET r.is_cross_file = $is_cross_file
         """
 
-        graph.query(
+        _ = graph.query(
             query,
             params={
                 "child_qualified": edge.child_qualified,
@@ -284,7 +283,7 @@ class GraphService:
         SET r.names = $names,
             r.line_number = $line_number
         """
-        graph.query(
+        _ = graph.query(
             query,
             params={
                 "source_file_id": imp.source_file_id,
@@ -301,7 +300,7 @@ class GraphService:
         MATCH (m:Method {qualified_name: $method_qualified})
         MERGE (c)-[r:DEFINES_METHOD]->(m)
         """
-        graph.query(
+        _ = graph.query(
             query,
             params={
                 "class_qualified": edge.class_qualified,
@@ -322,7 +321,7 @@ class GraphService:
             ("Class", "name"),
         ]:
             try:
-                graph.create_node_range_index(label, prop)
+                _ = graph.create_node_range_index(label, prop)
             except Exception as e:
                 if "already indexed" not in str(e).lower():
                     logger.warning(
@@ -335,7 +334,7 @@ class GraphService:
             ("Class", "embedding", 896),
         ]:
             try:
-                graph.create_node_vector_index(
+                _ = graph.create_node_vector_index(
                     label,
                     prop,
                     dim=dim,
@@ -349,7 +348,7 @@ class GraphService:
 
         for label in ("Function", "Method", "Class"):
             try:
-                graph.query(
+                _ = graph.query(
                     f"CALL db.idx.fulltext.createNodeIndex('{label}', 'name', 'qualified_name', 'docstring')"
                 )
             except Exception as e:
@@ -387,7 +386,7 @@ class GraphService:
         q_emb = np.array(query_embedding, dtype=np.float32)
         q_norm = np.linalg.norm(q_emb)
         if q_norm == 0:
-            q_norm = 1.0
+            q_norm: float = 1.0
 
         label_placeholders = ",".join(f"'{lbl}'" for lbl in labels)
         query = f"""
@@ -772,5 +771,5 @@ class GraphService:
     def clear_graph(self) -> None:
         """delete all nodes and edges in the graph."""
         graph = self._get_graph()
-        graph.query("MATCH (n) DETACH DELETE n")
+        _ = graph.query("MATCH (n) DETACH DELETE n")
         logger.info("Cleared graph '{}'", self._graph_name)

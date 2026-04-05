@@ -4,9 +4,7 @@ import asyncio
 import mimetypes
 from pathlib import Path
 
-from loguru import logger
-
-from backend.src.domain.schemas.doc import Doc, DocMetadata, Section
+from backend.src.domain.schemas.doc import Doc, DocMetadata
 from backend.src.services.processing.kreuzberg_extractor import (
     KreuzbergExtractor,
     SectionGrouper,

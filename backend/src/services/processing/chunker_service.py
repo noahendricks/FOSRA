@@ -3,30 +3,24 @@ from __future__ import annotations
 import asyncio
 import time
 from asyncio.tasks import Task
-from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from backend.src.domain.enums import ChunkerType
-from backend.src.settings import CodeChunkerConfig
 from backend.src.domain.schemas.doc import (
     Chunk,
     ChunkMetadata,
     Doc,
     DocMetadata,
-    PDFMetadata,
-    TextMetadata,
 )
 from backend.src.services.processing.hi_chunk import HiChunk, HiChunkStructurer
-from backend.src.storage.models import ulid_factory
 
 if TYPE_CHECKING:
     from backend.src.settings import ChunkerConfig
 
 from uuid import uuid4
 
-from chonkie import Visualizer, chunker
+from chonkie import Visualizer
 
 viz = Visualizer()
 

@@ -6,13 +6,10 @@ Provides semantic vector search and structural traversals on the code graph.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-from falkordb import FalkorDB, Node
-from loguru import logger
+from typing import TYPE_CHECKING
 
 from backend.src.domain.enums import GraphNodeType
-from backend.src.domain.schemas.graph import CodeNode, GraphQueryResult
+from backend.src.domain.schemas.graph import GraphQueryResult
 
 if TYPE_CHECKING:
     from falkordb import Graph

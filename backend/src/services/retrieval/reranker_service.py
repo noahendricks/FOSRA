@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from flashrank import Ranker, RerankRequest
 from loguru import logger
@@ -8,6 +8,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from backend.src.settings import RerankerConfig
     from backend.src.services.retrieval.vector_service import RetrievedChunk
+    from FlagEmbedding import FlagReranker
 
 from backend.src.domain.enums import RerankerType
 from backend.src.domain.schemas.graph import CodeNode
@@ -21,7 +22,7 @@ _flashrank_cache: dict[str, Ranker] = {}
 
 def _get_flashrank_ranker(model_name: str, cache_dir: str | None = None) -> Ranker:
     if model_name not in _flashrank_cache:
-        kwargs: dict = {"model_name": model_name}
+        kwargs: dict[str, Any] = {"model_name": model_name}
         if cache_dir:
             kwargs["cache_dir"] = cache_dir
         logger.info("Loading FlashRank model: {}", model_name)
@@ -32,11 +33,11 @@ def _get_flashrank_ranker(model_name: str, cache_dir: str | None = None) -> Rank
 # =============================================================================
 # FlagEmbedding BGE reranker
 # =============================================================================
-_bgereranker_cache: dict[str, "FlagReranker"] = {}  # type: ignore[name-defined]
+_bgereranker_cache: dict[str, FlagReranker] = {}
 
 
-def _get_bge_reranker(model_name: str) -> "FlagReranker":  # type: ignore[name-defined]
-    from FlagEmbedding import FlagReranker
+def _get_bge_reranker(model_name: str) -> FlagReranker:
+    from FlagEmbedding import FlagReranker  # noqa: F401
 
     if model_name not in _bgereranker_cache:
         logger.info("Loading BGE reranker model: {}", model_name)
@@ -71,11 +72,11 @@ class RerankerService:
     ) -> list[RetrievedChunk]:
         reranker = _get_bge_reranker(self._bge_model)
 
-        pairs = [[query, chunk.text] for chunk in chunks]
+        pairs: list[tuple[str, str]] = [(query, chunk.text) for chunk in chunks]
         raw_scores = reranker.compute_score(pairs, normalize=True)
 
         scored: list[tuple[int, float]] = [
-            (idx, score) for idx, score in enumerate(raw_scores)
+            (idx, cast("float", score)) for idx, score in enumerate(raw_scores or [])
         ]
         if score_threshold is not None:
             scored = [(idx, s) for idx, s in scored if s >= score_threshold]
@@ -106,7 +107,7 @@ class RerankerService:
         ]
 
         request = RerankRequest(query=query, passages=passages)
-        ranked: list[dict] = reranker.rerank(request)
+        ranked: list[dict[str, Any]] = reranker.rerank(request)
 
         reranked: list[RetrievedChunk] = []
         for item in ranked:

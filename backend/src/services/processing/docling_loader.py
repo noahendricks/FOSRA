@@ -58,13 +58,13 @@ class DoclingLoader:
 
         first_content = (
             sections[0].section_text
-            if sections
+            if sections and sections[0].section_text
             else path.read_text(encoding="utf-8", errors="replace")
         )
 
         return Doc(
             id=ulid_factory(),
-            page_content=first_content,
+            page_content=first_content or "",
             metadata=DocMetadata(
                 source=str(path.absolute()),
                 mime_type=mime_type,
@@ -123,12 +123,12 @@ class DoclingLoader:
         for chunk in chunks:
             meta = chunk.meta
             headings: list[str] = [
-                _clean_heading(h) or "" for h in (meta.headings or [])
+                _clean_heading(h) or "" for h in getattr(meta, "headings", []) or []
             ]
             headings = [h for h in headings if h]
             raw_heading = headings[-1] if headings else None
 
-            doc_items = meta.doc_items or []
+            doc_items = getattr(meta, "doc_items", []) or []
             page_no: int | None = None
             if doc_items:
                 prov = getattr(doc_items[0], "prov", []) or []

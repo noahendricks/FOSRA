@@ -2,13 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import re
+from enum import Enum
 from typing import Any
 
 import kreuzberg
-from kreuzberg import ExtractionConfig, OutputFormat, ResultFormat
+from kreuzberg import ExtractionConfig  # type: ignore[attr-defined]
+
 from loguru import logger
 
 from backend.src.domain.schemas.doc import Section
+
+
+class OutputFormat(str, Enum):
+    PLAIN = "plain"
+    MARKDOWN = "markdown"
+    DJOT = "djot"
+    HTML = "html"
+    STRUCTURED = "structured"
+
+
+class ResultFormat(str, Enum):
+    ELEMENT_BASED = "element_based"
+    OBJECT_BASED = "object_based"
 
 
 class KreuzbergExtractor:
@@ -17,20 +32,6 @@ class KreuzbergExtractor:
         file_path: str,
         output_format: OutputFormat = OutputFormat.PLAIN,
     ) -> list[dict[str, Any]]:
-        """Extract structured elements from a file using Kreuzberg.
-
-                Uses element-based output to get typed elements (narrative_text, list_item,
-                page_break, etc.) with page_number, element_index, and element_id metadata.
-
-                Args:
-                    file_path: Absolute path to the file
-                    output_format: Kre
-
-        zburg output format (default PLAIN)
-
-                Returns:
-                    List of element dicts with keys: element_id, element_type, text, metadata
-        """
         config = ExtractionConfig(
             output_format=output_format,
             result_format=ResultFormat.ELEMENT_BASED,
@@ -49,7 +50,6 @@ class KreuzbergExtractor:
         file_path: str,
         output_format: OutputFormat = OutputFormat.PLAIN,
     ) -> list[dict[str, Any]]:
-        """Synchronous wrapper for extract_elements."""
         return asyncio.run(
             KreuzbergExtractor.extract_elements(file_path, output_format)
         )

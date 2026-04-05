@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-import os
-import re
-from dataclasses import dataclass, field
-from typing import Any, Optional
-from uuid import uuid4
-
-import numpy as np
+from loguru import logger
 from chonkie import (
     CodeChunker,
     LateChunker,
@@ -16,24 +10,14 @@ from chonkie import (
     SentenceTransformerEmbeddings,
     TokenChunker,
 )
-from chonkie.refinery import EmbeddingsRefinery
-from loguru import logger
-from qdrant_client.models import PointStruct
-
-from backend.src.api.schemas.base import _BaseModelFlexLower as _BaseModelFlex
 from backend.src.domain.enums import ChunkerType
 from backend.src.domain.schemas.doc import (
     Chunk,
     ChunkMetadata,
     Doc,
-    FunctionsClassesMetadata,
     HierarchicalChunk,
-    ImportsMetadata,
-    PDFMetadata,
-    SimplifiedCodeMetadata,
-    TextMetadata,
 )
-from backend.src.settings import ChunkerConfig, EmbedderConfig
+from backend.src.settings import ChunkerConfig
 
 
 class FlatChunkProducer:

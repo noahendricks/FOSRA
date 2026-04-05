@@ -1,5 +1,3 @@
-import strenum
-
 code_mimes = {
     "text/x-python": "python",
     "text/x-rust": "rust",

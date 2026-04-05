@@ -157,7 +157,7 @@ class ModelRegistry:
         Returns:
             ChatLiteLLM instance
         """
-        from backend.src.services.conversation.utils.llm_utils import build_llm
+        from backend.src.services.session.utils.llm_utils import build_llm
 
         cache_key = self._llm_cache_key(config)
 
