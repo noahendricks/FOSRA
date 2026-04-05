@@ -9,7 +9,7 @@ async def validation_exception_handler(
 ) -> JSONResponse:
     logger.bind(
         _structured={"path": str(request.url.path), "method": request.method}
-    ).opt(exception=True).warning("Validation error")
+    ).opt(exception=exc).warning("Validation error")
     return JSONResponse(
         status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
@@ -34,7 +34,7 @@ async def not_found_exception_handler(request: Request, exc: Exception) -> JSONR
 async def service_unavailable_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.bind(
         _structured={"path": str(request.url.path), "method": request.method}
-    ).opt(exception=True).error("Service unavailable")
+    ).opt(exception=exc).error("Service unavailable")
     return JSONResponse(
         status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
         content={
@@ -48,12 +48,12 @@ async def service_unavailable_handler(request: Request, exc: Exception) -> JSONR
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.bind(
         _structured={"path": str(request.url.path), "method": request.method}
-    ).opt(exception=True).error("Unexpected error")
+    ).opt(exception=exc).error("Unexpected error")
     return JSONResponse(
         status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error": "InternalServerError",
-            "message": "An unexpected error occurred. Please try again.",
+            "message": str(exc) or "An unexpected error occurred. Please try again.",
             "path": str(request.url.path),
         },
     )
