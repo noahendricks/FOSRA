@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import Any
 
-from backend.src.api.schemas.api_schemas import MessageResponse
-from backend.src.api.schemas.base import _BaseModelFlex
+from backend.src.api.schemas.message_schemas import AssistantMessage, UserMessage
+from backend.src.api.schemas.base import BaseModelFlex
 from backend.src.api.schemas.source_api_schemas import (
     SourceResponseDeep,
     SourceResponseShallow,
@@ -12,7 +12,7 @@ from backend.src.storage.utils.converters import utc_now
 from pydantic import Field
 
 
-class ConversationStreamRequest(_BaseModelFlex):
+class ConversationStreamRequest(BaseModelFlex):
     """Request for conversation streaming."""
 
     user_query: str
@@ -26,7 +26,7 @@ class ConversationStreamRequest(_BaseModelFlex):
     streaming_type: ConversationStreamType = ConversationStreamType.CHAT
 
 
-class ConversationStreamResponse(_BaseModelFlex):
+class ConversationStreamResponse(BaseModelFlex):
     """Response from conversation streaming."""
 
     stream_id: str
@@ -38,7 +38,7 @@ class ConversationStreamResponse(_BaseModelFlex):
     error_message: str | None = None
 
 
-class ConversationStreamRequestModel(_BaseModelFlex):
+class ConversationStreamRequestModel(BaseModelFlex):
     """Pydantic model for conversation streaming request."""
 
     user_query: str = Field(..., description="User query to process")
@@ -64,7 +64,7 @@ class ConversationStreamRequestModel(_BaseModelFlex):
     )
 
 
-class ConversationStreamResponseModel(_BaseModelFlex):
+class ConversationStreamResponseModel(BaseModelFlex):
     """Pydantic model for conversation streaming response."""
 
     stream_id: str = Field(..., description="Unique stream identifier")
@@ -87,58 +87,58 @@ class ConversationStreamResponseModel(_BaseModelFlex):
 # =============================================================================
 
 
-class MessageAPI(_BaseModelFlex):
+class MessageAPI(BaseModelFlex):
     text: str
-    convo_id: str
+    session_id: str
     role: MessageRole
     user_id: str | None = None
     message_id: str | None = None
     message_metadata: dict[str, Any] | None = None
 
 
-class ConvoRequestBase(_BaseModelFlex):
+class SessionRequestBase(BaseModelFlex):
     user_id: str
 
 
-class ConvoRequest(ConvoRequestBase):
-    convo_id: str
+class SessionRequest(SessionRequestBase):
+    session_id: str
 
 
-class NewConvoRequest(ConvoRequestBase):
-    title: str | None = "New Convo"
+class NewSessionRequest(SessionRequestBase):
+    title: str | None = "New Session"
     workspace_id: str = "default"
 
 
-class ConvoDeleteRequest(ConvoRequestBase):
-    convo_id: str
-    convo_list: list[str] | None = None
+class SessionDeleteRequest(SessionRequestBase):
+    session_id: str
+    session_list: list[str] | None = None
 
 
-class ConvoUpdateRequest(ConvoRequestBase):
-    title: str | None = "New Convo"
-    convo_id: str
-    convo_metadata: dict[str, Any] | None = None
+class SessionUpdateRequest(SessionRequestBase):
+    title: str | None = "New Session"
+    session_id: str
+    session_metadata: dict[str, Any] | None = None
     messages: list[MessageAPI] | None = None
     data: dict[str, Any] | None = None
 
 
-class ConvoListItemResponse(ConvoRequestBase):
+class SessionListItemResponse(SessionRequestBase):
     title: str
-    convo_id: str
+    session_id: str
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     message_count: int = Field(default=0)
 
 
-class NewConvoResponse(ConvoRequestBase):
-    convo_id: str
-    title: str | None = "New Convo"
-    convo_metadata: dict[str, Any] | None = None
+class NewSessionResponse(SessionRequestBase):
+    session_id: str
+    title: str | None = "New Session"
+    session_metadata: dict[str, Any] | None = None
 
 
-class ConvoFullResponse(ConvoRequestBase):
-    convo_id: str
-    title: str | None = "New Convo"
+class SessionFullResponse(SessionRequestBase):
+    session_id: str
+    title: str | None = "New Session"
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     message_count: int = 0
@@ -148,4 +148,13 @@ class ConvoFullResponse(ConvoRequestBase):
         description="All sources for this chat",
     )
 
-    messages: list[MessageResponse] = Field(default_factory=list)
+    messages: list[UserMessage | AssistantMessage] = Field(default_factory=list)
+
+
+class MessageUpdateRequest(BaseModelFlex):
+    user_id: str
+    session_id: str
+    message_id: str
+    role: str | None = None
+    text: str | None = None
+    message_metadata: dict[str, Any] | None = None

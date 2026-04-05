@@ -20,21 +20,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.dependencies import get_current_user_id, get_db_session
 from backend.src.services.session.event_emitter import get_event_emitter
-from backend.src.api.routes.oc.state import session_status
-from backend.src.api.schemas.convo_api_schemas import (
-    ConvoUpdateRequest,
-    NewConvoRequest,
+from backend.src.api.schemas.session_api_schemas import (
+    SessionUpdateRequest,
+    NewSessionRequest,
 )
 from backend.src.api.schemas.tui_schemas import (
     PROJECT_DIR,
-    convo_full_to_session,
-    convo_to_session,
-    get_default_provider,
 )
-from backend.src.domain.schemas.convo import Message
+from backend.src.domain.schemas.session import Message
 from backend.src.domain.enums import MessageRole
-from backend.src.services.conversation.conversation_service import ConversationService
-from backend.src.storage.convo import ConvoRepo
+from backend.src.services.session.conversation_service import SessionService
+from backend.src.storage.session import SessionRepo
 from backend.src.storage.utils.converters import ulid_factory
 
 router = APIRouter(prefix="/oc/session", tags=["Session Operations"])
@@ -61,7 +57,7 @@ def _set_snapshot(session_id: str, data: list[dict[str, Any]]) -> None:
 
 
 def _del_snapshot(session_id: str) -> None:
-    _session_snapshots.pop(session_id, None)
+    _ = _session_snapshots.pop(session_id, None)
 
 
 def _get_parent_id(meta: dict[str, Any] | None) -> str | None:
@@ -70,8 +66,8 @@ def _get_parent_id(meta: dict[str, Any] | None) -> str | None:
     return meta.get("parent_id")
 
 
-def _convo_to_session_with_parent(
-    convo_id: str,
+def _session_to_session_with_parent(
+    session_id: str,
     user_id: str,
     title: str | None = None,
     created_at=None,
@@ -83,13 +79,13 @@ def _convo_to_session_with_parent(
     now = time.time()
     parent_id = _get_parent_id(meta)
     return {
-        "id": convo_id,
-        "slug": convo_id[:8],
+        "id": session_id,
+        "slug": session_id[:8],
         "projectID": "default",
         "workspaceID": None,
         "directory": PROJECT_DIR,
         "parentID": parent_id,
-        "title": title or "New Convo",
+        "title": title or "New Session",
         "version": "2",
         "time": {
             "created": int(created_at.timestamp() if created_at else now),
@@ -106,14 +102,14 @@ def _convo_to_session_with_parent(
 async def _fork_copy_messages(
     session: AsyncSession,
     source_convo_id: str,
-    new_convo_id: str,
+    new_session_id: str,
     user_id: str,
 ) -> list[dict[str, Any]]:
     """
     deep-copy all messages from source conversation to new conversation.
     returns the list of new message dicts for the response.
     """
-    source = await ConvoRepo.get_by_id(session, user_id, source_convo_id)
+    source = await SessionRepo.get_by_id(session, user_id, source_convo_id)
     new_msgs: list[dict[str, Any]] = []
     id_map: dict[str, str] = {}
 
@@ -131,12 +127,10 @@ async def _fork_copy_messages(
         parent_id = id_map.get(msg.parent_id) if msg.parent_id else None
         root_id = id_map.get(msg.root_id) if msg.root_id else None
 
-        from backend.src.storage.convo import file_part_to_dict
-
         db_msg = {
             "user_id": user_id,
             "text": msg.text,
-            "convo_id": new_convo_id,
+            "session_id": new_session_id,
             "role": msg.role,
             "parent_id": parent_id,
             "root_id": root_id,
@@ -152,7 +146,7 @@ async def _fork_copy_messages(
         new_msgs.append(
             {
                 "id": new_id,
-                "sessionID": new_convo_id,
+                "sessionID": new_session_id,
                 "role": msg.role.value if hasattr(msg.role, "value") else msg.role,
                 "text": msg.text,
                 "parentID": parent_id,
@@ -178,41 +172,43 @@ async def fork_session(
     deep-copy a conversation and all its messages.
     sets parentID on the new session to the original.
     """
-    source = await ConvoRepo.get_by_id(session, user_id, session_id)
+    source = await SessionRepo.get_by_id(session, user_id, session_id)
     if source is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    new_convo_id = ulid_factory()
-    new_convo = NewConvoRequest(
+    new_session_id = ulid_factory()
+    new_convo = NewSessionRequest(
         user_id=user_id,
         title=f"{source.title} (fork)",
     )
 
-    result = await ConversationService.create_conversation(
+    result = await SessionService.create_session(
         session=session,
-        new_convo=new_convo,
+        new_session=new_convo,
     )
 
-    new_conv_id = result.convo_id
+    new_session_id = result.session_id
 
-    new_conv_orm = await ConvoRepo._get_convo_orm(session, new_conv_id, user_id)
-    if new_conv_orm:
-        meta = new_conv_orm.meta
+    new_session_orm = await SessionRepo._get_session_orm(
+        session, new_session_id, user_id
+    )
+    if new_session_orm:
+        meta = new_session_orm.meta
         if meta is None:
             meta = {}
-            new_conv_orm.meta = meta
+            new_session_orm.meta = meta
         meta["parent_id"] = session_id
     await session.commit()
 
-    await _fork_copy_messages(session, session_id, new_conv_id, user_id)
+    _ = await _fork_copy_messages(session, session_id, new_session_id, user_id)
     await session.commit()
 
-    session_info = _convo_to_session_with_parent(
-        convo_id=new_conv_id,
+    session_info = _session_to_session_with_parent(
+        session_id=new_session_id,
         user_id=user_id,
         title=f"{source.title} (fork)",
-        created_at=new_conv_orm.created_at if new_conv_orm else None,
-        meta=new_conv_orm.meta if new_conv_orm else None,
+        created_at=new_session_orm.created_at if new_session_orm else None,
+        meta=new_session_orm.meta if new_session_orm else None,
     )
 
     await event_emitter.emit_session_created(session_info)
@@ -227,25 +223,25 @@ async def get_session_children(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """return all sessions whose parentID is this session_id."""
-    from backend.src.storage.models import ConvoORM
+    from backend.src.storage.models import SessionORM
     from sqlalchemy import select
 
     result = await session.execute(
-        select(ConvoORM).where(
-            ConvoORM.user_id == user_id,
-            ConvoORM.archived == False,  # noqa: E712
+        select(SessionORM).where(
+            SessionORM.user_id == user_id,
+            SessionORM.archived == False,  # noqa: E712
         )
     )
     children = []
-    for convo in result.scalars().all():
-        meta = convo.meta or {}
+    for session_orm in result.scalars().all():
+        meta = session_orm.meta or {}
         if meta.get("parent_id") == session_id:
             children.append(
-                _convo_to_session_with_parent(
-                    convo_id=convo.convo_id,
+                _session_to_session_with_parent(
+                    session_id=session_orm.session_id,
                     user_id=user_id,
-                    title=convo.title,
-                    created_at=convo.created_at,
+                    title=session_orm.title,
+                    created_at=session_orm.created_at,
                     meta=meta,
                 )
             )
@@ -258,7 +254,7 @@ async def init_session(session_id: str) -> bool:
     agents_md = os.path.join(PROJECT_DIR, "AGENTS.md")
     if not os.path.exists(agents_md):
         with open(agents_md, "w") as f:
-            f.write(
+            _ = f.write(
                 "# AGENTS.md\n\nThis file marks the project root for the FOSRA agent.\n"
             )
     return True
@@ -286,16 +282,16 @@ async def summarize_session(
     generate a summary for the session by looking at the conversation text.
     updates the conversation title with the summary.
     """
-    convo = await ConversationService.get_conversation_by_id(
+    session_obj = await SessionService.get_session_by_id(
         session=session,
         user_id=user_id,
-        convo_id=session_id,
+        session_id=session_id,
     )
-
-    texts = []
-    for msg in convo.messages:
-        if hasattr(msg, "text") and msg.text:
-            texts.append(f"[{msg.role}]: {msg.text[:200]}")
+    texts: list[str] = []
+    for msg in session_obj.messages:
+        msg_text = getattr(msg, "text", None)
+        if msg_text:
+            texts.append(f"[{msg.role}]: {msg_text[:200]}")
 
     summary_text = ""
     if texts:
@@ -304,11 +300,11 @@ async def summarize_session(
 
     title = summary_text[:80] if summary_text else "Summarized Session"
 
-    await ConversationService.update_conversation(
+    _ = await SessionService.update_session(
         session=session,
-        convo_update=ConvoUpdateRequest(
+        session_update=SessionUpdateRequest(
             user_id=user_id,
-            convo_id=session_id,
+            session_id=session_id,
             title=title,
         ),
     )
@@ -328,28 +324,19 @@ async def revert_session(
     snapshot the current messages, store in memory, then clear messages.
     the snapshot can be restored via /unrevert.
     """
-    convo = await ConversationService.get_conversation_by_id(
+    session_obj = await SessionService.get_session_by_id(
         session=session,
         user_id=user_id,
-        convo_id=session_id,
+        session_id=session_id,
     )
-
-    snapshot = [
-        {"id": getattr(m, "message_id", None), "text": m.text, "role": m.role}
-        for m in convo.messages
-    ]
-    _set_snapshot(session_id, snapshot)
-
-    from backend.src.api.schemas.convo_api_schemas import ConvoDeleteRequest
-
-    for msg in reversed(list(convo.messages)):
+    for msg in reversed(list(session_obj.messages)):
         msg_id = getattr(msg, "message_id", None)
         if msg_id:
             try:
                 from sqlalchemy import delete
                 from backend.src.storage.models import MessageORM
 
-                await session.execute(
+                _ = await session.execute(
                     delete(MessageORM).where(MessageORM.message_id == msg_id)
                 )
             except Exception:
@@ -376,12 +363,12 @@ async def unrevert_session(
     for msg_data in snapshot:
         new_msg = Message(
             role=msg_data["role"],
-            convo_id=session_id,
+            session_id=session_id,
             text=msg_data["text"],
             user_id=user_id,
             message_id=msg_data.get("id") or ulid_factory(),
         )
-        await ConvoRepo.add_message(session, new_msg)
+        _ = await SessionRepo.add_message(session, new_msg)
 
     await session.commit()
     _del_snapshot(session_id)

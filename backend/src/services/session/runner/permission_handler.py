@@ -37,9 +37,9 @@ _TOOL_PERMISSIONS: dict[str, str] = {
 
 def _normalize_tool_name(name: str) -> str:
     """map llm tool names to tui-expected lowercase names."""
-    from backend.src.services.conversation.runner import _TOOL_NAME_MAP
+    from backend.src.services.session.runner.constants import normalize_tool_name
 
-    return _TOOL_NAME_MAP.get(name, name.lower())
+    return normalize_tool_name(name)
 
 
 async def handle_permission_request(

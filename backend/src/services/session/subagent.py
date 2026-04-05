@@ -25,8 +25,8 @@ from backend.src.domain.schemas.retrieval import (
     RetrievalTarget,
     SubagentResult,
 )
-from backend.src.services.conversation.utils.llm_utils import build_llm
-from backend.src.services.conversation.utils.prompts import (
+from backend.src.services.session.utils.llm_utils import build_llm
+from backend.src.services.session.utils.prompts import (
     SUBAGENT_SYSTEM_PROMPT,
     SUBAGENT_USER_TEMPLATE,
 )

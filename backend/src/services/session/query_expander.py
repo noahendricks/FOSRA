@@ -16,8 +16,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from backend.src.domain.schemas.retrieval import ChecklistItem, QueryExpansion
-from backend.src.services.conversation.utils.llm_utils import build_llm
-from backend.src.services.conversation.utils.prompts import (
+from backend.src.services.session.utils.llm_utils import build_llm
+from backend.src.services.session.utils.prompts import (
     QUERY_EXPANSION_SYSTEM_PROMPT,
     QUERY_EXPANSION_USER_TEMPLATE,
 )

@@ -73,7 +73,7 @@ def create_retrieval_tool(
     feedback_a, feedback_b, feedback_c:
         Naive relevance feedback formula parameters (default 0.24, 1.35, 0.59).
     """
-    from backend.src.services.conversation.retrieval_pipeline import (
+    from backend.src.services.session.retrieval_pipeline import (
         build_retrieval_pipeline,
     )
 
@@ -204,8 +204,6 @@ def create_graph_tool(
                     result = retriever.get_inheritance_chain(name, depth=depth)
                 case "file_symbols":
                     result = retriever.get_file_symbols(name)
-                case _:
-                    return f"Unknown query type: {query_type}"
 
             if not result.nodes and not result.paths:
                 return f"No results found for {query_type} query on '{name}'"

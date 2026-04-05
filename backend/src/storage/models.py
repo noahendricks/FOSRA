@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any
 
-from pydantic import BaseModel
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
-    Column,
     DateTime,
     ForeignKey,
     Index,
@@ -29,10 +25,6 @@ from backend.src.domain.enums import (
     SourceType,
     ToolCategory,
 )
-from backend.src.settings import UserPreferences
-
-if TYPE_CHECKING:
-    pass
 
 
 class Base(DeclarativeBase):
@@ -107,15 +99,15 @@ class DocTopicORM(Base):
     topic_hash: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, index=True
     )
-    icl_examples: Mapped[Optional[dict[str, Any]]] = mapped_column(
+    icl_examples: Mapped[dict[str, Any] | None] = mapped_column(
         MutableDict.as_mutable(JSONB)
     )
 
 
-class ConvoORM(Base):
-    __tablename__ = "convos"
+class SessionORM(Base):
+    __tablename__ = "sessions"
 
-    convo_id: Mapped[str] = mapped_column(
+    session_id: Mapped[str] = mapped_column(
         String(26), primary_key=True, index=True, default=ulid_factory
     )
 
@@ -123,9 +115,9 @@ class ConvoORM(Base):
 
     workspace_id: Mapped[str] = mapped_column(String(26), nullable=False, index=True)
 
-    title: Mapped[str | None] = mapped_column(String(500), default="New Convo")
+    title: Mapped[str | None] = mapped_column(String(500), default="New Session")
 
-    dynamic_prefs: Mapped[Optional[dict[str, Any]]] = mapped_column(
+    dynamic_prefs: Mapped[dict[str, Any] | None] = mapped_column(
         MutableDict.as_mutable(JSONB)
     )
 
@@ -138,15 +130,13 @@ class ConvoORM(Base):
     pinned: Mapped[Boolean] = mapped_column(Boolean, default=False)
 
     messages: Mapped[list["MessageORM"]] = relationship(
-        back_populates="convo",
+        back_populates="session",
         cascade="all, delete-orphan",
     )
 
     folder_id = mapped_column(Text, nullable=True)
 
-    meta: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        MutableDict.as_mutable(JSONB)
-    )
+    meta: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSONB))
 
 
 class MessageORM(Base):
@@ -156,9 +146,9 @@ class MessageORM(Base):
         String(26), primary_key=True, index=True, default=ulid_factory
     )
 
-    convo_id: Mapped[str] = mapped_column(
+    session_id: Mapped[str] = mapped_column(
         String(26),
-        ForeignKey("convos.convo_id", ondelete="CASCADE"),
+        ForeignKey("sessions.session_id", ondelete="CASCADE"),
         nullable=False,
     )
 
@@ -201,18 +191,43 @@ class MessageORM(Base):
         DateTime(timezone=True), default=utc_now
     )
 
-    message_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(
+    message_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         MutableDict.as_mutable(JSONB)
     )
 
-    convo: Mapped["ConvoORM"] = relationship(back_populates="messages")
+    session: Mapped["SessionORM"] = relationship(back_populates="messages")
 
     __table_args__ = (
-        Index("ix_messages_convo_created", "convo_id", "created_at"),
+        Index("ix_messages_session_created", "session_id", "created_at"),
         CheckConstraint(
             "role IN ('user', 'assistant', 'system', 'tool')", name="check_valid_role"
         ),
     )
 
 
-from backend.src.storage.session_state import SessionStateORM  # noqa: E402,F401
+class SessionStateORM(Base):
+    __tablename__ = "session_states"
+
+    session_id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=ulid_factory
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.now(UTC),
+        onupdate=datetime.now(UTC),
+    )
+    last_active_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    agent_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    interaction_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    workspace_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSONB, nullable=True
+    )

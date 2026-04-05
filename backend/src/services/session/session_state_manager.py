@@ -97,7 +97,7 @@ class SessionStateManager:
                 )
 
                 repo = SessionStateRepo(session)
-                await repo.upsert(
+                _ = await repo.upsert(
                     session_id=session_id,
                     agent_snapshot=agent_snapshot,
                     interaction_snapshot=interaction_snapshot,
@@ -137,7 +137,7 @@ class SessionStateManager:
                 )
 
                 repo = SessionStateRepo(session)
-                await repo.update(
+                _ = await repo.update(
                     session_id=session_id,
                     agent_snapshot=agent_snapshot,
                     interaction_snapshot=interaction_snapshot,
@@ -149,7 +149,7 @@ class SessionStateManager:
 
     async def delete(self, session_id: str) -> bool:
         async with self._in_memory_lock:
-            self._in_memory_state.pop(session_id, None)
+            _ = self._in_memory_state.pop(session_id, None)
 
         if self._session_factory:
             async with self._session_factory() as session:

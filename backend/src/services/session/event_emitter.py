@@ -10,10 +10,10 @@ Provides:
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
-from backend.src.api.events import BusEvent, EventBus, event_bus
+from backend.src.api.events import BusEvent, BusEventProperties, EventBus, event_bus
 from backend.src.api.schemas.tui_event_schemas import TUIEvent
 
 MAX_QUEUE_SIZE = 1000
@@ -38,10 +38,16 @@ class EventEmitter:
     async def emit(self, event_type: str, properties: dict[str, Any]) -> None:
         tuiev = TUIEvent(type=event_type, properties=properties)
         await self._bus.publish(
-            {
-                "type": tuiev.type,
-                "properties": tuiev.properties,
-            }
+            cast(
+                BusEventProperties,
+                cast(
+                    object,
+                    {
+                        "type": tuiev.type,
+                        "properties": tuiev.properties,
+                    },
+                ),
+            )
         )
 
     async def emit_message_updated(self, info: dict[str, Any]) -> None:
@@ -137,7 +143,7 @@ class EventEmitter:
         await self.emit("question.asked", question)
 
     async def emit_question_replied(
-        self, session_id: str, request_id: str, answers: dict[str, Any]
+        self, session_id: str, request_id: str, answers: Any
     ) -> None:
         await self.emit(
             "question.replied",

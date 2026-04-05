@@ -30,14 +30,11 @@ from backend.src.api.schemas.tui_schemas import (
     ToolStateRunning,
     ToolStateRunningTime,
     UnknownError,
-    UnknownErrorData,
     UserMessage,
     UserMessageModel,
     UserMessageTime,
 )
 from backend.src.storage.utils.converters import ulid_factory
-
-from loguru import logger as log
 
 if TYPE_CHECKING:
     from backend.src.services.session.event_emitter import EventEmitter
@@ -57,6 +54,14 @@ class EventFormatter:
         self._now = now
         self._provider_id = provider_id
         self._model_id = model_id
+
+    @property
+    def emitter(self) -> EventEmitter:
+        return self._emitter
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
 
     async def emit_user_message(
         self,

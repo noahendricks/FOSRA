@@ -33,9 +33,6 @@ from backend.src.domain.schemas.retrieval import (
     QueryExpansion,
     RetrievalTarget,
 )
-from backend.src.services.conversation.query_expander import QueryExpander
-from backend.src.services.conversation.subagent import Subagent
-from backend.src.services.conversation.utils.llm_utils import format_source_for_citation
 from backend.src.services.processing.embedder_service import EmbedderService
 from backend.src.services.retrieval.graph_service import GraphService
 from backend.src.services.retrieval.reranker_service import RerankerService
@@ -44,6 +41,9 @@ from backend.src.services.retrieval.vector_service import (
     RetrievedChunk,
     VectorService,
 )
+from backend.src.services.session.query_expander import QueryExpander
+from backend.src.services.session.subagent import Subagent
+from backend.src.services.session.utils.llm_utils import format_source_for_citation
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -94,13 +94,13 @@ def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
     )
 
 
-def _format_chunks_as_context(chunks: list[RetrievedChunk]) -> str:
-    """Format chunks as XML with citation IDs."""
-    if not chunks:
-        return ""
-    scored = [_chunk_to_scored(c, i) for i, c in enumerate(chunks)]
-    parts = [format_source_for_citation(s) for s in scored]
-    return "Source material:\n<documents>\n" + "\n".join(parts) + "\n</documents>"
+# def _format_chunks_as_context(chunks: list[RetrievedChunk]) -> str:
+#     """Format chunks as XML with citation IDs."""
+#     if not chunks:
+#         return ""
+#     scored = [_chunk_to_scored(c, i) for i, c in enumerate(chunks)]
+#     parts = [format_source_for_citation(s) for s in scored]
+#     return "Source material:\n<documents>\n" + "\n".join(parts) + "\n</documents>"
 
 
 def _retrieved_chunk_to_item(chunk: RetrievedChunk) -> AccumulatedItem:
@@ -131,7 +131,7 @@ def build_retrieval_pipeline(
     feedback_a: float = 0.24,
     feedback_b: float = 1.35,
     feedback_c: float = 0.59,
-) -> CompiledStateGraph:
+) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Compile a retrieval pipeline with configs baked into closures.
 
     Args:
@@ -161,7 +161,7 @@ def build_retrieval_pipeline(
     if falkordb_client:
         graph_service = GraphService(falkordb_client)
 
-    async def expand_query_node(state: RetrievalState) -> dict:
+    async def expand_query_node(state: RetrievalState) -> dict[str, Any]:
         """Expand user query into rewritten query + checklist."""
         expansion = await QueryExpander.expand(
             user_query=state.user_query,
@@ -180,7 +180,7 @@ def build_retrieval_pipeline(
             "file_ids": set(),
         }
 
-    async def initial_retrieve_node(state: RetrievalState) -> dict:
+    async def initial_retrieve_node(state: RetrievalState) -> dict[str, Any]:
         """Initial retrieval on rewritten query (chunks + auto-merge hierarchical upgrade)."""
         if state.query_expansion:
             query = state.query_expansion.rewritten_query
@@ -213,7 +213,7 @@ def build_retrieval_pipeline(
             "merged_context": merged_context,
         }
 
-    async def agentic_loop_node(state: RetrievalState) -> dict:
+    async def agentic_loop_node(state: RetrievalState) -> dict[str, Any]:
         """Run subagent iteration: assess coverage + plan retrieval."""
         result = await Subagent.assess_and_plan(
             original_query=state.user_query,
@@ -361,7 +361,7 @@ def build_retrieval_pipeline(
 
         return "agentic_loop"
 
-    async def relevance_feedback_node(state: RetrievalState) -> dict:
+    async def relevance_feedback_node(state: RetrievalState) -> dict[str, Any]:
         """Apply Qdrant relevance feedback using accumulated items as positive examples."""
         context = state.accumulated_context
         if not context.items:
@@ -460,7 +460,7 @@ def build_retrieval_pipeline(
 
         return {"accumulated_context": new_context}
 
-    async def rerank_node(state: RetrievalState) -> dict:
+    async def rerank_node(state: RetrievalState) -> dict[str, Any]:
         """Rerank accumulated context against original query."""
         context = state.accumulated_context
 
@@ -514,17 +514,17 @@ def build_retrieval_pipeline(
 
     graph = StateGraph(RetrievalState)  # type: ignore[arg-type]
 
-    graph.add_node("expand_query", expand_query_node)
-    graph.add_node("initial_retrieve", initial_retrieve_node)
-    graph.add_node("agentic_loop", agentic_loop_node)
-    graph.add_node("relevance_feedback", relevance_feedback_node)
-    graph.add_node("rerank", rerank_node)
+    _ = graph.add_node("expand_query", expand_query_node)
+    _ = graph.add_node("initial_retrieve", initial_retrieve_node)
+    _ = graph.add_node("agentic_loop", agentic_loop_node)
+    _ = graph.add_node("relevance_feedback", relevance_feedback_node)
+    _ = graph.add_node("rerank", rerank_node)
 
-    graph.add_edge(START, "expand_query")
-    graph.add_edge("expand_query", "initial_retrieve")
-    graph.add_edge("initial_retrieve", "agentic_loop")
-    graph.add_conditional_edges("agentic_loop", should_continue_loop)
-    graph.add_edge("relevance_feedback", "rerank")
-    graph.add_edge("rerank", END)
+    _ = graph.add_edge(START, "expand_query")
+    _ = graph.add_edge("expand_query", "initial_retrieve")
+    _ = graph.add_edge("initial_retrieve", "agentic_loop")
+    _ = graph.add_conditional_edges("agentic_loop", should_continue_loop)
+    _ = graph.add_edge("relevance_feedback", "rerank")
+    _ = graph.add_edge("rerank", END)
 
     return graph.compile()

@@ -26,12 +26,12 @@ from deepagents.backends import FilesystemBackend
 from falkordb import FalkorDB
 from loguru import logger
 
-from backend.src.services.conversation.tools import (
+from backend.src.services.session.tools import (
     RetrievalResultStore,
     create_graph_tool,
     create_retrieval_tool,
 )
-from backend.src.services.conversation.utils.llm_utils import build_llm
+from backend.src.services.session.utils.llm_utils import build_llm
 from backend.src.settings import LLMConfig, settings
 from backend.src.settings.config import EmbedderConfig, VectorStoreConfig
 from backend.src.settings.fosra_paths import fosra_paths
@@ -48,7 +48,7 @@ def create_fosra_agent(
     backend: Any | None = None,
     checkpointer: Any | None = None,
     llm_config: LLMConfig | None = None,
-) -> tuple[CompiledStateGraph, RetrievalResultStore]:
+) -> tuple[CompiledStateGraph[Any, Any, Any, Any], RetrievalResultStore]:
     """Create a FOSRA agent with retrieval capabilities.
 
     Parameters
@@ -77,7 +77,7 @@ def create_fosra_agent(
 
     # -- Resolve prompt ------------------------------------------------
     if system_prompt is None:
-        from backend.src.services.conversation.utils.prompts import (
+        from backend.src.services.session.utils.prompts import (
             FOSRA_AGENT_SYSTEM_PROMPT,
         )
 
@@ -86,23 +86,15 @@ def create_fosra_agent(
     # -- Resolve LLM ---------------------------------------------------
     # explicit config from TUI prompt request takes priority
     if llm_config is None:
-        if user_prefs:
-            for cfg in (
-                user_prefs.llm_default,
-                user_prefs.llm_logic,
-                user_prefs.llm_fast,
-                user_prefs.llm_heavy,
-            ):
-                if cfg is not None:
-                    llm_config = cfg
-                    break
-            else:
-                llm_config = LLMConfig(
-                    provider="openai",
-                    model=settings.agent.fallback_model,
-                    api_key="not-needed",
-                    api_base=settings.agent.fallback_api_base,
-                )
+        for cfg in (
+            user_prefs.llm_default,
+            user_prefs.llm_logic,
+            user_prefs.llm_fast,
+            user_prefs.llm_heavy,
+        ):
+            if cfg is not None:
+                llm_config = cfg
+                break
         else:
             llm_config = LLMConfig(
                 provider="openai",

@@ -15,17 +15,19 @@ session_todos, session_diffs.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import loguru
 
+from backend.src.api.schemas.tui_schemas import (
+    PermissionRequest,
+    PermissionRequestTool,
+    QuestionRequest,
+    QuestionRequestTool,
+)
+
 if TYPE_CHECKING:
-    from backend.src.api.schemas.tui_schemas import (
-        FileDiff,
-        PermissionRequest,
-        QuestionRequest,
-        Todo,
-    )
+    pass
     from backend.src.services.session.session_state_manager import (
         SessionStateManager,
     )
@@ -45,7 +47,7 @@ def log_process_start() -> None:
     _restart_marker("process start")
 
 
-class StateDict(dict):
+class StateDict(dict[str, Any]):
     """dict wrapper that logs every mutation with a live snapshot."""
 
     def __init__(self, name: str, logger: loguru.Logger, log_level: str = "DEBUG"):
@@ -54,8 +56,10 @@ class StateDict(dict):
         self._logger = logger
         self._log_level = log_level
 
-    def _log(self, op: str, key: str | None = None, value: Any = None, note: str = ""):
-        snapshot = {
+    def _log(
+        self, op: str, key: str | None = None, value: Any = None, note: str = ""
+    ) -> None:  # type: ignore[reportExplicitAny]
+        snapshot: dict[str, Any] = {  # type: ignore[reportExplicitAny]
             k: (
                 "<Task>"
                 if self._name == "running_tasks" and isinstance(v, asyncio.Task)
@@ -63,7 +67,20 @@ class StateDict(dict):
             )
             for k, v in self.items()
         }
-        structured = {"op": op, "dict": self._name}
+        structured: dict[str, Any] = {"op": op, "dict": self._name}  # type: ignore[reportExplicitAny]
+        if key is not None:
+            structured["key"] = key
+        if value is not None:
+            structured["value"] = str(value)[:100]
+        if note:
+            structured["note"] = note
+        structured["snapshot"] = snapshot
+        self._logger.bind(_structured=structured).log(
+            self._log_level, f"[{self._name}] {op}"
+        )
+        # for k, v in self.items() #WARN: may cause issues
+        # }
+        structured: dict[str, object] = {"op": op, "dict": self._name}  # type: ignore[reportExplicitAny]
         if key is not None:
             structured["key"] = key
         if value is not None:
@@ -83,13 +100,13 @@ class StateDict(dict):
         self._log("del", key)
         super().__delitem__(key)
 
-    def pop(self, key, *default):
+    def pop(self, key: str, *default: Any) -> Any:  # type: ignore[reportExplicitAny]
         had_key = key in self
         if had_key or default:
-            result = super().pop(key, *default)
+            result = super().pop(key, *default)  # type: ignore[reportAny]
             if had_key:
                 self._log("pop", key, result)
-            return result
+            return result  # type: ignore[reportAny]
         raise KeyError(key)
 
     def get(self, key, default=None):
@@ -98,13 +115,13 @@ class StateDict(dict):
     def setdefault(self, key, default=None):
         if key not in self:
             self._log("setdefault", key, default)
-            super().setdefault(key, default)
+            _ = super().setdefault(key, default)
         return super().get(key, default)
 
-    def append_to_list(self, key, value):
+    def append_to_list(self, key: str, value: Any) -> None:  # type: ignore[reportExplicitAny]
         if key not in self:
             super().__setitem__(key, [])
-        super().__getitem__(key).append(value)
+        super().__getitem__(key).append(value)  # type: ignore[reportAny]
         self._log("list_append", key, value)
 
 
@@ -154,13 +171,36 @@ async def persist_session_state(
 ) -> dict[str, Any]:
     """Persist session state to DB."""
     manager = await get_session_state_manager()
-    return await manager.upsert(
+    session = await manager.upsert(
         session_id=session_id,
         agent_snapshot=agent_snapshot,
         interaction_snapshot=interaction_snapshot,
         workspace_id=workspace_id,
         metadata=metadata,
     )
+    if await manager.get(session_id) is not None:
+        loguru.logger.bind(_structured={"session_id": session_id}).debug(
+            "Persisted session state"
+        )
+        return session
+    else:
+        loguru.logger.bind(_structured={"session_id": session_id}).warning(
+            "Failed to persist session state"
+        )
+        return {}
+
+
+async def check_session_existing(session_id: str) -> bool:
+    """Check if a session state already exists in DB."""
+    manager = await get_session_state_manager()
+    loguru.logger.bind(_structured={"session_id": session_id}).debug(
+        "Checking if session exists"
+    )
+    state = await manager.get(session_id)
+    loguru.logger.bind(
+        _structured={"session_id": session_id, "exists": state is not None}
+    ).debug("Checked if session exists")
+    return state is not None
 
 
 async def update_persisted_session_state(
@@ -259,7 +299,7 @@ async def cleanup_session(session_id: str) -> None:
         )
 
     manager = await get_session_state_manager()
-    await manager.delete(session_id)
+    _ = await manager.delete(session_id)
 
     _state_logger.info(
         "cleanup_session completed",
@@ -275,8 +315,8 @@ def ask_permission(
     patterns: list[str],
     metadata: dict[str, Any],
     always: list[str],
-    tool: dict[str, Any] | None = None,
-) -> tuple[str, asyncio.Future[Any], dict[str, Any]]:
+    tool: PermissionRequestTool | None = None,
+) -> tuple[str, asyncio.Future[str], PermissionRequest]:
     """
     register a pending permission request and return a future that blocks until the user replies.
     returns (request_id, future, request).
@@ -287,7 +327,7 @@ def ask_permission(
 
     request_id = ulid_factory()
     loop = asyncio.get_running_loop()
-    future: asyncio.Future[Any] = loop.create_future()
+    future: asyncio.Future[str] = loop.create_future()
     pending_permissions[request_id] = future
 
     _state_logger.debug(
@@ -297,15 +337,15 @@ def ask_permission(
         future_pending_count=len(pending_permissions),
     )
 
-    request: dict[str, Any] = {
-        "id": request_id,
-        "sessionID": session_id,
-        "permission": permission,
-        "patterns": patterns,
-        "metadata": metadata,
-        "always": always,
-        "tool": tool,
-    }
+    request = PermissionRequest(
+        id=request_id,
+        sessionID=session_id,
+        permission=permission,
+        patterns=patterns,
+        metadata=metadata,
+        always=always,
+        tool=tool,
+    )
     permission_requests.append_to_list(session_id, request)
 
     _state_logger.info(
@@ -320,9 +360,9 @@ def ask_permission(
 
 def ask_question(
     session_id: str,
-    questions: list[dict[str, Any]],
-    tool: dict[str, Any] | None = None,
-) -> tuple[str, asyncio.Future[Any], dict[str, Any]]:
+    questions: list[QuestionRequest],
+    tool: QuestionRequestTool | None = None,
+) -> tuple[str, asyncio.Future[str | list[dict[str, Any]]], QuestionRequest]:
     """
     register a pending question request and return a future that blocks until the user replies.
     returns (request_id, future, request).
@@ -333,7 +373,7 @@ def ask_question(
 
     request_id = ulid_factory()
     loop = asyncio.get_running_loop()
-    future: asyncio.Future[Any] = loop.create_future()
+    future: asyncio.Future[str | list[dict[str, Any]]] = loop.create_future()
     pending_questions[request_id] = future
 
     _state_logger.debug(
@@ -343,12 +383,12 @@ def ask_question(
         future_pending_count=len(pending_questions),
     )
 
-    request: dict[str, Any] = {
-        "id": request_id,
-        "sessionID": session_id,
-        "questions": questions,
-        "tool": tool,
-    }
+    request = QuestionRequest(
+        id=request_id,
+        sessionID=session_id,
+        questions=questions,
+        tool=tool,
+    )
     question_requests.append_to_list(session_id, request)
 
     _state_logger.info(
@@ -362,7 +402,7 @@ def ask_question(
 
 def resolve_permission_future(request_id: str, result: str) -> None:
     """Resolve a pending permission future and log the outcome."""
-    fut = pending_permissions.pop(request_id, None)
+    fut = cast(asyncio.Future[str], pending_permissions.pop(request_id, None))
     if fut and not fut.done():
         fut.set_result(result)
         _state_logger.debug(
@@ -376,7 +416,10 @@ def resolve_question_future(
     request_id: str, result: str | list[dict[str, Any]]
 ) -> None:
     """Resolve a pending question future and log the outcome."""
-    fut = pending_questions.pop(request_id, None)
+    fut = cast(
+        asyncio.Future[str | list[dict[str, Any]]],
+        pending_questions.pop(request_id, None),
+    )
     if fut and not fut.done():
         fut.set_result(result)
         _state_logger.debug(

@@ -12,7 +12,7 @@ from backend.src.storage.utils.converters import DomainStruct
 
 class Message(DomainStruct):
     role: MessageRole
-    convo_id: str
+    session_id: str
     text: str
     user_id: str | None = None
     message_id: str | None = None
@@ -29,24 +29,24 @@ class Message(DomainStruct):
         return {"role": self.role.value, "content": self.text}
 
 
-class Convo(DomainStruct):
+class Session(DomainStruct):
     user_id: str
-    convo_id: str
-    title: str | None = "New Convo"
+    session_id: str
+    title: str | None = "New Session"
 
 
-class NewConvo(Convo, kw_only=True):
-    convo_id: str = field(default_factory=lambda: str(UUID()))
-    convo_metadata: dict[str, Any] | None = None
+class NewSession(Session, kw_only=True):
+    session_id: str = field(default_factory=lambda: str(UUID()))
+    session_metadata: dict[str, Any] | None = None
 
 
-class ConvoUpdate(Convo):
-    convo_metadata: dict[str, Any] | None = None
+class SessionUpdate(Session):
+    session_metadata: dict[str, Any] | None = None
     messages: list[Message] | None = None
     data: dict[str, Any] | None = None
 
 
-class ConvoFull(Convo):
+class SessionFull(Session):
     created_at: datetime = field(default_factory=utc_now)
     docs: list[Doc] = []
     messages: list[Message] = field(default_factory=list)

@@ -20,7 +20,6 @@ from backend.src.api.schemas.tui_control_schemas import (
     UIMessage,
     UIMessagePart,
 )
-from backend.src.domain.schemas.doc import Chunk, Doc, PDFMetadata
 from backend.src.settings import LLMConfig, ScoredRetrieval
 
 if TYPE_CHECKING:
@@ -157,9 +156,7 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
 
         kwargs: dict[str, Any] = {
             "model": model_string,
-            "api_key": config.api_key.get_secret_value()
-            if hasattr(config.api_key, "get_secret_value")
-            else config.api_key,
+            "api_key": config.get_api_key_value(),
             "streaming": True,
         }
 
