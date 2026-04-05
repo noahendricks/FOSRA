@@ -18,13 +18,13 @@ export function createHandlerRegistry() {
     type: T,
     handler: EventHandler<T>
   ) {
-    ;(handlers as any)[type] = handler
+    ;(handlers as Record<T, EventHandler<T>>)[type] = handler
   }
 
   function dispatch(event: Event) {
     const handler = handlers[event.type]
     if (handler) {
-      ;(handler as any)(event.properties, event)
+      ;(handler as EventHandler<typeof event.type>)(event.properties, event)
     }
   }
 

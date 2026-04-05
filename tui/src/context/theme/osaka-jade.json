@@ -43,7 +43,7 @@
     "warning": { "dark": "darkYellowBright", "light": "lightYellow" },
     "success": { "dark": "darkGreen", "light": "lightGreen" },
     "info": { "dark": "darkCyan", "light": "lightCyan" },
-    "text": { "dark": "darkFg0", "light": "lightFg0" },
+    "text": { "dark": "lightYellow", "light": "lightFg0" },
     "textMuted": { "dark": "darkGray", "light": "lightGray" },
     "background": { "dark": "darkBg0", "light": "lightBg0" },
     "backgroundPanel": { "dark": "darkBg1", "light": "lightBg1" },

@@ -1,6 +1,6 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
-import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
+import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
@@ -47,13 +47,176 @@ export type DialogSelectRef<T> = {
   filtered: DialogSelectOption<T>[]
 }
 
+type DialogSelectStore = {
+  selected: number
+  filter: string
+  input: "keyboard" | "mouse"
+}
+
+function useFiltering<T>(options: {
+  propsOptions: DialogSelectOption<T>[]
+  skipFilter?: boolean
+  flat: () => boolean
+  storeFilter: () => string
+  setStore: (...args: any[]) => void
+}) {
+  const filtered = createMemo(() => {
+    if (options.skipFilter) return options.propsOptions.filter((x) => x.disabled !== true)
+    const needle = options.storeFilter().toLowerCase()
+    const opts = pipe(
+      options.propsOptions,
+      filter((x) => x.disabled !== true),
+    )
+    if (!needle) return opts
+
+    const result = fuzzysort
+      .go(needle, opts, {
+        keys: ["title", "category"],
+        scoreFn: (r) => r[0].score * 2 + r[1].score,
+      })
+      .map((x) => x.obj)
+
+    return result
+  })
+
+  createEffect(() => {
+    filtered()
+    options.setStore("input", "keyboard")
+  })
+
+  const flatten = createMemo(() => {
+    return options.flat() && options.storeFilter().length > 0
+  })
+
+  return { filtered, flatten }
+}
+
+function useGroupedOptions<T>(options: {
+  filtered: () => DialogSelectOption<T>[]
+  flatten: () => boolean
+  dimensions: () => { height: number }
+}) {
+  const grouped = createMemo<[string, DialogSelectOption<T>[]][]>(() => {
+    if (options.flatten()) return [["", options.filtered()]]
+    const result = pipe(
+      options.filtered(),
+      groupBy((x) => x.category ?? ""),
+      entries(),
+    )
+    return result
+  })
+
+  const flat = createMemo(() => {
+    return pipe(
+      grouped(),
+      flatMap(([_, opts]) => opts),
+    )
+  })
+
+  const rows = createMemo(() => {
+    const headers = grouped().reduce((acc, [category], i) => {
+      if (!category) return acc
+      return acc + (i > 0 ? 2 : 1)
+    }, 0)
+    return flat().length + headers
+  })
+
+  const height = createMemo(() => Math.min(rows(), Math.floor(options.dimensions().height / 2) - 6))
+
+  return { grouped, flat, rows, height }
+}
+
+function useSelection<T>(options: {
+  flat: () => DialogSelectOption<T>[]
+  rows: () => number
+  store: DialogSelectStore
+  setStore: (...args: any[]) => void
+  scrollRef: () => ScrollBoxRenderable | undefined
+  keybind: () => DialogSelectProps<T>["keybind"]
+  onSelect?: (option: DialogSelectOption<T>) => void
+  dialog: DialogContext
+  onMove?: (option: DialogSelectOption<T>) => void
+}) {
+  const selected = createMemo(() => options.flat()[options.store.selected])
+
+  function move(direction: number) {
+    if (options.flat().length === 0) return
+    let next = options.store.selected + direction
+    if (next < 0) next = options.flat().length - 1
+    if (next >= options.flat().length) next = 0
+    moveTo(next, true)
+  }
+
+  function moveTo(next: number, center = false) {
+    options.setStore("selected", next)
+    const opt = selected()
+    if (opt) options.onMove?.(opt)
+    const scroll = options.scrollRef()
+    if (!scroll) return
+    const target = scroll.getChildren().find((child) => {
+      return child.id === JSON.stringify(selected()?.value)
+    })
+    if (!target) return
+    const y = target.y - scroll.y
+    if (center) {
+      const centerOffset = Math.floor(scroll.height / 2)
+      scroll.scrollBy(y - centerOffset)
+    } else {
+      if (y >= scroll.height) {
+        scroll.scrollBy(y - scroll.height + 1)
+      }
+      if (y < 0) {
+        scroll.scrollBy(y)
+        if (isDeepEqual(options.flat()[0].value, selected()?.value)) {
+          scroll.scrollTo(0)
+        }
+      }
+    }
+  }
+
+  useKeyboard((evt) => {
+    options.setStore("input", "keyboard")
+
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
+    if (evt.name === "pageup") move(-10)
+    if (evt.name === "pagedown") move(10)
+    if (evt.name === "home") moveTo(0)
+    if (evt.name === "end") moveTo(options.flat().length - 1)
+
+    if (evt.name === "return") {
+      const option = selected()
+      if (option) {
+        evt.preventDefault()
+        evt.stopPropagation()
+        if (option.onSelect) option.onSelect(options.dialog)
+        options.onSelect?.(option)
+      }
+    }
+
+    const kb = useKeybind()
+    for (const item of options.keybind() ?? []) {
+      if (item.disabled || !item.keybind) continue
+      if (Keybind.match(item.keybind, kb.parse(evt))) {
+        const s = selected()
+        if (s) {
+          evt.preventDefault()
+          item.onTrigger(s)
+        }
+      }
+    }
+  })
+
+  return { selected, move, moveTo }
+}
+
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<DialogSelectStore>({
     selected: 0,
     filter: "",
-    input: "keyboard" as "keyboard" | "mouse",
+    input: "keyboard",
   })
 
   createEffect(
@@ -72,67 +235,35 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   let input: InputRenderable
 
-  const filtered = createMemo(() => {
-    if (props.skipFilter) return props.options.filter((x) => x.disabled !== true)
-    const needle = store.filter.toLowerCase()
-    const options = pipe(
-      props.options,
-      filter((x) => x.disabled !== true),
-    )
-    if (!needle) return options
-
-    // prioritize title matches (weight: 2) over category matches (weight: 1).
-    // users typically search by the item name, and not its category.
-    const result = fuzzysort
-      .go(needle, options, {
-        keys: ["title", "category"],
-        scoreFn: (r) => r[0].score * 2 + r[1].score,
-      })
-      .map((x) => x.obj)
-
-    return result
-  })
-
-  // When the filter changes due to how TUI works, the mousemove might still be triggered
-  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard
-  // that the mouseover event doesn't trigger when filtering.
-  createEffect(() => {
-    filtered()
-    setStore("input", "keyboard")
-  })
-
-  const flatten = createMemo(() => props.flat && store.filter.length > 0)
-
-  const grouped = createMemo<[string, DialogSelectOption<T>[]][]>(() => {
-    if (flatten()) return [["", filtered()]]
-    const result = pipe(
-      filtered(),
-      groupBy((x) => x.category ?? ""),
-      // mapValues((x) => x.sort((a, b) => a.title.localeCompare(b.title))),
-      entries(),
-    )
-    return result
-  })
-
-  const flat = createMemo(() => {
-    return pipe(
-      grouped(),
-      flatMap(([_, options]) => options),
-    )
-  })
-
-  const rows = createMemo(() => {
-    const headers = grouped().reduce((acc, [category], i) => {
-      if (!category) return acc
-      return acc + (i > 0 ? 2 : 1)
-    }, 0)
-    return flat().length + headers
+  const { filtered, flatten } = useFiltering({
+    propsOptions: props.options,
+    skipFilter: props.skipFilter,
+    flat: () => props.flat ?? false,
+    storeFilter: () => store.filter,
+    setStore,
   })
 
   const dimensions = useTerminalDimensions()
-  const height = createMemo(() => Math.min(rows(), Math.floor(dimensions().height / 2) - 6))
+  const { grouped, flat, rows, height } = useGroupedOptions({
+    filtered,
+    flatten,
+    dimensions,
+  })
 
-  const selected = createMemo(() => flat()[store.selected])
+  let scroll: ScrollBoxRenderable | undefined
+  const scrollRef = () => scroll
+
+  const { selected, move, moveTo } = useSelection({
+    flat,
+    rows,
+    store,
+    setStore,
+    scrollRef,
+    keybind: () => props.keybind,
+    onSelect: props.onSelect,
+    dialog,
+    onMove: props.onMove,
+  })
 
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
@@ -149,74 +280,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }),
   )
 
-  function move(direction: number) {
-    if (flat().length === 0) return
-    let next = store.selected + direction
-    if (next < 0) next = flat().length - 1
-    if (next >= flat().length) next = 0
-    moveTo(next, true)
-  }
-
-  function moveTo(next: number, center = false) {
-    setStore("selected", next)
-    const option = selected()
-    if (option) props.onMove?.(option)
-    if (!scroll) return
-    const target = scroll.getChildren().find((child) => {
-      return child.id === JSON.stringify(selected()?.value)
-    })
-    if (!target) return
-    const y = target.y - scroll.y
-    if (center) {
-      const centerOffset = Math.floor(scroll.height / 2)
-      scroll.scrollBy(y - centerOffset)
-    } else {
-      if (y >= scroll.height) {
-        scroll.scrollBy(y - scroll.height + 1)
-      }
-      if (y < 0) {
-        scroll.scrollBy(y)
-        if (isDeepEqual(flat()[0].value, selected()?.value)) {
-          scroll.scrollTo(0)
-        }
-      }
-    }
-  }
-
-  const keybind = useKeybind()
-  useKeyboard((evt) => {
-    setStore("input", "keyboard")
-
-    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
-    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
-    if (evt.name === "pageup") move(-10)
-    if (evt.name === "pagedown") move(10)
-    if (evt.name === "home") moveTo(0)
-    if (evt.name === "end") moveTo(flat().length - 1)
-
-    if (evt.name === "return") {
-      const option = selected()
-      if (option) {
-        evt.preventDefault()
-        evt.stopPropagation()
-        if (option.onSelect) option.onSelect(dialog)
-        props.onSelect?.(option)
-      }
-    }
-
-    for (const item of props.keybind ?? []) {
-      if (item.disabled || !item.keybind) continue
-      if (Keybind.match(item.keybind, keybind.parse(evt))) {
-        const s = selected()
-        if (s) {
-          evt.preventDefault()
-          item.onTrigger(s)
-        }
-      }
-    }
-  })
-
-  let scroll: ScrollBoxRenderable | undefined
   const ref: DialogSelectRef<T> = {
     get filter() {
       return store.filter

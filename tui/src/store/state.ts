@@ -111,96 +111,20 @@ export function createAppState() {
     };
   }
 
-  const sessions = makeRecord<Session>(
-    () => collections.sessions,
-    (id, v) => setCollections("sessions", id, v),
-    (id) =>
-      setCollections(
-        "sessions",
-        produce((d) => {
-          delete d[id];
-        }),
-      ),
-    "sessions",
-  );
+  function createRecords<K extends keyof Collections>(key: K): ReactiveRecord<any> {
+    const read = () => collections[key];
+    const write = (id: string, value: any) => setCollections(key as any, id as any, value);
+    const remove = (id: string) => setCollections(key as any, produce((d: any) => { delete d[id]; }));
+    return makeRecord<any>(read, write, remove, key);
+  }
 
-  const messages = makeRecord<Message[]>(
-    () => collections.messages,
-    (id, v) => setCollections("messages", id, v),
-    (id) =>
-      setCollections(
-        "messages",
-        produce((d) => {
-          delete d[id];
-        }),
-      ),
-    "messages",
-  );
-
-  const parts = makeRecord<Part[]>(
-    () => collections.parts,
-    (id, v) => setCollections("parts", id, v),
-    (id) =>
-      setCollections(
-        "parts",
-        produce((d) => {
-          delete d[id];
-        }),
-      ),
-    "parts",
-  );
-
-  const todos = makeRecord<Todo[]>(
-    () => collections.todos,
-    (id, v) => setCollections("todos", id, v),
-    (id) =>
-      setCollections(
-        "todos",
-        produce((d) => {
-          delete d[id];
-        }),
-      ),
-    "todos",
-  );
-
-  const permissions = makeRecord<PermissionRequest[]>(
-    () => collections.permissions,
-    (id, v) => setCollections("permissions", id, v),
-    (id) =>
-      setCollections(
-        "permissions",
-        produce((d) => {
-          delete d[id];
-        }),
-      ),
-    "permissions",
-  );
-
-  const questions = makeRecord<QuestionRequest[]>(
-    () => collections.questions,
-    (id, v) => setCollections("questions", id, v),
-    (id) =>
-      setCollections(
-        "questions",
-        produce((d) => {
-          delete d[id];
-        }),
-      ),
-    "questions",
-  );
-
-  const mcp = makeRecord<McpStatus>(
-    () => collections.mcp,
-    (id, v) => setCollections("mcp", id, v),
-    (id) =>
-      setCollections(
-        "mcp",
-        produce((d) => {
-          delete d[id];
-        }),
-      ),
-    "mcp",
-  );
+  const sessions = createRecords("sessions");
+  const messages = createRecords("messages");
+  const parts = createRecords("parts");
+  const todos = createRecords("todos");
+  const permissions = createRecords("permissions");
+  const questions = createRecords("questions");
+  const mcp = createRecords("mcp");
 
   const [systemState, setSystemState] = createStore<{
     lsp: LspStatus[];
@@ -233,6 +157,8 @@ export function createAppState() {
   });
 
   const loadedSessions = new Set<string>();
+  const [version, setVersion] = createSignal(0);
+  const bumpVersion = () => setVersion((v) => v + 1);
 
   const [sessionsArray, baseSetSessionsArray] = createSignal<Session[]>([]);
   const [providerDefault, baseSetProviderDefault] = createSignal<
@@ -244,10 +170,6 @@ export function createAppState() {
 
   const setSessionsArray = ((val: Session[]) => {
     baseSetSessionsArray(val);
-    log.store.debug("STATE_SET_SIGNAL", {
-      signal: "sessionsArray",
-      length: val.length,
-    });
   }) as unknown as Setter<Session[]>;
 
   const setProviderDefault = ((val: Record<string, string>) => {
@@ -287,7 +209,10 @@ export function createAppState() {
   };
   const setPath = (data: typeof systemState.path) => {
     setSystemState("path", data);
-    log.store.debug("STATE_SET_SYSTEM", { field: "path", keys: Object.keys(data) });
+    log.store.debug("STATE_SET_SYSTEM", {
+      field: "path",
+      keys: Object.keys(data),
+    });
   };
   const setCommand = (data: Command[]) => {
     setSystemState("command", data);
@@ -368,6 +293,8 @@ export function createAppState() {
     setDirectory,
 
     loadedSessions,
+    version,
+    bumpVersion,
 
     providerDefault,
     setProviderDefault,

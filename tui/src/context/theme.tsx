@@ -52,6 +52,7 @@ type ThemeColors = {
   warning: RGBA;
   success: RGBA;
   info: RGBA;
+  error: RGBA;
   text: RGBA;
   textMuted: RGBA;
   selectedListItemText: RGBA;
@@ -349,7 +350,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           size: 16,
         })
         .then((colors) => {
-          log.theme.debug("THEME_PALETTE_DETECTED", { palette: colors.palette });
+          log.theme.debug("THEME_PALETTE_DETECTED", {
+            palette: colors.palette,
+          });
           if (!colors.palette[0]) {
             if (store.active === "system") {
               setStore(

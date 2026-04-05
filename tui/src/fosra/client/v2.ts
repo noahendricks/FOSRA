@@ -5,6 +5,30 @@ import type {
   Part,
   ProviderAuthAuthorization,
   ProviderListResponse,
+  SessionSummarizeResponse,
+  SessionRevertResponse,
+  SessionUnrevertResponse,
+  SessionShareResponse,
+  SessionUnshareResponse,
+  ConfigProvidersResponse,
+  ConfigGetResponse,
+  ConfigUpdateResponse,
+  ProviderAuthResponse,
+  AppAgentsResponse,
+  SessionTodoResponse,
+  SessionDiffResponse,
+  SessionStatusResponse,
+  SessionShellResponse,
+  SessionCommandResponse,
+  SessionPromptResponse,
+  CommandListResponse,
+  LspStatusResponse,
+  McpStatusResponse,
+  FormatterStatusResponse,
+  VcsGetResponse,
+  PathGetResponse,
+  FindFilesResponse,
+  ExperimentalWorkspaceListResponse,
 } from "../sdk-types";
 import { log } from "../util/log";
 export * from "../sdk-types";
@@ -108,8 +132,7 @@ export const createFosraClient = (options: {
         path,
         error: parseError,
       });
-      if (init?.throwOnError)
-        throw new Error(parseError);
+      if (init?.throwOnError) throw new Error(parseError);
       return {
         error: {
           code: "PARSE",
@@ -120,8 +143,34 @@ export const createFosraClient = (options: {
     }
   }
 
-  function opts(o?: any): { throwOnError?: boolean; signal?: AbortSignal } {
-    return { throwOnError: o?.throwOnError, signal: o?.signal };
+  function opts(o?: { throwOnError?: boolean; signal?: AbortSignal }): {
+    throwOnError?: boolean;
+    signal?: AbortSignal;
+  } {
+    return {
+      ...(o?.throwOnError !== undefined && { throwOnError: o.throwOnError }),
+      ...(o?.signal !== undefined && { signal: o.signal }),
+    };
+  }
+
+  function queryString(params: Record<string, unknown> = {}): string {
+    const entries = Object.entries(params).filter(([, v]) => v !== undefined);
+    if (entries.length === 0) return "";
+    return "?" + new URLSearchParams(entries as [string, string][]).toString();
+  }
+
+  function sessionMethod<T>(
+    sessionID: string,
+    path: string,
+    method: string,
+    body: Record<string, unknown>,
+    o?: { throwOnError?: boolean; signal?: AbortSignal },
+  ): Promise<Result<T>> {
+    return api<T>(`/session/${sessionID}${path}`, {
+      method,
+      body: JSON.stringify(body),
+      ...opts(o),
+    });
   }
 
   // stub for endpoints the backend doesn't support
@@ -164,9 +213,17 @@ export const createFosraClient = (options: {
 
               let data = "";
               for (const line of block.split("\n")) {
-                if (line.startsWith("data: ")) data += line.slice(6);
-                else if (line.startsWith("data:")) data += line.slice(5);
+                // skip SSE comments (lines starting with :)
+                if (line.startsWith(":")) continue;
+                // skip other SSE fields (event:, id:, retry:)
+                if (!line.startsWith("data:")) continue;
+                // extract data content
+                data += line.startsWith("data: ")
+                  ? line.slice(6)
+                  : line.slice(5);
+                data += "\n";
               }
+              data = data.trim();
               if (data) {
                 try {
                   yield JSON.parse(data.trim()) as Event;
@@ -186,10 +243,11 @@ export const createFosraClient = (options: {
     },
     config: {
       providers: async (_p?: any, o?: any) =>
-        api<any>("/config/providers", opts(o)),
-      get: async (_p?: any, o?: any) => api<any>("/config", opts(o)),
+        api<ConfigProvidersResponse>("/config/providers", opts(o)),
+      get: async (_p?: any, o?: any) =>
+        api<ConfigGetResponse>("/config", opts(o)),
       update: async (p?: any, o?: any) =>
-        api<any>("/config", {
+        api<ConfigUpdateResponse>("/config", {
           method: "PUT",
           body: JSON.stringify(p),
           ...opts(o),
@@ -198,7 +256,8 @@ export const createFosraClient = (options: {
     provider: {
       list: async (_p?: any, o?: any) =>
         api<ProviderListResponse>("/provider", opts(o)),
-      auth: async (_p?: any, o?: any) => api<any>("/provider/auth", opts(o)),
+      auth: async (_p?: any, o?: any) =>
+        api<ProviderAuthResponse>("/provider/auth", opts(o)),
       oauth: {
         authorize: async (_p?: any, _o?: any) =>
           mock<ProviderAuthAuthorization>({
@@ -210,14 +269,13 @@ export const createFosraClient = (options: {
       },
     },
     app: {
-      agents: async (_p?: any, o?: any) => api<any[]>("/agent", opts(o)),
-      skills: async (_p?: any, _o?: any) => mock<any[]>([]),
+      agents: async (_p?: any, o?: any) =>
+        api<AppAgentsResponse>("/agent", opts(o)),
+      skills: async (_p?: any, _o?: any) => mock<AppAgentsResponse>([]),
     },
     session: {
-      list: async (p?: any, o?: any) => {
-        const query = p?.start ? `?start=${p.start}` : "";
-        return api<Session[]>(`/session${query}`, opts(o));
-      },
+      list: async (p?: any, o?: any) =>
+        api<Session[]>(`/session${queryString(p ?? {})}`, opts(o)),
       get: async (p: any, o?: any) =>
         api<Session>(`/session/${p.sessionID}`, opts(o)),
       create: async (p?: any, o?: any) =>
@@ -226,69 +284,64 @@ export const createFosraClient = (options: {
           body: JSON.stringify(p),
           ...opts(o),
         }),
-      messages: async (p: any, o?: any) => {
-        const query = p?.limit ? `?limit=${p.limit}` : "";
-        return api<Array<{ info: Message; parts: Part[] }>>(
-          `/session/${p.sessionID}/message${query}`,
+      messages: async (p: any, o?: any) =>
+        api<Array<{ info: Message; parts: Part[] }>>(
+          `/session/${p.sessionID}/message${queryString(p ?? {})}`,
           opts(o),
-        );
-      },
+        ),
       todo: async (p: any, o?: any) =>
-        api<any[]>(`/session/${p.sessionID}/todo`, opts(o)),
+        api<SessionTodoResponse>(`/session/${p.sessionID}/todo`, opts(o)),
       diff: async (p: any, o?: any) =>
-        api<any[]>(`/session/${p.sessionID}/diff`, opts(o)),
-      status: async (_p?: any, o?: any) => api<any>("/session/status", opts(o)),
+        api<SessionDiffResponse>(`/session/${p.sessionID}/diff`, opts(o)),
+      status: async (_p?: any, o?: any) =>
+        api<SessionStatusResponse>("/session/status", opts(o)),
       abort: async (p: any, o?: any) =>
         api<boolean>(`/session/${p.sessionID}/abort`, {
           method: "POST",
           ...opts(o),
         }),
       summarize: async (p: any, o?: any) =>
-        api<{ title: string }>(`/session/${p.sessionID}/summarize`, {
+        api<SessionSummarizeResponse>(`/session/${p.sessionID}/summarize`, {
           method: "POST",
           ...opts(o),
         }),
       revert: async (p: any, o?: any) =>
-        api<{ ok: boolean }>(`/session/${p.sessionID}/revert`, {
+        api<SessionRevertResponse>(`/session/${p.sessionID}/revert`, {
           method: "POST",
           ...opts(o),
         }),
       unrevert: async (p: any, o?: any) =>
-        api<{ ok: boolean }>(`/session/${p.sessionID}/unrevert`, {
+        api<SessionUnrevertResponse>(`/session/${p.sessionID}/unrevert`, {
           method: "POST",
           ...opts(o),
         }),
       fork: async (p: any, o?: any) => {
         const { sessionID, ...body } = p;
-        return api<Session>(`/session/${sessionID}/fork`, {
-          method: "POST",
-          body: JSON.stringify(body),
-          ...opts(o),
-        });
+        return sessionMethod<Session>(sessionID, "/fork", "POST", body, o);
       },
       shell: async (p: any, o?: any) => {
         const { sessionID, ...body } = p;
-        return api<any>(`/session/${sessionID}/shell`, {
-          method: "POST",
-          body: JSON.stringify(body),
-          ...opts(o),
-        });
+        return sessionMethod<SessionShellResponse>(
+          sessionID,
+          "/shell",
+          "POST",
+          body,
+          o,
+        );
       },
       command: async (p: any, o?: any) => {
         const { sessionID, ...body } = p;
-        return api<any>(`/session/${sessionID}/command`, {
-          method: "POST",
-          body: JSON.stringify(body),
-          ...opts(o),
-        });
+        return sessionMethod<SessionCommandResponse>(
+          sessionID,
+          "/command",
+          "POST",
+          body,
+          o,
+        );
       },
       update: async (p: any, o?: any) => {
         const { sessionID, ...body } = p;
-        return api<Session>(`/session/${sessionID}`, {
-          method: "PUT",
-          body: JSON.stringify(body),
-          ...opts(o),
-        });
+        return sessionMethod<Session>(sessionID, "", "PUT", body, o);
       },
       delete: async (p: any, o?: any) =>
         api<boolean>(`/session/${p.sessionID}`, {
@@ -297,25 +350,28 @@ export const createFosraClient = (options: {
         }),
       prompt: async (p: any, o?: any) => {
         const { sessionID, ...body } = p;
-        return api<any>(`/session/${sessionID}/message`, {
-          method: "POST",
-          body: JSON.stringify(body),
-          ...opts(o),
-        });
+        return sessionMethod<SessionPromptResponse>(
+          sessionID,
+          "/message",
+          "POST",
+          body,
+          o,
+        );
       },
       share: async (p: any, o?: any) =>
-        api<{ url: string }>(`/session/${p.sessionID}/share`, {
+        api<SessionShareResponse>(`/session/${p.sessionID}/share`, {
           method: "POST",
           ...opts(o),
         }),
       unshare: async (p: any, o?: any) =>
-        api<{}>(`/session/${p.sessionID}/share`, {
+        api<SessionUnshareResponse>(`/session/${p.sessionID}/share`, {
           method: "DELETE",
           ...opts(o),
         }),
     },
     command: {
-      list: async (_p?: any, o?: any) => api<any[]>("/command", opts(o)),
+      list: async (_p?: any, o?: any) =>
+        api<CommandListResponse>("/command", opts(o)),
     },
     permission: {
       reply: async (p: any, o?: any) =>
@@ -340,10 +396,12 @@ export const createFosraClient = (options: {
         }),
     },
     lsp: {
-      status: async (_p?: any, o?: any) => api<any[]>("/lsp/status", opts(o)),
+      status: async (_p?: any, o?: any) =>
+        api<LspStatusResponse>("/lsp/status", opts(o)),
     },
     mcp: {
-      status: async (_p?: any, o?: any) => api<any>("/mcp/status", opts(o)),
+      status: async (_p?: any, o?: any) =>
+        api<McpStatusResponse>("/mcp/status", opts(o)),
       connect: async (p: any, o?: any) =>
         api<{}>(`/mcp/${p.name}/connect`, { method: "POST", ...opts(o) }),
       disconnect: async (p: any, o?: any) =>
@@ -359,7 +417,10 @@ export const createFosraClient = (options: {
       },
       workspace: {
         list: async (p: any, o?: any) =>
-          api<any[]>("/experimental/workspace", { method: "GET", ...opts(o) }),
+          api<ExperimentalWorkspaceListResponse>("/experimental/workspace", {
+            method: "GET",
+            ...opts(o),
+          }),
         create: async (p: any, o?: any) =>
           api<{}>("/experimental/workspace", {
             method: "POST",
@@ -375,13 +436,13 @@ export const createFosraClient = (options: {
     },
     formatter: {
       status: async (_p?: any, o?: any) =>
-        api<any[]>("/formatter/status", opts(o)),
+        api<FormatterStatusResponse>("/formatter/status", opts(o)),
     },
     vcs: {
-      get: async (_p?: any, o?: any) => api<any>("/vcs", opts(o)),
+      get: async (_p?: any, o?: any) => api<VcsGetResponse>("/vcs", opts(o)),
     },
     path: {
-      get: async (_p?: any, o?: any) => api<any>("/path", opts(o)),
+      get: async (_p?: any, o?: any) => api<PathGetResponse>("/path", opts(o)),
     },
     instance: {
       dispose: async (p: any, o?: any) =>
@@ -389,7 +450,7 @@ export const createFosraClient = (options: {
     },
     find: {
       files: async (p: any, o?: any) =>
-        api<any[]>("/find/file", { method: "GET", ...opts(o) }),
+        api<FindFilesResponse>("/find/file", { method: "GET", ...opts(o) }),
     },
     auth: {
       set: async (p?: any, o?: any) =>

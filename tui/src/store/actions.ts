@@ -26,6 +26,50 @@ export function createStoreActions(state: {
     state.setSessionsArray(state.sessions.values());
   }
 
+  function upsertItem<T>(
+    collection: ReactiveRecord<T[]>,
+    parentId: string,
+    item: T,
+    findBy: (existing: T) => boolean,
+    logTag: string,
+    extra: (
+      updated: T[],
+      op: "update" | "insert",
+    ) => Record<string, unknown> = () => ({}),
+  ) {
+    const current = collection.get(parentId) ?? [];
+    const idx = current.findIndex(findBy);
+    const op: "update" | "insert" = idx >= 0 ? "update" : "insert";
+    const updated =
+      idx >= 0
+        ? (() => {
+            const r = [...current];
+            r[idx] = item;
+            return r;
+          })()
+        : [...current, item];
+    collection.set(parentId, updated);
+    log.store.debug(logTag, {
+      operation: op,
+      total: updated.length,
+      ...extra(updated, op),
+    });
+  }
+
+  function getMessageCompleted(message: Message): number | null {
+    if (message.role !== "assistant") return null;
+    const t = message.time;
+    if (!t) return null;
+    return "completed" in t
+      ? ((t as { completed?: number }).completed ?? null)
+      : null;
+  }
+
+  function getPartTextLength(part: Part): number {
+    if (part.type !== "text") return 0;
+    return (part as { text?: string }).text?.length ?? 0;
+  }
+
   return {
     get<K extends EntityKey>(collection: K, id: string) {
       return state[collection].get(id);
@@ -42,91 +86,86 @@ export function createStoreActions(state: {
     },
 
     setMessage(sessionId: string, message: Message) {
-      const current = state.messages.get(sessionId) ?? [];
-      const idx = current.findIndex((m) => m.id === message.id);
-
-      if (idx >= 0) {
-        const updated = [...current];
-        updated[idx] = message;
-        state.messages.set(sessionId, updated);
-        log.store.debug("STORE_SET_MESSAGE", { operation: "update", sessionId, messageId: message.id, role: message.role, total: current.length });
-      } else {
-        state.messages.set(sessionId, [...current, message]);
-        log.store.debug("STORE_SET_MESSAGE", { operation: "insert", sessionId, messageId: message.id, role: message.role, total: current.length + 1 });
-      }
+      upsertItem(
+        state.messages,
+        sessionId,
+        message,
+        (m) => m.id === message.id,
+        "STORE_SET_MESSAGE",
+        (updated) => ({
+          sessionId,
+          messageId: message.id,
+          role: message.role,
+          messageList: updated.map((m) => ({
+            id: m.id,
+            role: m.role,
+            completed: getMessageCompleted(m),
+          })),
+        }),
+      );
     },
 
     removeMessage(sessionId: string, messageId: string) {
       const current = state.messages.get(sessionId) ?? [];
-      state.messages.set(
-        sessionId,
-        current.filter((m) => m.id !== messageId),
-      );
+      const updated = current.filter((m) => m.id !== messageId);
+      state.messages.set(sessionId, updated);
       log.store.debug("STORE_REMOVE_MESSAGE", {
         sessionId,
         messageId,
-        remaining: current.length - 1,
+        remaining: updated.length,
+        messageList: updated.map((m) => ({
+          id: m.id,
+          role: m.role,
+          completed: getMessageCompleted(m),
+        })),
       });
     },
 
     setPart(messageId: string, part: Part) {
-      const current = state.parts.get(messageId) ?? [];
-      const idx = current.findIndex((p) => p.id === part.id);
-      if (idx >= 0) {
-        const updated = [...current];
-        updated[idx] = part;
-        state.parts.set(messageId, updated);
-        log.store.debug("STORE_SET_PART", {
+      upsertItem(
+        state.parts,
+        messageId,
+        part,
+        (p) => p.id === part.id,
+        "STORE_SET_PART",
+        (updated) => ({
           messageId,
           partId: part.id,
-          operation: "update",
-          total: current.length,
-        });
-      } else {
-        state.parts.set(messageId, [...current, part]);
-        log.store.debug("STORE_SET_PART", {
-          messageId,
-          partId: part.id,
-          operation: "insert",
-          total: current.length + 1,
-        });
-      }
+          type: part.type,
+          partsList: updated.map((p) => ({
+            id: p.id,
+            type: p.type,
+            textLen: getPartTextLength(p),
+          })),
+        }),
+      );
     },
 
     removePart(messageId: string, partId: string) {
       const current = state.parts.get(messageId) ?? [];
-      state.parts.set(
-        messageId,
-        current.filter((p) => p.id !== partId),
-      );
+      const updated = current.filter((p) => p.id !== partId);
+      state.parts.set(messageId, updated);
       log.store.debug("STORE_REMOVE_PART", {
         messageId,
         partId,
-        remaining: current.length - 1,
+        remaining: updated.length,
+        partsList: updated.map((p) => ({
+          id: p.id,
+          type: p.type,
+          textLen: getPartTextLength(p),
+        })),
       });
     },
 
     setTodo(sessionId: string, todo: Todo) {
-      const current = state.todos.get(sessionId) ?? [];
-      const idx = current.findIndex((t) => t.content === todo.content);
-
-      if (idx >= 0) {
-        const updated = [...current];
-        updated[idx] = todo;
-        state.todos.set(sessionId, updated);
-        log.store.debug("STORE_SET_TODO", {
-          sessionId,
-          operation: "update",
-          total: current.length,
-        });
-      } else {
-        state.todos.set(sessionId, [...current, todo]);
-        log.store.debug("STORE_SET_TODO", {
-          sessionId,
-          operation: "insert",
-          total: current.length + 1,
-        });
-      }
+      upsertItem(
+        state.todos,
+        sessionId,
+        todo,
+        (t) => t.content === todo.content,
+        "STORE_SET_TODO",
+        () => ({ sessionId }),
+      );
     },
 
     removeTodo(sessionId: string, todoContent: string) {
@@ -143,28 +182,17 @@ export function createStoreActions(state: {
     },
 
     setPermission(sessionId: string, request: PermissionRequest) {
-      const current = state.permission.get(sessionId) ?? [];
-      const idx = current.findIndex((r) => r.id === request.id);
-
-      if (idx >= 0) {
-        const updated = [...current];
-        updated[idx] = request;
-        state.permission.set(sessionId, updated);
-        log.store.debug("STORE_SET_PERMISSION", {
+      upsertItem(
+        state.permission,
+        sessionId,
+        request,
+        (r) => r.id === request.id,
+        "STORE_SET_PERMISSION",
+        () => ({
           sessionId,
           permissionId: request.id,
-          operation: "update",
-          total: current.length,
-        });
-      } else {
-        state.permission.set(sessionId, [...current, request]);
-        log.store.debug("STORE_SET_PERMISSION", {
-          sessionId,
-          permissionId: request.id,
-          operation: "insert",
-          total: current.length + 1,
-        });
-      }
+        }),
+      );
     },
 
     clearPermission(sessionId: string) {
@@ -193,27 +221,23 @@ export function createStoreActions(state: {
       field: string = "text",
       partType: string = "text",
     ) {
-      let parts = state.parts.get(messageId);
-
-      if (!parts) {
-        parts = [];
-      }
+      let parts = state.parts.get(messageId) ?? [];
 
       let idx = parts.findIndex((p) => p.id === partId);
 
       if (idx < 0) {
-        const newPart = {
+        const newPart: Record<string, unknown> = {
           id: partId,
           sessionID: sessionId,
           messageID: messageId,
           type: partType,
           text: field === "text" ? delta : "",
           time: { start: Date.now() },
-        } as Part;
+        };
         if (field !== "text") {
-          (newPart as any)[field] = delta;
+          newPart[field] = delta;
         }
-        parts = [...parts, newPart];
+        parts = [...parts, newPart as Part];
         log.store.debug("STORE_APPLY_DELTA", {
           messageId,
           partId,
@@ -226,18 +250,24 @@ export function createStoreActions(state: {
         return;
       }
 
-      const part = parts[idx] as any;
-      const existing = part[field] as string | undefined;
+      const part = parts[idx];
+      const existing = (part as Record<string, unknown>)[field] as
+        | string
+        | undefined;
 
-      const updatedPart = { ...part, [field]: (existing ?? "") + delta };
+      const updatedPart: Record<string, unknown> = {
+        ...part,
+        [field]: (existing ?? "") + delta,
+        ...(partType && partType !== part.type ? { type: partType } : {}),
+      };
       const newParts = [...parts];
-      newParts[idx] = updatedPart;
+      newParts[idx] = updatedPart as Part;
       log.store.debug("STORE_APPLY_DELTA", {
         messageId,
         partId,
         field,
         operation: "update",
-        resultLength: (updatedPart[field] as string)?.length ?? 0,
+        resultLength: String(updatedPart[field] ?? "").length,
       });
       state.parts.set(messageId, newParts);
     },

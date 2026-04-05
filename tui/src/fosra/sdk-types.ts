@@ -14,7 +14,8 @@ export type EventInstallationUpdated = {
 export type EventInstallationUpdateAvailable = {
   type: "installation.update-available";
   properties: {
-    version: string;
+    currentVersion: string;
+    latestVersion: string;
   };
 };
 
@@ -656,6 +657,7 @@ export type EventMessagePartDelta = {
     partID: string;
     field: string;
     delta: string;
+    partType?: string;
   };
 };
 
@@ -848,6 +850,7 @@ export type Session = {
     diff?: string;
   };
   metadata?: {
+    agent?: string;
     model?: {
       providerID: string;
       modelID: string;
@@ -969,7 +972,7 @@ export type EventWorktreeReady = {
   type: "worktree.ready";
   properties: {
     name: string;
-    branch: string;
+    path: string;
   };
 };
 

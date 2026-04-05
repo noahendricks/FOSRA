@@ -20,7 +20,11 @@ import { useRoute, useRouteData } from "@tui/context/route";
 import { useStore } from "@tui/context/store";
 import { SplitBorder } from "@tui/component/border";
 import { Spinner } from "@tui/component/spinner";
-import { selectedForeground, useTheme } from "@tui/context/theme";
+import {
+  selectedForeground,
+  ThemeProvider,
+  useTheme,
+} from "@tui/context/theme";
 import {
   BoxRenderable,
   ScrollBoxRenderable,
@@ -125,6 +129,25 @@ function use() {
   if (!ctx)
     throw new Error("useContext must be used within a Session component");
   return ctx;
+}
+
+function useOutputDisplay(
+  getRaw: () => string,
+  maxLines: number,
+  transform?: (s: string) => string,
+) {
+  const output = createMemo(() => {
+    const raw = getRaw();
+    return transform ? transform(raw) : raw;
+  });
+  const [expanded, setExpanded] = createSignal(false as any);
+  const lines = createMemo(() => output().split("\n"));
+  const overflow = createMemo(() => lines().length > maxLines);
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output();
+    return [...lines().slice(0, maxLines), "…"].join("\n");
+  });
+  return { output, lines, overflow, limited, expanded, setExpanded };
 }
 
 export function Session() {
@@ -243,9 +266,12 @@ export function Session() {
       .then(() => {
         if (scroll) scroll.scrollBy(100_000);
       })
-        .catch((e) => {
-          log.session.error("SESSION_LOAD_FAILED", { sessionID: route.sessionID, error: String(e) });
-          toast.show({
+      .catch((e) => {
+        log.session.error("SESSION_LOAD_FAILED", {
+          sessionID: route.sessionID,
+          error: String(e),
+        });
+        toast.show({
           message: `Session not found: ${route.sessionID}`,
           variant: "error",
         });
@@ -256,7 +282,7 @@ export function Session() {
   const toast = useToast();
   const api = useApi();
 
-  // Handle initial prompt from fork
+  // handle initial prompt from fork
   createEffect(() => {
     if (route.initialPrompt && prompt) {
       prompt.set(route.initialPrompt);
@@ -269,7 +295,7 @@ export function Session() {
   const dialog = useDialog();
   const renderer = useRenderer();
 
-  // Allow exit when in child session (prompt is hidden)
+  // allow exit when in child session (prompt is hidden)
   const exit = useExit();
 
   createEffect(() => {
@@ -436,7 +462,7 @@ export function Session() {
           .share({
             sessionID: route.sessionID,
           })
-          .then((res) => copy(res.data!.url))
+          .then((res) => copy(res.data.share!.url))
           .catch((error) => {
             toast.show({
               message:
@@ -593,7 +619,10 @@ export function Session() {
             toBottom();
           })
           .catch((e: unknown) => {
-            log.session.error("SESSION_REVERT_FAILED", { sessionID: route.sessionID, error: String(e) });
+            log.session.error("SESSION_REVERT_FAILED", {
+              sessionID: route.sessionID,
+              error: String(e),
+            });
           });
         const parts = store.state.parts.get(message.id) ?? [];
         prompt.set(
@@ -1088,52 +1117,50 @@ export function Session() {
     },
   ]);
 
-  const revertInfo = createMemo(() => session()?.revert);
-  const revertMessageID = createMemo(() => revertInfo()?.messageID);
-
-  const revertDiffFiles = createMemo(() => {
-    const diffText = revertInfo()?.diff ?? "";
-    if (!diffText) return [];
-
-    try {
-      const patches = parsePatch(diffText);
-      return patches.map((patch) => {
-        const filename = patch.newFileName || patch.oldFileName || "unknown";
-        const cleanFilename = filename.replace(/^[ab]\//, "");
-        return {
-          filename: cleanFilename,
-          additions: patch.hunks.reduce(
-            (sum, hunk) =>
-              sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-            0,
-          ),
-          deletions: patch.hunks.reduce(
-            (sum, hunk) =>
-              sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-            0,
-          ),
-        };
-      });
-    } catch (error) {
-      return [];
-    }
-  });
-
-  const revertRevertedMessages = createMemo(() => {
-    const messageID = revertMessageID();
-    if (!messageID) return [];
-    return messages().filter((x) => x.id >= messageID && x.role === "user");
-  });
-
   const revert = createMemo(() => {
-    const info = revertInfo();
-    if (!info) return;
-    if (!info.messageID) return;
+    const info = session()?.revert;
+    if (!info?.messageID) return;
+
+    const diffText = info.diff ?? "";
+    let diffFiles: Array<{
+      filename: string;
+      additions: number;
+      deletions: number;
+    }> = [];
+    if (diffText) {
+      try {
+        const patches = parsePatch(diffText);
+        diffFiles = patches.map((patch) => {
+          const filename = patch.newFileName || patch.oldFileName || "unknown";
+          const cleanFilename = filename.replace(/^[ab]\//, "");
+          return {
+            filename: cleanFilename,
+            additions: patch.hunks.reduce(
+              (sum, hunk) =>
+                sum + hunk.lines.filter((line) => line.startsWith("+")).length,
+              0,
+            ),
+            deletions: patch.hunks.reduce(
+              (sum, hunk) =>
+                sum + hunk.lines.filter((line) => line.startsWith("-")).length,
+              0,
+            ),
+          };
+        });
+      } catch (error) {
+        diffFiles = [];
+      }
+    }
+
+    const reverted = messages().filter(
+      (x) => x.id >= info.messageID && x.role === "user",
+    );
+
     return {
       messageID: info.messageID,
-      reverted: revertRevertedMessages(),
+      reverted,
       diff: info.diff,
-      diffFiles: revertDiffFiles(),
+      diffFiles,
     };
   });
 
@@ -1820,15 +1847,8 @@ type ToolProps<T extends Tool.Info> = {
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme();
   const ctx = use();
-  const output = createMemo(() => props.output?.trim() ?? "");
-  const [expanded, setExpanded] = createSignal(false as any);
-  const lines = createMemo(() => output().split("\n"));
-  const maxLines = 3;
-  const overflow = createMemo(() => lines().length > maxLines);
-  const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output();
-    return [...lines().slice(0, maxLines), "…"].join("\n");
-  });
+  const { output, lines, overflow, limited, expanded, setExpanded } =
+    useOutputDisplay(() => props.output?.trim() ?? "", 3);
 
   return (
     <Show
@@ -2031,16 +2051,8 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme();
   const store = useStore();
   const isRunning = createMemo(() => props.part.state.status === "running");
-  const output = createMemo(() =>
-    stripAnsi(props.metadata.output?.trim() ?? ""),
-  );
-  const [expanded, setExpanded] = createSignal(false as any);
-  const lines = createMemo(() => output().split("\n"));
-  const overflow = createMemo(() => lines().length > 10);
-  const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output();
-    return [...lines().slice(0, 10), "…"].join("\n");
-  });
+  const { output, lines, overflow, limited, expanded, setExpanded } =
+    useOutputDisplay(() => props.metadata.output?.trim() ?? "", 10, stripAnsi);
 
   const workdirDisplay = createMemo(() => {
     const workdir = props.input.workdir;
@@ -2294,11 +2306,17 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const local = useLocal();
   const store = useStore();
 
-  onMount(() => {
+  onMount(async () => {
     if (props.metadata.sessionId) {
       const msgs = store.state.messages.get(props.metadata.sessionId);
       if (!msgs?.length) {
-        store.session.load(props.metadata.sessionId);
+        const metadata = await store.session.load(props.metadata.sessionId);
+        if (metadata?.agent) {
+          local.agent.set(metadata.agent);
+        }
+        if (metadata?.model) {
+          local.model.set(metadata.model);
+        }
       }
     }
   });

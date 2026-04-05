@@ -118,6 +118,22 @@ function formatTimestamp(iso: string): string {
   return `${h}:${m}:${s}.${ms}`
 }
 
+function captureCallSite(stack: string): string | undefined {
+  if (!stack) return undefined
+
+  const lines = stack.split("\n")
+  for (const line of lines.slice(1)) {
+    const match = line.match(/at\s+(.+):(\d+):(\d+)/)
+    if (match) {
+      const [, file, lineNum, col] = match
+      if (file.includes("log.ts")) continue
+      const basename = file.split("/").pop() ?? file
+      return `${basename}:${lineNum}:${col}`
+    }
+  }
+  return undefined
+}
+
 function write(cat: Category, lvl: Level, msg: string, data?: unknown) {
   if (LEVEL_ORDER[lvl] < LEVEL_ORDER[LOG_LEVEL]) {
     return
@@ -128,19 +144,28 @@ function write(cat: Category, lvl: Level, msg: string, data?: unknown) {
     dirReady = true
   }
 
+  const ts = new Date().toISOString()
+  const callSite = lvl === "error" ? captureCallSite(new Error().stack ?? "") : undefined
+
   if (data !== undefined) {
     try {
       data = truncateStrings(data)
     } catch {
       data = "[unserializable]"
     }
+    if (callSite && typeof data === "object" && data !== null && !Array.isArray(data)) {
+      const d = data as Record<string, unknown>
+      if (d.error && typeof d.error === "object" && d.error !== null) {
+        const err = d.error as Record<string, unknown>
+        delete err.stack
+      }
+    }
   }
-
-  const ts = new Date().toISOString()
 
   if (LOG_FORMAT === "json") {
     const entry: Record<string, unknown> = { ts, cat, lvl, msg }
     if (data !== undefined) entry.data = data
+    if (callSite) entry.at = callSite
     try {
       fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + "\n")
     } catch (_) {}
@@ -153,6 +178,10 @@ function write(cat: Category, lvl: Level, msg: string, data?: unknown) {
   const msgStr = msg
 
   let out = `${tsStr} [${catStr}] ${lvlStr} ${msgStr}`
+
+  if (callSite) {
+    out += "\n" + chalk.dim(`  at ${callSite}`)
+  }
 
   if (data !== undefined) {
     out += "\n" + chalk.dim(JSON.stringify(data, null, 2))

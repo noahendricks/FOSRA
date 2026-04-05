@@ -46,6 +46,7 @@ const ctx = createSimpleContext({
     );
 
     loadInitial(api, state, actions);
+
     log.startup.info("STORE_INITIALIZED", {
       sessions: state.sessionsArray(),
       providers: state.providers,
@@ -61,7 +62,13 @@ const ctx = createSimpleContext({
       }, SNAPSHOT_MS);
     }
 
-    async function sessionLoad(sessionID: string, force = false) {
+    async function sessionLoad(
+      sessionID: string,
+      force = false,
+    ): Promise<
+      | { agent?: string; model?: { providerID: string; modelID: string } }
+      | undefined
+    > {
       if (state.loadedSessions.has(sessionID) && !force) return;
 
       if (!state.sessions.has(sessionID)) {
@@ -80,6 +87,7 @@ const ctx = createSimpleContext({
         api.fosra.session.messages({ sessionID, limit: 100 }),
         api.fosra.session.todo({ sessionID }),
       ]);
+      log.startup.debug("CHECKING_STARTUP_CONFIG", { messages });
 
       for (const msg of messages.data ?? []) {
         actions.setMessage(msg.info.sessionID, msg.info as Message);
@@ -91,6 +99,8 @@ const ctx = createSimpleContext({
       }
       state.todos.set(sessionID, todos.data ?? []);
       state.loadedSessions.add(sessionID);
+
+      return state.sessions.get(sessionID)?.metadata;
     }
 
     function sessionStatus(
