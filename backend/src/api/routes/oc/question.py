@@ -7,7 +7,8 @@ reply/reject resolves the asyncio.Future that the agent is waiting on.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+import asyncio
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -17,7 +18,11 @@ from backend.src.api.routes.oc.state import (
     pending_questions,
     question_requests,
 )
-from backend.src.api.schemas.tui_schemas import QuestionRequest
+from backend.src.api.schemas.tui_control_schemas import (
+    QuestionAnswer,
+    QuestionReject,
+    QuestionRequest,
+)
 
 router = APIRouter(prefix="/oc/question", tags=["Question"])
 event_emitter = get_event_emitter()
@@ -26,13 +31,15 @@ event_emitter = get_event_emitter()
 @router.get("")
 async def list_questions(
     user_id: Annotated[str, Depends(get_current_user_id)],
-):
+) -> list[QuestionRequest]:
     """
     return all pending question requests across all sessions for the current user.
     the tui filters by sessionID on the client side.
     """
-    all_requests: list[dict[str, Any]] = []
-    for session_id, requests in question_requests.items():
+    all_requests: list[QuestionRequest] = []
+    for session_id, requests in cast(
+        dict[str, list[QuestionRequest]], question_requests
+    ).items():
         for req in requests:
             all_requests.append(req)
     return all_requests
@@ -41,8 +48,8 @@ async def list_questions(
 @router.post("/{request_id}/reply")
 async def reply_question(
     request_id: str,
-    body: dict[str, Any],
-):
+    body: QuestionAnswer,
+) -> bool:
     """
     reply to a question request with answers.
     body: { "sessionID": str, "answers": [["option1"], ["option2"]] }
@@ -50,51 +57,50 @@ async def reply_question(
     resolves the pending asyncio.Future so the agent can continue.
     publishes question.replied event.
     """
-    answers = body.get("answers", [])
-    session_id = body.get("sessionID", "")
-
-    future = pending_questions.get(request_id)
+    future = cast(
+        "asyncio.Future[list[list[str]]] | None", pending_questions.get(request_id)
+    )
     if future is None:
         raise HTTPException(status_code=404, detail="Question request not found")
 
-    for session_id_key, requests in list(question_requests.items()):
-        question_requests[session_id_key] = [
-            r for r in requests if r.get("id") != request_id
-        ]
+    for session_id_key, requests in cast(
+        dict[str, list[QuestionRequest]], question_requests
+    ).items():
+        question_requests[session_id_key] = [r for r in requests if r.id != request_id]
 
     if not future.done():
-        future.set_result(answers)
+        future.set_result(body.answers)
 
     pending_questions.pop(request_id, None)
 
-    await event_emitter.emit_question_replied(session_id, request_id, answers)
+    await event_emitter.emit_question_replied(body.sessionID, request_id, body.answers)
     return True
 
 
 @router.post("/{request_id}/reject")
 async def reject_question(
     request_id: str,
-    body: dict[str, Any],
-):
+    body: QuestionReject,
+) -> bool:
     """
     reject a question request.
     body: { "sessionID": str }
     resolves the pending asyncio.Future with 'reject' so the agent can handle it.
     publishes question.rejected event.
     """
-    session_id = body.get("sessionID", "")
-
-    future = pending_questions.get(request_id)
+    future = cast("asyncio.Future[str] | None", pending_questions.get(request_id))
     if future is None:
         raise HTTPException(status_code=404, detail="Question request not found")
 
-    for sid, requests in list(question_requests.items()):
-        question_requests[sid] = [r for r in requests if r.get("id") != request_id]
+    for sid, requests in cast(
+        dict[str, list[QuestionRequest]], question_requests
+    ).items():
+        question_requests[sid] = [r for r in requests if r.id != request_id]
 
     if not future.done():
         future.set_result("reject")
 
     pending_questions.pop(request_id, None)
 
-    await event_emitter.emit_question_rejected(session_id, request_id)
+    await event_emitter.emit_question_rejected(body.sessionID, request_id)
     return True

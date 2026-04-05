@@ -11,7 +11,9 @@ import asyncio
 import os
 import subprocess
 from datetime import datetime, timezone
-from typing import Annotated, Any, AsyncIterable
+from typing import Annotated, Any, cast
+
+from collections.abc import AsyncIterable
 
 from fastapi import (
     APIRouter,
@@ -23,6 +25,7 @@ from fastapi import (
 )
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.dependencies import (
     get_current_user_id,
@@ -30,40 +33,39 @@ from backend.src.api.dependencies import (
     get_session_factory,
 )
 from backend.src.api.routes.oc.state import (
+    check_session_existing,
     cleanup_session,
     get_persisted_session_state,
     pending_permissions,
     pending_questions,
     permission_requests,
+    persist_session_state,
     question_requests,
     running_tasks,
     session_diffs,
     session_status,
-    session_todos,
 )
-from backend.src.api.schemas import MessageResponse
-from backend.src.api.schemas.convo_api_schemas import (
-    ConvoDeleteRequest,
-    ConvoUpdateRequest,
-    NewConvoRequest,
+from backend.src.api.schemas.session_api_schemas import (
+    SessionDeleteRequest,
+    SessionUpdateRequest,
+    NewSessionRequest,
 )
 from backend.src.api.schemas.provider_registry import (
     get_config_providers_response,
     get_provider_list_response,
 )
 from backend.src.api.schemas.tui_schemas import (
-    DEFAULT_USER_ID,
     PROJECT_DIR,
     PromptRequest,
     Session,
     SessionTime,
-    convo_full_to_session,
-    convo_list_item_to_session,
+    session_full_to_session,
+    session_list_item_to_session,
     get_agents,
     get_default_config,
     message_to_tui,
 )
-from backend.src.services.conversation.conversation_service import ConversationService
+from backend.src.services.session.conversation_service import SessionService
 from backend.src.services.session.event_emitter import get_event_emitter
 
 router = APIRouter(prefix="/oc", tags=["TUI"])
@@ -139,20 +141,20 @@ async def sse_endpoint(
 @router.get("/session")
 async def list_sessions(
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ):
-    items = await ConversationService.list_conversations(
+    items = await SessionService.list_sessions(
         session=session,
         user_id=user_id,
     )
-    results = [convo_list_item_to_session(item) for item in items]
+    results = [session_list_item_to_session(item) for item in items]
 
     for item, result in zip(items, results):
-        persisted = await get_persisted_session_state(item.convo_id)
-        if persisted and persisted.get("metadata"):
+        persisted = await get_persisted_session_state(item.session_id)
+        if persisted and persisted.get("metadata"):  # type: ignore[reportUnknownMemberType]
             from backend.src.api.schemas.session_schemas import SessionMetadataModel
 
-            result.metadata = SessionMetadataModel(**persisted["metadata"])
+            result.metadata = SessionMetadataModel(**persisted["metadata"])  # type: ignore[reportUnknownMemberType]
 
     return results
 
@@ -167,20 +169,20 @@ async def get_all_session_statuses():
 async def get_session(
     session_id: str,
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ):
-    convo = await ConversationService.get_conversation_by_id(
+    session_obj = await SessionService.get_session_by_id(
         session=session,
         user_id=user_id,
-        convo_id=session_id,
+        session_id=session_id,
     )
-    result = convo_full_to_session(convo)
+    result = session_full_to_session(session_obj)
 
     persisted = await get_persisted_session_state(session_id)
-    if persisted and persisted.get("metadata"):
+    if persisted and persisted.get("metadata"):  # type: ignore[reportUnknownMemberType]
         from backend.src.api.schemas.session_schemas import SessionMetadataModel
 
-        result.metadata = SessionMetadataModel(**persisted["metadata"])
+        result.metadata = SessionMetadataModel(**persisted["metadata"])  # type: ignore[reportUnknownMemberType]
 
     return result
 
@@ -188,47 +190,47 @@ async def get_session(
 @router.post("/session")
 async def create_session(
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ):
-    new_convo = NewConvoRequest(user_id=user_id)
-    result = await ConversationService.create_conversation(
+    new_session = NewSessionRequest(user_id=user_id)
+    result = await SessionService.create_session(
         session=session,
-        new_convo=new_convo,
+        new_session=new_session,
     )
     now = int(datetime.now(timezone.utc).timestamp())
     session_info = Session(
-        id=result.convo_id,
+        id=result.session_id,
         slug="",
         projectID="",
         workspaceID="default",
         directory=PROJECT_DIR,
-        title=result.title or "New Convo",
+        title=result.title or "New Session",
         version="",
         time=SessionTime(created=now, updated=now),
     )
 
-    await event_emitter.emit_session_created(session_info.model_dump())
+    await event_emitter.emit_session_created(session_info.model_dump())  # type: ignore[reportUnknownMemberType]
     return session_info
 
 
 @router.patch("/session/{session_id}")
 async def update_session(
     session_id: str,
-    body: dict[str, Any],
+    body: dict[str, Any],  # type: ignore[reportExplicitAny]
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ):
-    update = ConvoUpdateRequest(
+    update = SessionUpdateRequest(
         user_id=user_id,
-        convo_id=session_id,
-        title=body.get("title"),
+        session_id=session_id,
+        title=body.get("title"),  # type: ignore[reportAny]
     )
-    result = await ConversationService.update_conversation(
+    result = await SessionService.update_session(
         session=session,
-        convo_update=update,
+        session_update=update,
     )
-    session_info = convo_full_to_session(result)
-    await event_emitter.emit_session_updated(session_info.model_dump())
+    session_info = session_full_to_session(result)
+    await event_emitter.emit_session_updated(session_info.model_dump())  # type: ignore[reportUnknownMemberType]
     return session_info
 
 
@@ -236,12 +238,12 @@ async def update_session(
 async def delete_session(
     session_id: str,
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ):
-    delete_req = ConvoDeleteRequest(user_id=user_id, convo_id=session_id)
-    deleted = await ConversationService.delete_conversation(
+    delete_req = SessionDeleteRequest(user_id=user_id, session_id=session_id)
+    deleted = await SessionService.delete_session(
         session=session,
-        convo_request=delete_req,
+        session_request=delete_req,
     )
     if deleted:
         await cleanup_session(session_id)
@@ -255,7 +257,7 @@ async def delete_session(
             version="",
             time=SessionTime(created=0, updated=0),
         )
-        await event_emitter.emit_session_deleted(session_info.model_dump())
+        await event_emitter.emit_session_deleted(session_info.model_dump())  # type: ignore[reportUnknownMemberType]
     return deleted
 
 
@@ -266,7 +268,7 @@ async def delete_session(
 async def list_messages(
     session_id: str,
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session=Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
     limit: int | None = None,
     before: str | None = None,
 ):
@@ -274,13 +276,13 @@ async def list_messages(
     list messages for a session, newest first.
     supports pagination via `limit` (max messages) and `before` (message ID cursor).
     """
-    convo = await ConversationService.get_conversation_by_id(
+    session_obj = await SessionService.get_session_by_id(
         session=session,
         user_id=user_id,
-        convo_id=session_id,
+        session_id=session_id,
     )
 
-    messages = list(convo.messages)
+    messages = list(session_obj.messages)
 
     if before:
         try:
@@ -289,7 +291,7 @@ async def list_messages(
                 for i, m in enumerate(messages)
                 if getattr(m, "message_id", None) == before
             )
-            messages: list[MessageResponse] = messages[idx + 1 :]
+            messages = messages[idx + 1 :]
         except StopIteration:
             pass
 
@@ -309,48 +311,59 @@ async def create_message(
     body: PromptRequest,
     background_tasks: BackgroundTasks,
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session_factory=Depends(get_session_factory),
+    session_factory=Depends(get_session_factory),  # type: ignore[reportExplicitAny]
 ):
     # import here to avoid circular imports
-    from backend.src.services.conversation.agent_runner import run_agent_with_events
-
-    logger.info(
-        "create_message started",
-        session_id=session_id,
-        providerID=body.providerID,
-        modelID=body.modelID,
-        body_model_providerID=body.model.providerID if body.model else None,
-        body_model_modelID=body.model.modelID if body.model else None,
-    )
+    from backend.src.services.session.agent_runner import run_agent_with_events
 
     # resolve providerID and modelID from body
     provider_id = body.providerID or (body.model.providerID if body.model else None)
     model_id = body.modelID or (body.model.modelID if body.model else None)
 
     # store model info in session metadata synchronously
+    existing = await check_session_existing(session_id=session_id)
+    if not existing:
+        existing = await persist_session_state(
+            session_id=session_id,
+            metadata={"model": {"providerID": provider_id, "modelID": model_id}},
+        )
+    else:
+        existing = True
     if provider_id and model_id:
         from backend.src.api.routes.oc.state import (
             get_model_info_for_session,
             update_persisted_session_state,
         )
 
+        metadata_update: dict[str, Any] = {}  # type: ignore[reportExplicitAny]
         model_info = get_model_info_for_session(provider_id, model_id)
 
-        if model_info:
-            await update_persisted_session_state(
-                session_id=session_id,
-                metadata={"model": model_info},
-            )
-            # emit session.updated so TUI refreshes session with new metadata
-            updated_session = await get_persisted_session_state(session_id)
-            if updated_session:
-                from backend.src.api.schemas.session_schemas import SessionMetadataModel
+        if existing:
+            if model_info:
+                metadata_update["model"] = model_info
+            if body.agent:
+                metadata_update["agent"] = body.agent
 
-                if updated_session.get("metadata"):
-                    session_data["metadata"] = SessionMetadataModel(
-                        model=updated_session["metadata"].get("model")
-                    ).model_dump()
-                await event_emitter.emit_session_updated(session_data)
+            if metadata_update:
+                _ = await update_persisted_session_state(
+                    session_id=session_id,
+                    metadata=metadata_update,
+                )
+                # emit session.updated so TUI refreshes session with new metadata
+                updated_session = await get_persisted_session_state(session_id)
+                if updated_session:
+                    from backend.src.api.schemas.session_schemas import (
+                        SessionMetadataModel,
+                    )
+
+                    session_data: dict[str, Any] = {"id": session_id}  # type: ignore[reportExplicitAny]
+                    if updated_session.get("metadata"):  # type: ignore[reportUnknownMemberType]
+                        session_data["metadata"] = SessionMetadataModel(
+                            model=updated_session["metadata"].get("model"),  # type: ignore[reportUnknownMemberType]
+                            agent=updated_session["metadata"].get("agent"),  # type: ignore[reportUnknownMemberType]
+                        ).model_dump()
+
+                    await event_emitter.emit_session_updated(session_data)
 
     async def _run():
         try:
@@ -373,7 +386,7 @@ async def create_message(
     running_tasks[session_id] = task
 
     # clean up when done
-    def _cleanup(t):
+    def _cleanup(t: Any) -> None:  # type: ignore[reportExplicitAny]
         running_tasks.pop(session_id, None)
 
     task.add_done_callback(_cleanup)
@@ -569,11 +582,11 @@ async def provider_auth():
 
 
 @router.post("/provider/auth")
-async def set_provider_auth(body: dict[str, Any]):
+async def set_provider_auth(body: dict[str, Any]) -> bool:  # type: ignore[reportExplicitAny]
     """store an API key for a provider in .env and os.environ."""
-    provider_id = body.get("providerID")
-    auth = body.get("auth", {})
-    key = auth.get("key")
+    provider_id = body.get("providerID")  # type: ignore[reportAny]
+    auth = body.get("auth", {})  # type: ignore[reportAny]
+    key = auth.get("key")  # type: ignore[reportAny]
     if not provider_id or not key:
         raise HTTPException(status_code=400, detail="providerID and auth.key required")
 
@@ -589,11 +602,11 @@ async def set_provider_auth(body: dict[str, Any]):
     env_var = provider.env[0]
 
     # set in current process
-    os.environ[env_var] = key
+    os.environ[env_var] = key  # type: ignore[reportAny]
 
     # persist to .env file
     env_path = os.path.join(PROJECT_DIR, ".env")
-    _update_env_file(env_path, env_var, key)
+    _update_env_file(env_path, env_var, key)  # type: ignore[reportAny]
 
     return True
 
@@ -643,13 +656,13 @@ async def lsp_status():
 
 @router.post("/lsp/updated")
 async def emit_lsp_updated(
-    body: dict[str, Any],
-):
+    body: dict[str, Any],  # type: ignore[reportExplicitAny]
+) -> dict[str, bool]:
     """
     emit lsp.updated to all SSE subscribers.
     body: arbitrary LSP state dict — the TUI consumes this to refresh diagnostics.
     """
-    await event_emitter.emit_lsp_updated(body)
+    await event_emitter.emit_lsp_updated(body)  # type: ignore[reportUnknownMemberType]
     return {"ok": True}
 
 

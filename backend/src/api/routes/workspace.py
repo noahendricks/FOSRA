@@ -1,30 +1,22 @@
 from __future__ import annotations
 
-import json
-from typing import Annotated, Any
+from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Query, Request
-from fastapi.responses import StreamingResponse
-from langchain_core.messages import AIMessageChunk
+from fastapi import APIRouter, Body, Depends, Query
 from loguru import logger
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.api.dependencies import get_db_session, get_session_factory
-from backend.src.api.request_context import RequestContext
-from backend.src.api.schemas import (
-    ConvoFullResponse,
-    ConvoRequest,
-    ConvoUpdateRequest,
-    MessageRequest,
-    MessageResponse,
-    NewConvoRequest,
-    SourceResponseDeep,
+from backend.src.api.dependencies import get_db_session
+from backend.src.api.schemas.session_api_schemas import (
+    NewSessionRequest,
+    NewSessionResponse,
+    SessionDeleteRequest,
+    SessionFullResponse,
+    SessionListItemResponse,
+    SessionUpdateRequest,
 )
-from backend.src.api.schemas.convo_api_schemas import (
-    ConvoDeleteRequest,
-    ConvoListItemResponse,
-    NewConvoResponse,
-)
+from backend.src.api.schemas.source_api_schemas import SourceResponseDeep
 from backend.src.api.schemas.tui_control_schemas import (
     TextPart,
     UIMessagePart,
@@ -34,13 +26,10 @@ from backend.src.api.schemas.source_api_schemas import (
     ChunkWithScoreResponse,
     SourceGroupResponse,
 )
-from backend.src.domain.enums import DocType, MessageRole
+from backend.src.domain.enums import DocType
 from backend.src.settings import ScoredRetrieval
-from backend.src.services.conversation.agent_service import create_fosra_agent
-from backend.src.services.conversation.conversation_service import ConversationService
-from backend.src.services.conversation.utils.llm_utils import ui_messages_to_lc_messages
+from backend.src.services.session.conversation_service import SessionService
 from backend.src.services.retrieval.vector_service import RetrievedChunk
-from backend.src.storage.utils.converters import ulid_factory
 
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
@@ -61,32 +50,14 @@ def extract_text_from_parts(parts: list[UIMessagePart]) -> str:
 def _retrieved_chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
     return ScoredRetrieval(
         rank=rank,
-        score=chunk.score,
-        text=chunk.text,
-        doc_title=chunk.payload.get("doc_title", ""),
-        chunk_id=chunk.payload.get("chunk_id", str(rank)),
-        doc_id=chunk.payload.get("source_id", ""),
-        page_number=chunk.payload.get("page_number", 0),
-        start_index=chunk.start_char,
-        end_index=chunk.payload.get("end_char", chunk.start_char + len(chunk.text)),
-    )
-
-
-def _accumulated_to_retrieved(item: "AccumulatedItem") -> RetrievedChunk:
-    from backend.src.domain.schemas.retrieval import AccumulatedItem
-
-    return RetrievedChunk(
-        id=item.file_id,
-        score=item.score,
-        text=item.content,
-        payload={
-            "source_id": item.file_id,
-            "doc_title": item.path,
-            "chunk_id": item.file_id,
-            "end_char": 0,
-        },
-        start_char=item.line_start,
-        token_count=0,
+        score=chunk.score,  # type: ignore[reportUnknownMemberType]
+        text=chunk.text,  # type: ignore[reportUnknownMemberType]
+        doc_title=chunk.payload.get("doc_title", ""),  # type: ignore[reportUnknownMemberType]
+        chunk_id=chunk.payload.get("chunk_id", str(rank)),  # type: ignore[reportUnknownMemberType]
+        doc_id=chunk.payload.get("source_id", ""),  # type: ignore[reportUnknownMemberType]
+        page_number=chunk.payload.get("page_number", 0),  # type: ignore[reportUnknownMemberType]
+        start_index=chunk.start_char,  # type: ignore[reportUnknownMemberType]
+        end_index=chunk.payload.get("end_char", chunk.start_char + len(chunk.text)),  # type: ignore[reportUnknownMemberType]
     )
 
 
@@ -97,7 +68,7 @@ def _chunks_to_source_groups(
 
     groups: dict[str, list[tuple[int, RetrievedChunk]]] = defaultdict(list)
     for idx, chunk in enumerate(chunks):
-        source_id = chunk.payload.get("source_id", "unknown")
+        source_id = chunk.payload.get("source_id", "unknown")  # type: ignore[reportUnknownMemberType]
         groups[source_id].append((idx, chunk))
 
     result: list[SourceGroupResponse] = []
@@ -105,22 +76,23 @@ def _chunks_to_source_groups(
         chunk_responses: list[ChunkWithScoreResponse] = []
         top_score = 0.0
         for idx, chunk in items:
-            top_score = max(top_score, chunk.score)
+            top_score = max(top_score, chunk.score)  # type: ignore[reportUnknownMemberType]
             chunk_responses.append(
                 ChunkWithScoreResponse(
                     chunk=ChunkResponse(
-                        chunk_id=chunk.payload.get("chunk_id", str(idx)),
+                        chunk_id=chunk.payload.get("chunk_id", str(idx)),  # type: ignore[reportUnknownMemberType]
                         source_id=source_id,
                         source_hash="",
-                        start_index=chunk.start_char,
-                        end_index=chunk.payload.get(
-                            "end_char", chunk.start_char + len(chunk.text)
+                        start_index=chunk.start_char,  # type: ignore[reportUnknownMemberType]
+                        end_index=chunk.payload.get(  # type: ignore[reportUnknownMemberType]
+                            "end_char",
+                            chunk.start_char + len(chunk.text),  # type: ignore[reportUnknownMemberType]
                         ),
-                        token_count=chunk.token_count,
-                        text=chunk.text,
+                        token_count=chunk.token_count,  # type: ignore[reportUnknownMemberType]
+                        text=chunk.text,  # type: ignore[reportUnknownMemberType]
                     ),
-                    similarity_score=chunk.score,
-                    reranker_score=chunk.score,
+                    similarity_score=chunk.score,  # type: ignore[reportUnknownMemberType]
+                    reranker_score=chunk.score,  # type: ignore[reportUnknownMemberType]
                 )
             )
 
@@ -150,48 +122,50 @@ async def intercept_file_binary(
     return None
 
 
-@router.get("/{user_id}/{convo_id}/get_convo")
-async def get_convo(
-    user_id: str, convo_id: str, session=Depends(get_db_session)
-) -> ConvoFullResponse:
-    return await ConversationService().get_conversation_by_id(
-        user_id=user_id, convo_id=convo_id, session=session
+@router.get("/{user_id}/{session_id}/get_session")
+async def get_session(
+    user_id: str,
+    session_id: str,
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
+) -> SessionFullResponse:
+    return await SessionService().get_session_by_id(
+        user_id=user_id, session_id=session_id, session=session
     )
 
 
-@router.get("/{user_id}/get_convos_list/")
-async def get_list_of_convos(
-    user_id: str, session=Depends(get_db_session)
-) -> list[ConvoListItemResponse]:
-    return await ConversationService().list_conversations(
-        user_id=user_id, session=session
+@router.get("/{user_id}/get_sessions_list/")
+async def get_list_of_sessions(
+    user_id: str,
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
+) -> list[SessionListItemResponse]:
+    return await SessionService().list_sessions(user_id=user_id, session=session)
+
+
+@router.post("/{user_id}/new_session/")
+async def create_new_session(
+    request: Annotated[NewSessionRequest, Query()],
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
+) -> NewSessionResponse:
+    return await SessionService().create_session(new_session=request, session=session)
+
+
+@router.put("/{session_id}")
+async def update_session(
+    request: Annotated[SessionUpdateRequest, Query()],
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
+) -> SessionFullResponse:
+    return await SessionService().update_session(
+        session=session, session_update=request
     )
 
 
-@router.post("/{user_id}/new_convo/")
-async def create_new_convo(
-    request: Annotated[NewConvoRequest, Query()], session=Depends(get_db_session)
-) -> NewConvoResponse:
-    return await ConversationService().create_conversation(
-        new_convo=request, session=session
-    )
-
-
-@router.put("/{convo_id}")
-async def update_convo(
-    request: Annotated[ConvoUpdateRequest, Query()], session=Depends(get_db_session)
-) -> ConvoFullResponse:
-    return await ConversationService().update_conversation(
-        session=session, convo_update=request
-    )
-
-
-@router.delete("/{convo_id}")
-async def delete_convo(
-    request: Annotated[ConvoDeleteRequest, Query()], session=Depends(get_db_session)
+@router.delete("/{session_id}")
+async def delete_session(
+    request: Annotated[SessionDeleteRequest, Query()],
+    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ) -> bool:
-    return await ConversationService().delete_conversation(
-        session=session, convo_request=request
+    return await SessionService().delete_session(
+        session=session, session_request=request
     )
 
 

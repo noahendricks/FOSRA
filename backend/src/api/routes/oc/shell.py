@@ -9,9 +9,8 @@ real shell execution with sandboxing.
 
 from __future__ import annotations
 
-import os
 import subprocess
-from typing import Annotated, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
@@ -56,7 +55,7 @@ async def run_shell(
     returns { "stdout": str, "stderr": str, "exit": int }
     """
     command = body.get("command", "")
-    _validate_command(command)
+    _ = _validate_command(command)
 
     import shlex
 
@@ -92,7 +91,7 @@ async def run_shell(
 @router.post("/{session_id}/command")
 async def run_session_command(
     session_id: str,
-    body: dict,
+    body: dict[str, Any],
 ):
     """
     stub — slash commands are handled by the agent prompt flow.

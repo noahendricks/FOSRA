@@ -11,7 +11,7 @@ import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.src.api.dependencies import get_current_user_id, get_db_session
@@ -24,7 +24,6 @@ from backend.src.api.schemas.tui_schemas import (
     AssistantMessageTime,
     AssistantMessageTokens,
     AssistantMessageTokensCache,
-    Message,
     Part,
     TextPart,
     TextPartTime,
@@ -34,10 +33,9 @@ from backend.src.api.schemas.tui_schemas import (
     UserMessage,
     UserMessageModel,
     UserMessageTime,
-    message_to_tui,
 )
 from backend.src.services.session.event_emitter import get_event_emitter
-from backend.src.storage.models import ConvoORM, MessageORM
+from backend.src.storage.models import SessionORM, MessageORM
 from backend.src.storage.utils.converters import ulid_factory
 
 router = APIRouter(prefix="/oc/session", tags=["Message Operations"])
@@ -48,12 +46,12 @@ async def _get_message_orm(
     session: AsyncSession,
     message_id: str,
     user_id: str,
-    convo_id: str,
+    session_id: str,
 ) -> MessageORM:
     stmt = (
         select(MessageORM)
         .where(MessageORM.message_id == message_id)
-        .where(MessageORM.convo_id == convo_id)
+        .where(MessageORM.session_id == session_id)
         .where(MessageORM.user_id == user_id)
     )
     result = await session.execute(stmt)
@@ -66,18 +64,18 @@ async def _get_message_orm(
 async def _get_convo_for_user(
     session: AsyncSession,
     user_id: str,
-    convo_id: str,
-) -> ConvoORM:
+    session_id: str,
+) -> SessionORM:
     stmt = (
-        select(ConvoORM)
-        .where(ConvoORM.convo_id == convo_id)
-        .where(ConvoORM.user_id == user_id)
+        select(SessionORM)
+        .where(SessionORM.session_id == session_id)
+        .where(SessionORM.user_id == user_id)
     )
     result = await session.execute(stmt)
-    convo = result.scalar_one_or_none()
-    if not convo:
+    session_obj = result.scalar_one_or_none()
+    if not session_obj:
         raise HTTPException(status_code=404, detail="Session not found")
-    return convo
+    return session_obj
 
 
 def _message_orm_to_tui(msg: MessageORM, session_id: str) -> dict[str, Any]:
@@ -165,7 +163,7 @@ async def get_message(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """return a single message with its parts."""
-    await _get_convo_for_user(session, user_id, session_id)
+    _ = await _get_convo_for_user(session, user_id, session_id)
     msg = await _get_message_orm(session, message_id, user_id, session_id)
     return _message_orm_to_tui(msg, session_id)
 
@@ -178,10 +176,12 @@ async def delete_message(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """delete a message and publish message.removed event."""
-    await _get_convo_for_user(session, user_id, session_id)
+    _ = await _get_convo_for_user(session, user_id, session_id)
     msg = await _get_message_orm(session, message_id, user_id, session_id)
 
-    await session.execute(delete(MessageORM).where(MessageORM.message_id == message_id))
+    _ = await session.execute(
+        delete(MessageORM).where(MessageORM.message_id == message_id)
+    )
     await session.commit()
 
     await event_emitter.emit_message_removed(session_id, message_id)
@@ -201,7 +201,7 @@ async def update_part(
     update part content (text field).
     publishes message.part.updated with the updated TextPart.
     """
-    await _get_convo_for_user(session, user_id, session_id)
+    _ = await _get_convo_for_user(session, user_id, session_id)
     msg = await _get_message_orm(session, message_id, user_id, session_id)
 
     if "text" in body:
@@ -218,7 +218,7 @@ async def update_part(
         time=TextPartTime(start=created, end=int(time.time())),
     )
 
-    await event_emitter.emit_message_part_updated(updated_part)
+    await event_emitter.emit_message_part_updated(updated_part.model_dump())
     return {"ok": True}
 
 
@@ -234,7 +234,7 @@ async def delete_part(
     stub — parts are embedded in messages so we can't delete a single part
     without restructuring. publish part.removed event for the tui to handle.
     """
-    await _get_convo_for_user(session, user_id, session_id)
+    _ = await _get_convo_for_user(session, user_id, session_id)
 
     await event_emitter.emit_message_part_removed(session_id, message_id, part_id)
     return True
