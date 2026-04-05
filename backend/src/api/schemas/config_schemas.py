@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -12,11 +12,11 @@ from pydantic import BaseModel
 
 class ApiErrorData(BaseModel):
     message: str
-    statusCode: Optional[int] = None
+    statusCode: int | None = None
     isRetryable: bool
-    responseHeaders: Optional[Dict[str, str]] = None
-    responseBody: Optional[str] = None
-    metadata: Optional[Dict[str, str]] = None
+    responseHeaders: dict[str, str] | None = None
+    responseBody: str | None = None
+    metadata: dict[str, str] | None = None
 
 
 class ApiError(BaseModel):
@@ -73,7 +73,7 @@ class StructuredOutputError(BaseModel):
 
 class ContextOverflowErrorData(BaseModel):
     message: str
-    responseBody: Optional[str] = None
+    responseBody: str | None = None
 
 
 class ContextOverflowError(BaseModel):
@@ -117,7 +117,7 @@ class ModelCapabilities(BaseModel):
     toolcall: bool
     input: ModelCapabilitiesInput
     output: ModelCapabilitiesOutput
-    interleaved: Union[bool, ModelCapabilitiesInterleaved]
+    interleaved: bool | ModelCapabilitiesInterleaved
 
 
 class ModelCostCache(BaseModel):
@@ -140,12 +140,12 @@ class ModelCost(BaseModel):
     input: float
     output: float
     cache: ModelCostCache
-    experimentalOver200K: Optional[ModelCostExperimentalOver200k] = None
+    experimentalOver200K: ModelCostExperimentalOver200k | None = None
 
 
 class ModelLimit(BaseModel):
     context: int
-    input: Optional[int] = None
+    input: int | None = None
     output: int
 
 
@@ -154,25 +154,25 @@ class Model(BaseModel):
     providerID: str
     api: ModelApi
     name: str
-    family: Optional[str] = None
+    family: str | None = None
     capabilities: ModelCapabilities
     cost: ModelCost
     limit: ModelLimit
     status: Literal["alpha", "beta", "deprecated", "active"]
-    options: Dict[str, Any]
-    headers: Dict[str, Any]
+    options: dict[str, Any]
+    headers: dict[str, Any]
     releaseDate: str
-    variants: Optional[Dict[str, Dict[str, Any]]] = None
+    variants: dict[str, dict[str, Any]] | None = None
 
 
 class Provider(BaseModel):
     id: str
     name: str
     source: Literal["env", "config", "custom", "api"]
-    env: List[str]
-    key: Optional[str] = None
-    options: Dict[str, Any]
-    models: Dict[str, Model]
+    env: list[str]
+    key: str | None = None
+    options: dict[str, Any]
+    models: dict[str, Model]
 
 
 class AgentModel(BaseModel):
@@ -182,19 +182,19 @@ class AgentModel(BaseModel):
 
 class Agent(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     mode: Literal["subagent", "primary", "all"]
-    native: Optional[bool] = None
-    hidden: Optional[bool] = None
-    topP: Optional[float] = None
-    temperature: Optional[float] = None
-    color: Optional[str] = None
+    native: bool | None = None
+    hidden: bool | None = None
+    topP: float | None = None
+    temperature: float | None = None
+    color: str | None = None
     permission: Any = None  # PermissionRuleset — avoid circular
-    model: Optional[AgentModel] = None
-    variant: Optional[str] = None
-    prompt: Optional[str] = None
-    options: Dict[str, Any]
-    steps: Optional[int] = None
+    model: AgentModel | None = None
+    variant: str | None = None
+    prompt: str | None = None
+    options: dict[str, Any]
+    steps: int | None = None
 
 
 # ---- CONFIG ----
@@ -205,28 +205,28 @@ class LogLevel(BaseModel):
 
 
 class ServerConfig(BaseModel):
-    port: Optional[int] = None
-    hostname: Optional[str] = None
-    mdns: Optional[bool] = None
-    mdnsDomain: Optional[str] = None
-    cors: Optional[List[str]] = None
+    port: int | None = None
+    hostname: str | None = None
+    mdns: bool | None = None
+    mdnsDomain: str | None = None
+    cors: list[str] | None = None
 
 
 class ConfigCommandEntry(BaseModel):
     template: str
-    description: Optional[str] = None
-    agent: Optional[str] = None
-    model: Optional[str] = None
-    subtask: Optional[bool] = None
+    description: str | None = None
+    agent: str | None = None
+    model: str | None = None
+    subtask: bool | None = None
 
 
 class ConfigSkills(BaseModel):
-    paths: Optional[List[str]] = None
-    urls: Optional[List[str]] = None
+    paths: list[str] | None = None
+    urls: list[str] | None = None
 
 
 class ConfigWatcher(BaseModel):
-    ignore: Optional[List[str]] = None
+    ignore: list[str] | None = None
 
 
 class PermissionConfig(BaseModel):
@@ -234,90 +234,90 @@ class PermissionConfig(BaseModel):
 
 
 class ConfigCompaction(BaseModel):
-    auto: Optional[bool] = None
-    prune: Optional[bool] = None
-    reserved: Optional[int] = None
+    auto: bool | None = None
+    prune: bool | None = None
+    reserved: int | None = None
 
 
 class ConfigExperimental(BaseModel):
-    disablePasteSummary: Optional[bool] = None
-    batchTool: Optional[bool] = None
-    openTelemetry: Optional[bool] = None
-    primaryTools: Optional[List[str]] = None
-    continueLoopOnDeny: Optional[bool] = None
-    mcpTimeout: Optional[int] = None
+    disablePasteSummary: bool | None = None
+    batchTool: bool | None = None
+    openTelemetry: bool | None = None
+    primaryTools: list[str] | None = None
+    continueLoopOnDeny: bool | None = None
+    mcpTimeout: int | None = None
 
 
 class ConfigEnterprise(BaseModel):
-    url: Optional[str] = None
+    url: str | None = None
 
 
 class AgentConfig(BaseModel):
-    model: Optional[str] = None
-    variant: Optional[str] = None
-    temperature: Optional[float] = None
-    topP: Optional[float] = None
-    prompt: Optional[str] = None
-    tools: Optional[Dict[str, bool]] = None
-    disable: Optional[bool] = None
-    description: Optional[str] = None
-    mode: Optional[Literal["subagent", "primary", "all"]] = None
-    hidden: Optional[bool] = None
-    options: Optional[Dict[str, Any]] = None
-    color: Optional[str] = None
-    steps: Optional[int] = None
-    maxSteps: Optional[int] = None
-    permission: Optional[PermissionConfig] = None
+    model: str | None = None
+    variant: str | None = None
+    temperature: float | None = None
+    topP: float | None = None
+    prompt: str | None = None
+    tools: dict[str, bool] | None = None
+    disable: bool | None = None
+    description: str | None = None
+    mode: Literal["subagent", "primary", "all"] | None = None
+    hidden: bool | None = None
+    options: dict[str, Any] | None = None
+    color: str | None = None
+    steps: int | None = None
+    maxSteps: int | None = None
+    permission: PermissionConfig | None = None
 
 
 class ConfigAgent(BaseModel):
-    plan: Optional[AgentConfig] = None
-    build: Optional[AgentConfig] = None
-    general: Optional[AgentConfig] = None
-    explore: Optional[AgentConfig] = None
-    title: Optional[AgentConfig] = None
-    summary: Optional[AgentConfig] = None
-    compaction: Optional[AgentConfig] = None
+    plan: AgentConfig | None = None
+    build: AgentConfig | None = None
+    general: AgentConfig | None = None
+    explore: AgentConfig | None = None
+    title: AgentConfig | None = None
+    summary: AgentConfig | None = None
+    compaction: AgentConfig | None = None
 
 
 class ProviderConfigOptions(BaseModel):
-    apiKey: Optional[str] = None
-    baseURL: Optional[str] = None
-    enterpriseUrl: Optional[str] = None
-    setCacheKey: Optional[bool] = None
-    timeout: Optional[Union[int, bool]] = None
-    chunkTimeout: Optional[int] = None
+    apiKey: str | None = None
+    baseURL: str | None = None
+    enterpriseUrl: str | None = None
+    setCacheKey: bool | None = None
+    timeout: int | bool | None = None
+    chunkTimeout: int | None = None
 
 
 class ProviderConfigModelProvider(BaseModel):
-    npm: Optional[str] = None
-    api: Optional[str] = None
+    npm: str | None = None
+    api: str | None = None
 
 
 class ProviderConfigModelModalities(BaseModel):
-    input: List[Literal["text", "audio", "image", "video", "pdf"]]
-    output: List[Literal["text", "audio", "image", "video", "pdf"]]
+    input: list[Literal["text", "audio", "image", "video", "pdf"]]
+    output: list[Literal["text", "audio", "image", "video", "pdf"]]
 
 
 class ProviderConfigModelLimit(BaseModel):
     context: int
-    input: Optional[int] = None
+    input: int | None = None
     output: int
 
 
 class ProviderConfigModelCostContextOver200k(BaseModel):
     input: float
     output: float
-    cacheRead: Optional[float] = None
-    cacheWrite: Optional[float] = None
+    cacheRead: float | None = None
+    cacheWrite: float | None = None
 
 
 class ProviderConfigModelCost(BaseModel):
     input: float
     output: float
-    cacheRead: Optional[float] = None
-    cacheWrite: Optional[float] = None
-    contextOver200k: Optional[ProviderConfigModelCostContextOver200k] = None
+    cacheRead: float | None = None
+    cacheWrite: float | None = None
+    contextOver200k: ProviderConfigModelCostContextOver200k | None = None
 
 
 class ProviderConfigModelInterleaved(BaseModel):
@@ -325,67 +325,67 @@ class ProviderConfigModelInterleaved(BaseModel):
 
 
 class ProviderConfigModelVariant(BaseModel):
-    disabled: Optional[bool] = None
+    disabled: bool | None = None
 
 
 class ProviderConfigModel(BaseModel):
-    id: Optional[str] = None
-    name: Optional[str] = None
-    family: Optional[str] = None
-    releaseDate: Optional[str] = None
-    attachment: Optional[bool] = None
-    reasoning: Optional[bool] = None
-    temperature: Optional[bool] = None
-    toolCall: Optional[bool] = None
-    interleaved: Optional[Union[bool, ProviderConfigModelInterleaved]] = None
-    cost: Optional[ProviderConfigModelCost] = None
-    limit: Optional[ProviderConfigModelLimit] = None
-    modalities: Optional[ProviderConfigModelModalities] = None
-    experimental: Optional[bool] = None
-    status: Optional[Literal["alpha", "beta", "deprecated"]] = None
-    options: Optional[Dict[str, Any]] = None
-    headers: Optional[Dict[str, str]] = None
-    provider: Optional[ProviderConfigModelProvider] = None
-    variants: Optional[Dict[str, ProviderConfigModelVariant]] = None
+    id: str | None = None
+    name: str | None = None
+    family: str | None = None
+    releaseDate: str | None = None
+    attachment: bool | None = None
+    reasoning: bool | None = None
+    temperature: bool | None = None
+    toolCall: bool | None = None
+    interleaved: bool | ProviderConfigModelInterleaved | None = None
+    cost: ProviderConfigModelCost | None = None
+    limit: ProviderConfigModelLimit | None = None
+    modalities: ProviderConfigModelModalities | None = None
+    experimental: bool | None = None
+    status: Literal["alpha", "beta", "deprecated"] | None = None
+    options: dict[str, Any] | None = None
+    headers: dict[str, str] | None = None
+    provider: ProviderConfigModelProvider | None = None
+    variants: dict[str, ProviderConfigModelVariant] | None = None
 
 
 class ProviderConfig(BaseModel):
-    api: Optional[str] = None
-    name: Optional[str] = None
-    env: Optional[List[str]] = None
-    id: Optional[str] = None
-    npm: Optional[str] = None
-    models: Optional[Dict[str, ProviderConfigModel]] = None
-    whitelist: Optional[List[str]] = None
-    blacklist: Optional[List[str]] = None
-    options: Optional[ProviderConfigOptions] = None
+    api: str | None = None
+    name: str | None = None
+    env: list[str] | None = None
+    id: str | None = None
+    npm: str | None = None
+    models: dict[str, ProviderConfigModel] | None = None
+    whitelist: list[str] | None = None
+    blacklist: list[str] | None = None
+    options: ProviderConfigOptions | None = None
 
 
 class McpLocalConfig(BaseModel):
     type: Literal["local"]
-    command: List[str]
-    environment: Optional[Dict[str, str]] = None
-    enabled: Optional[bool] = None
-    timeout: Optional[int] = None
+    command: list[str]
+    environment: dict[str, str] | None = None
+    enabled: bool | None = None
+    timeout: int | None = None
 
 
 class McpRemoteConfig(BaseModel):
     type: Literal["remote"]
     url: str
-    enabled: Optional[bool] = None
-    headers: Optional[Dict[str, str]] = None
-    oauth: Optional[Union["McpOAuthConfig", bool]] = None
-    timeout: Optional[int] = None
+    enabled: bool | None = None
+    headers: dict[str, str] | None = None
+    oauth: "McpOAuthConfig | bool | None" = None
+    timeout: int | None = None
 
 
 class McpOAuthConfig(BaseModel):
-    clientId: Optional[str] = None
-    clientSecret: Optional[str] = None
-    scope: Optional[str] = None
+    clientId: str | None = None
+    clientSecret: str | None = None
+    scope: str | None = None
 
 
 class ConfigMcpValue(BaseModel):
-    enabled: Optional[bool] = None
+    enabled: bool | None = None
 
 
 class ConfigFormatter(BaseModel):
@@ -401,34 +401,32 @@ class LayoutConfig(BaseModel):
 
 
 class Config(BaseModel):
-    logLevel: Optional[LogLevel] = None
-    server: Optional[ServerConfig] = None
-    command: Optional[Dict[str, ConfigCommandEntry]] = None
-    skills: Optional[ConfigSkills] = None
-    watcher: Optional[ConfigWatcher] = None
-    plugin: Optional[List[str]] = None
-    snapshot: Optional[bool] = None
-    share: Optional[Literal["manual", "auto", "disabled"]] = None
-    autoshare: Optional[bool] = None
-    autoupdate: Optional[Union[bool, Literal["notify"]]] = None
-    disabledProviders: Optional[List[str]] = None
-    enabledProviders: Optional[List[str]] = None
-    model: Optional[str] = None
-    smallModel: Optional[str] = None
-    defaultAgent: Optional[str] = None
-    username: Optional[str] = None
-    mode: Optional[Dict[str, Optional[AgentConfig]]] = None
-    agent: Optional[ConfigAgent] = None
-    provider: Optional[Dict[str, ProviderConfig]] = None
-    mcp: Optional[Dict[str, Union[McpLocalConfig, McpRemoteConfig, ConfigMcpValue]]] = (
-        None
-    )
-    formatter: Optional[Union[bool, ConfigFormatter]] = None
-    lsp: Optional[Union[bool, ConfigLsp]] = None
-    instructions: Optional[List[str]] = None
-    layout: Optional[LayoutConfig] = None
-    permission: Optional[PermissionConfig] = None
-    tools: Optional[Dict[str, bool]] = None
-    enterprise: Optional[ConfigEnterprise] = None
-    compaction: Optional[ConfigCompaction] = None
-    experimental: Optional[ConfigExperimental] = None
+    logLevel: LogLevel | None = None
+    server: ServerConfig | None = None
+    command: dict[str, ConfigCommandEntry] | None = None
+    skills: ConfigSkills | None = None
+    watcher: ConfigWatcher | None = None
+    plugin: list[str] | None = None
+    snapshot: bool | None = None
+    share: Literal["manual", "auto", "disabled"] | None = None
+    autoshare: bool | None = None
+    autoupdate: bool | Literal["notify"] | None = None
+    disabledProviders: list[str] | None = None
+    enabledProviders: list[str] | None = None
+    model: str | None = None
+    smallModel: str | None = None
+    defaultAgent: str | None = None
+    username: str | None = None
+    mode: dict[str, AgentConfig | None] | None = None
+    agent: ConfigAgent | None = None
+    provider: dict[str, ProviderConfig] | None = None
+    mcp: dict[str, McpLocalConfig | McpRemoteConfig | ConfigMcpValue] | None = None
+    formatter: bool | ConfigFormatter | None = None
+    lsp: bool | ConfigLsp | None = None
+    instructions: list[str] | None = None
+    layout: LayoutConfig | None = None
+    permission: PermissionConfig | None = None
+    tools: dict[str, bool] | None = None
+    enterprise: ConfigEnterprise | None = None
+    compaction: ConfigCompaction | None = None
+    experimental: ConfigExperimental | None = None

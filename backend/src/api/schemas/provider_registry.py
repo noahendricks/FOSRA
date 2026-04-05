@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 
 from loguru import logger as _loguru
 import os
@@ -136,7 +135,7 @@ async def refresh_models_cache() -> bool:
     return False
 
 
-_refresh_task: asyncio.Task | None = None
+_refresh_task: asyncio.Task[None] | None = None
 
 
 def _start_models_refresh_task() -> None:
@@ -148,7 +147,7 @@ def _start_models_refresh_task() -> None:
     async def _periodic_refresh():
         while True:
             await asyncio.sleep(MODELS_REFRESH_INTERVAL)
-            await refresh_models_cache()
+            _ = await refresh_models_cache()
 
     _refresh_task = asyncio.create_task(_periodic_refresh())
     logger.info("Started models.dev periodic refresh task")
@@ -772,7 +771,6 @@ async def _fetch_local_ollama_models() -> tuple[list[dict[str, Any]], list[str]]
     except Exception as e:
         logger.opt(exception=True).warning("Failed to fetch local Ollama models")
         return None
-    return None
 
 
 def _serialize_local_ollama(

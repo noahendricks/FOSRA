@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -11,35 +11,35 @@ from pydantic import BaseModel
 
 
 class ProjectIcon(BaseModel):
-    url: Optional[str] = None
-    override: Optional[str] = None
-    color: Optional[str] = None
+    url: str | None = None
+    override: str | None = None
+    color: str | None = None
 
 
 class ProjectCommands(BaseModel):
-    start: Optional[str] = None
+    start: str | None = None
 
 
 class ProjectTime(BaseModel):
     created: int
     updated: int
-    initialized: Optional[int] = None
+    initialized: int | None = None
 
 
 class Project(BaseModel):
     id: str
     worktree: str
-    vcs: Optional[Literal["git"]] = None
-    name: Optional[str] = None
-    icon: Optional[ProjectIcon] = None
-    commands: Optional[ProjectCommands] = None
+    vcs: Literal["git"] | None = None
+    name: str | None = None
+    icon: ProjectIcon | None = None
+    commands: ProjectCommands | None = None
     time: ProjectTime
-    sandboxes: List[str]
+    sandboxes: list[str]
 
 
 class ProjectSummary(BaseModel):
     id: str
-    name: Optional[str] = None
+    name: str | None = None
     worktree: str
 
 
@@ -49,10 +49,10 @@ class ProjectSummary(BaseModel):
 class Workspace(BaseModel):
     id: str
     type: str
-    branch: Optional[str] = None
-    name: Optional[str] = None
-    directory: Optional[str] = None
-    extra: Optional[Any] = None
+    branch: str | None = None
+    name: str | None = None
+    directory: str | None = None
+    extra: Any | None = None
     projectID: str
 
 
@@ -66,8 +66,8 @@ class Worktree(BaseModel):
 
 
 class WorktreeCreateInput(BaseModel):
-    name: Optional[str] = None
-    startCommand: Optional[str] = None
+    name: str | None = None
+    startCommand: str | None = None
 
 
 class WorktreeRemoveInput(BaseModel):
@@ -115,8 +115,8 @@ class OAuth(BaseModel):
     refresh: str
     access: str
     expires: int
-    accountId: Optional[str] = None
-    enterpriseUrl: Optional[str] = None
+    accountId: str | None = None
+    enterpriseUrl: str | None = None
 
 
 class ApiAuth(BaseModel):
@@ -148,7 +148,7 @@ class NotFoundError(BaseModel):
 
 class BadRequestError(BaseModel):
     data: Any
-    errors: List[Dict[str, Any]]
+    errors: list[dict[str, Any]]
     success: Literal[False]
 
 
@@ -159,7 +159,7 @@ class Pty(BaseModel):
     id: str
     title: str
     command: str
-    args: List[str]
+    args: list[str]
     cwd: str
     status: Literal["running", "exited"]
     pid: int

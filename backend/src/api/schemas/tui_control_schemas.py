@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from backend.src.api.schemas.base import _BaseModelFlex
+from backend.src.api.schemas.base import BaseModelFlex
 
 
 # ---- LEGACY WORKSPACE MESSAGE TYPES ----
 
 
-class TextPart(_BaseModelFlex):
+class TextPart(BaseModelFlex):
     type: str
     text: str
 
 
-class FilePart(_BaseModelFlex):
+class FilePart(BaseModelFlex):
     type: str
     name: str
     size: int
@@ -30,11 +30,12 @@ class FilePart(_BaseModelFlex):
 UIMessagePart = TextPart | FilePart
 
 
-class UIMessage(_BaseModelFlex):
+class UIMessage(BaseModelFlex):
     id: str
     role: str
     parts: list[UIMessagePart]
     message_metadata: dict[str, Any] | None = None
+    sources: list[dict[str, Any]] | None = None
 
 
 # ---- FILE DIFF ----
@@ -46,7 +47,7 @@ class FileDiff(BaseModel):
     after: str
     additions: int
     deletions: int
-    status: Optional[Literal["added", "deleted", "modified"]] = None
+    status: Literal["added", "deleted", "modified"] | None = None
 
 
 class RangeStart(BaseModel):
@@ -104,14 +105,15 @@ class PermissionRequest(BaseModel):
     id: str
     sessionID: str
     permission: str
-    patterns: List[str]
-    metadata: Dict[str, Any]
-    always: List[str]
-    tool: Optional[PermissionRequestTool] = None
+    patterns: list[str]
+    metadata: dict[str, Any]
+    always: list[str]
+    tool: PermissionRequestTool | None = None
 
 
 class PermissionAction(BaseModel):
-    pass
+    reply: Literal["once", "always", "reject"]
+    message: str = ""
 
 
 class PermissionRule(BaseModel):
@@ -135,9 +137,9 @@ class QuestionOption(BaseModel):
 class QuestionInfo(BaseModel):
     question: str
     header: str
-    options: List[QuestionOption]
-    multiple: Optional[bool] = None
-    custom: Optional[bool] = None
+    options: list[QuestionOption]
+    multiple: bool | None = None
+    custom: bool | None = None
 
 
 class QuestionRequestTool(BaseModel):
@@ -148,12 +150,17 @@ class QuestionRequestTool(BaseModel):
 class QuestionRequest(BaseModel):
     id: str
     sessionID: str
-    questions: List[QuestionInfo]
-    tool: Optional[QuestionRequestTool] = None
+    questions: list[QuestionInfo]
+    tool: QuestionRequestTool | None = None
 
 
 class QuestionAnswer(BaseModel):
-    pass
+    sessionID: str
+    answers: list[list[str]]
+
+
+class QuestionReject(BaseModel):
+    sessionID: str
 
 
 # ---- TODO ----
@@ -178,13 +185,13 @@ class Path(BaseModel):
 
 class Command(BaseModel):
     name: str
-    description: Optional[str] = None
-    agent: Optional[str] = None
-    model: Optional[str] = None
-    source: Optional[Literal["command", "mcp", "skill"]] = None
+    description: str | None = None
+    agent: str | None = None
+    model: str | None = None
+    source: Literal["command", "mcp", "skill"] | None = None
     template: str
-    subtask: Optional[bool] = None
-    hints: List[str] = Field(default_factory=list)
+    subtask: bool | None = None
+    hints: list[str] = Field(default_factory=list)
 
 
 # ---- PROMPT REQUEST ----
@@ -197,26 +204,26 @@ class SubtaskPartModel(BaseModel):
 
 class TextPartTime(BaseModel):
     start: int
-    end: Optional[int] = None
+    end: int | None = None
 
 
 class TextPartInput(BaseModel):
-    id: Optional[str] = None
+    id: str | None = None
     type: Literal["text"]
     text: str
-    synthetic: Optional[bool] = None
-    ignored: Optional[bool] = None
-    time: Optional[TextPartTime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    synthetic: bool | None = None
+    ignored: bool | None = None
+    time: TextPartTime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class FilePartInput(BaseModel):
-    id: Optional[str] = None
+    id: str | None = None
     type: Literal["file"]
     mime: str
-    filename: Optional[str] = None
+    filename: str | None = None
     url: str
-    source: Optional[FilePartSource] = None
+    source: FilePartSource | None = None
 
 
 class AgentPartInputSource(BaseModel):
@@ -226,20 +233,20 @@ class AgentPartInputSource(BaseModel):
 
 
 class AgentPartInput(BaseModel):
-    id: Optional[str] = None
+    id: str | None = None
     type: Literal["agent"]
     name: str
-    source: Optional[AgentPartInputSource] = None
+    source: AgentPartInputSource | None = None
 
 
 class SubtaskPartInput(BaseModel):
-    id: Optional[str] = None
+    id: str | None = None
     type: Literal["subtask"]
     prompt: str
     description: str
     agent: str
-    model: Optional[SubtaskPartModel] = None
-    command: Optional[str] = None
+    model: SubtaskPartModel | None = None
+    command: str | None = None
 
 
 class AgentModel(BaseModel):
@@ -248,14 +255,14 @@ class AgentModel(BaseModel):
 
 
 class PromptRequest(BaseModel):
-    sessionID: Optional[str] = None
-    parts: List[
-        Union[TextPartInput, FilePartInput, AgentPartInput, SubtaskPartInput]
-    ] = Field(default_factory=list)
-    model: Optional[AgentModel] = None
-    agent: Optional[str] = None
-    variant: Optional[str] = None
-    providerID: Optional[str] = None
-    modelID: Optional[str] = None
+    sessionID: str | None = None
+    parts: list[TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput] = (
+        Field(default_factory=list)
+    )
+    model: AgentModel | None = None
+    agent: str | None = None
+    variant: str | None = None
+    providerID: str | None = None
+    modelID: str | None = None
 
     model_config = {"extra": "allow"}

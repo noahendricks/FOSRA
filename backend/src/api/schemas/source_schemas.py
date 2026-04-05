@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -20,25 +20,25 @@ class FileContentPatchHunk(BaseModel):
     oldLines: int
     newStart: int
     newLines: int
-    lines: List[str]
+    lines: list[str]
 
 
 class FileContentPatch(BaseModel):
     oldFileName: str
     newFileName: str
-    oldHeader: Optional[str] = None
-    newHeader: Optional[str] = None
-    hunks: List[FileContentPatchHunk]
-    index: Optional[str] = None
+    oldHeader: str | None = None
+    newHeader: str | None = None
+    hunks: list[FileContentPatchHunk]
+    index: str | None = None
 
 
 class FileContent(BaseModel):
     type: Literal["text", "binary"]
     content: str
-    diff: Optional[str] = None
-    patch: Optional[FileContentPatch] = None
-    encoding: Optional[Literal["base64"]] = None
-    mimeType: Optional[str] = None
+    diff: str | None = None
+    patch: FileContentPatch | None = None
+    encoding: Literal["base64"] | None = None
+    mimeType: str | None = None
 
 
 class File(BaseModel):
@@ -64,7 +64,7 @@ class LspStatus(BaseModel):
 
 class FormatterStatus(BaseModel):
     name: str
-    extensions: List[str]
+    extensions: list[str]
     enabled: bool
 
 
@@ -74,8 +74,8 @@ class FormatterStatus(BaseModel):
 class McpResource(BaseModel):
     name: str
     uri: str
-    description: Optional[str] = None
-    mimeType: Optional[str] = None
+    description: str | None = None
+    mimeType: str | None = None
     client: str
 
 

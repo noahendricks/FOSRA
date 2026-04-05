@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from langchain_litellm import ChatLiteLLM
 from pydantic import Field, SecretStr
 
-from backend.src.api.schemas.base import _BaseModelFlexLower as _BaseModelFlex
+from backend.src.api.schemas.base import BaseModelFlexLower as BaseModelFlex
 from backend.src.domain.enums import (
     EmbedderType,
     EmbeddingMode,
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 # =============================================================================
 # Config Models
 # =============================================================================
-class BaseServiceConfig(_BaseModelFlex):
+class BaseServiceConfig(BaseModelFlex):
     """Common logic for all service configurations."""
 
     config_id: str | None = None
@@ -168,7 +168,7 @@ class RerankerConfigRequest(BaseServiceConfig):
         return self.api_key
 
 
-class RetrievalConfig(_BaseModelFlex):
+class RetrievalConfig(BaseModelFlex):
     """Configuration for retrieval operations."""
 
     top_k: int = 10

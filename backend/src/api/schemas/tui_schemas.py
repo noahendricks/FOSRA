@@ -1,7 +1,7 @@
 """
 tui-compatible types and fosra → tui shape transformers.
 
-maps fosra domain objects (convos, messages) into the shapes the
+maps fosra domain objects (sessions, messages) into the shapes the
 solidjs tui expects for sessions, messages, parts, and events.
 
 All schema classes have been moved to focused modules:
@@ -36,9 +36,6 @@ DEFAULT_MODEL_ID = os.environ.get("FOSRA_MODEL_ID", "stable-code:3b")
 # RE-EXPORTS FROM FOCUSED SCHEMAS (backward compatibility)
 # =============================================================================
 
-from backend.src.api.schemas.api_schemas import (  # noqa: F401
-    MessageResponse,
-)
 from backend.src.api.schemas.config_schemas import (  # noqa: F401
     Agent,
     AgentConfig,
@@ -97,10 +94,6 @@ from backend.src.api.schemas.config_schemas import (  # noqa: F401
     StructuredOutputErrorData,
     UnknownError,
     UnknownErrorData,
-)
-from backend.src.api.schemas.convo_api_schemas import (  # noqa: F401
-    ConvoFullResponse,
-    ConvoListItemResponse,
 )
 from backend.src.api.schemas.event_schemas import (  # noqa: F401
     EventFileEdited,
@@ -228,6 +221,10 @@ from backend.src.api.schemas.message_schemas import (  # noqa: F401
     UserMessageSummary,
     UserMessageTime,
 )
+from backend.src.api.schemas.session_api_schemas import (  # noqa: F401
+    SessionFullResponse,
+    SessionListItemResponse,
+)
 from backend.src.api.schemas.session_schemas import (  # noqa: F401
     GlobalSession,
     Session,
@@ -274,6 +271,7 @@ from backend.src.api.schemas.tui_control_schemas import (  # noqa: F401,F811
     QuestionAnswer,
     QuestionInfo,
     QuestionOption,
+    QuestionReject,
     QuestionRequest,
     QuestionRequestTool,
     Range,
@@ -321,11 +319,11 @@ def _ts(dt: datetime | None) -> int:
     return int(dt.timestamp()) if dt else 0
 
 
-def convo_to_session(
-    item: ConvoListItemResponse,
+def session_to_session(
+    item: SessionListItemResponse,
 ) -> Session:
     return Session(
-        id=item.convo_id,
+        id=item.session_id,
         slug="",
         projectID="",
         workspaceID="default",
@@ -339,82 +337,31 @@ def convo_to_session(
     )
 
 
-def convo_list_item_to_session(item: ConvoListItemResponse) -> Session:
-    return convo_to_session(item)
+def session_list_item_to_session(item: SessionListItemResponse) -> Session:
+    return session_to_session(item)
 
 
-def convo_full_to_session(convo: ConvoFullResponse) -> Session:
+def session_full_to_session(session: SessionFullResponse) -> Session:
     return Session(
-        id=convo.convo_id,
+        id=session.session_id,
         slug="",
         projectID="",
         workspaceID="default",
         directory=PROJECT_DIR,
-        title=convo.title or "",
+        title=session.title or "",
         version="",
         time=SessionTime(
-            created=_ts(convo.created_at),
-            updated=_ts(convo.updated_at),
+            created=_ts(session.created_at),
+            updated=_ts(session.updated_at),
         ),
     )
 
 
-def message_to_tui(msg: MessageResponse, session_id: str) -> dict[str, Any]:
-    """convert a db MessageResponse into the {info: Message, parts: Part[]} shape the tui expects."""
-    if not hasattr(msg, "model_dump"):
-        return {}
-
-    ts = int(msg.timestamp.timestamp()) if msg.timestamp else 0
-    msg_id = msg.message_id or ""
-    role_val = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
-
-    if role_val == "user":
-        info = UserMessage(
-            id=msg_id,
-            sessionID=session_id,
-            role="user",
-            time=UserMessageTime(created=ts),
-            agent="default",
-            model=UserMessageModel(
-                providerID=DEFAULT_PROVIDER_ID,
-                modelID=DEFAULT_MODEL_ID,
-            ),
-        )
-    else:
-        info = AssistantMessage(
-            id=msg_id,
-            sessionID=session_id,
-            role="assistant",
-            time=AssistantMessageTime(created=ts, completed=ts),
-            parentID=msg.parent_id or "",
-            modelID=DEFAULT_MODEL_ID,
-            providerID=DEFAULT_PROVIDER_ID,
-            mode="default",
-            agent="default",
-            path=AssistantMessagePath(cwd=PROJECT_DIR, root=PROJECT_DIR),
-            cost=0,
-            tokens=AssistantMessageTokens(
-                input=0,
-                output=0,
-                reasoning=0,
-                cache=AssistantMessageTokensCache(read=0, write=0),
-            ),
-            finish="stop",
-        )
-
-    parts: list[dict[str, Any]] = []
-    if msg.text:
-        parts.append(
-            TextPart(
-                id=f"{msg_id}-text",
-                sessionID=session_id,
-                messageID=msg_id,
-                type="text",
-                text=msg.text,
-            ).model_dump(mode="json")
-        )
-
-    return {"info": info.model_dump(mode="json"), "parts": parts}
+def message_to_tui(
+    msg: UserMessage | AssistantMessage, session_id: str
+) -> dict[str, Any]:
+    info = msg.model_dump(mode="json") if hasattr(msg, "model_dump") else {}
+    return {"info": info, "parts": []}
 
 
 def get_default_provider() -> dict[str, Any]:

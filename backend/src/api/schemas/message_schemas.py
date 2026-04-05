@@ -2,32 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     pass
-
-Message = Union["UserMessage", "AssistantMessage"]
-Part = Union[
-    "TextPart",
-    "ToolPart",
-    "ReasoningPart",
-    "FilePart",
-    "StepStartPart",
-    "StepFinishPart",
-    "AgentPart",
-    "SubtaskPart",
-    "RetryPart",
-    "CompactionPart",
-    "SnapshotPart",
-    "PatchPart",
-]
-ToolState = Union[
-    "ToolStatePending", "ToolStateRunning", "ToolStateCompleted", "ToolStateError"
-]
 
 
 class OutputFormat(BaseModel):
@@ -47,9 +27,9 @@ class UserMessageModel(BaseModel):
 
 
 class UserMessageSummary(BaseModel):
-    title: Optional[str] = None
-    body: Optional[str] = None
-    diffs: List[Any] = Field(default_factory=list)  # FileDiff — avoid circular
+    title: str | None = None
+    body: str | None = None
+    diffs: list[Any] = Field(default_factory=list)  # FileDiff — avoid circular
 
 
 class UserMessage(BaseModel):
@@ -57,13 +37,13 @@ class UserMessage(BaseModel):
     sessionID: str
     role: Literal["user"]
     time: UserMessageTime
-    format: Optional[OutputFormat] = None
-    summary: Optional[UserMessageSummary] = None
+    format: OutputFormat | None = None
+    summary: UserMessageSummary | None = None
     agent: str
     model: UserMessageModel
-    system: Optional[str] = None
-    tools: Optional[Dict[str, bool]] = None
-    variant: Optional[str] = None
+    system: str | None = None
+    tools: dict[str, bool] | None = None
+    variant: str | None = None
 
 
 # ---- ASSISTANT MESSAGE ----
@@ -71,7 +51,7 @@ class UserMessage(BaseModel):
 
 class AssistantMessageTime(BaseModel):
     created: int
-    completed: Optional[int] = None
+    completed: int | None = None
 
 
 class AssistantMessagePath(BaseModel):
@@ -85,7 +65,7 @@ class AssistantMessageTokensCache(BaseModel):
 
 
 class AssistantMessageTokens(BaseModel):
-    total: Optional[int] = None
+    total: int | None = None
     input: int
     output: int
     reasoning: int
@@ -97,19 +77,19 @@ class AssistantMessage(BaseModel):
     sessionID: str
     role: Literal["assistant"]
     time: AssistantMessageTime
-    error: Optional[Any] = None  # ApiError — avoid circular
+    error: Any | None = None  # ApiError — avoid circular
     parentID: str
     modelID: str
     providerID: str
     mode: str
     agent: str
     path: AssistantMessagePath
-    summary: Optional[bool] = None
+    summary: bool | None = None
     cost: float
     tokens: AssistantMessageTokens
-    structured: Optional[Any] = None
-    variant: Optional[str] = None
-    finish: Optional[str] = None
+    structured: Any | None = None
+    variant: str | None = None
+    finish: str | None = None
 
 
 # ---- PART TYPES ----
@@ -117,7 +97,7 @@ class AssistantMessage(BaseModel):
 
 class TextPartTime(BaseModel):
     start: int
-    end: Optional[int] = None
+    end: int | None = None
 
 
 class TextPart(BaseModel):
@@ -126,10 +106,10 @@ class TextPart(BaseModel):
     messageID: str
     type: Literal["text"]
     text: str
-    synthetic: Optional[bool] = None
-    ignored: Optional[bool] = None
-    time: Optional[TextPartTime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    synthetic: bool | None = None
+    ignored: bool | None = None
+    time: TextPartTime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class SubtaskPartModel(BaseModel):
@@ -145,13 +125,13 @@ class SubtaskPart(BaseModel):
     prompt: str
     description: str
     agent: str
-    model: Optional[SubtaskPartModel] = None
-    command: Optional[str] = None
+    model: SubtaskPartModel | None = None
+    command: str | None = None
 
 
 class ReasoningPartTime(BaseModel):
     start: int
-    end: Optional[int] = None
+    end: int | None = None
 
 
 class ReasoningPart(BaseModel):
@@ -160,7 +140,7 @@ class ReasoningPart(BaseModel):
     messageID: str
     type: Literal["reasoning"]
     text: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
     time: ReasoningPartTime
 
 
@@ -182,9 +162,9 @@ class FilePart(BaseModel):
     messageID: str
     type: Literal["file"]
     mime: str
-    filename: Optional[str] = None
+    filename: str | None = None
     url: str
-    source: Optional[FilePartSource] = None
+    source: FilePartSource | None = None
 
 
 class StepStartPart(BaseModel):
@@ -192,7 +172,7 @@ class StepStartPart(BaseModel):
     sessionID: str
     messageID: str
     type: Literal["step-start"]
-    snapshot: Optional[str] = None
+    snapshot: str | None = None
 
 
 class StepFinishPartTokensCache(BaseModel):
@@ -201,7 +181,7 @@ class StepFinishPartTokensCache(BaseModel):
 
 
 class StepFinishPartTokens(BaseModel):
-    total: Optional[int] = None
+    total: int | None = None
     input: int
     output: int
     reasoning: int
@@ -214,7 +194,7 @@ class StepFinishPart(BaseModel):
     messageID: str
     type: Literal["step-finish"]
     reason: str
-    snapshot: Optional[str] = None
+    snapshot: str | None = None
     cost: float
     tokens: StepFinishPartTokens
 
@@ -233,7 +213,7 @@ class PatchPart(BaseModel):
     messageID: str
     type: Literal["patch"]
     hash: str
-    files: List[str]
+    files: list[str]
 
 
 class AgentPartSource(BaseModel):
@@ -248,7 +228,7 @@ class AgentPart(BaseModel):
     messageID: str
     type: Literal["agent"]
     name: str
-    source: Optional[AgentPartSource] = None
+    source: AgentPartSource | None = None
 
 
 class RetryPartTime(BaseModel):
@@ -261,7 +241,7 @@ class RetryPart(BaseModel):
     messageID: str
     type: Literal["retry"]
     attempt: int
-    error: Optional[Any] = None  # ApiError — avoid circular
+    error: Any | None = None  # ApiError — avoid circular
     time: RetryPartTime
 
 
@@ -271,7 +251,7 @@ class CompactionPart(BaseModel):
     messageID: str
     type: Literal["compaction"]
     auto: bool
-    overflow: Optional[bool] = None
+    overflow: bool | None = None
 
 
 # ---- TOOL STATE ----
@@ -279,7 +259,7 @@ class CompactionPart(BaseModel):
 
 class ToolStatePending(BaseModel):
     status: Literal["pending"]
-    input: Dict[str, Any]
+    input: dict[str, Any]
     raw: str
 
 
@@ -289,26 +269,26 @@ class ToolStateRunningTime(BaseModel):
 
 class ToolStateRunning(BaseModel):
     status: Literal["running"]
-    input: Dict[str, Any]
-    title: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    input: dict[str, Any]
+    title: str | None = None
+    metadata: dict[str, Any] | None = None
     time: ToolStateRunningTime
 
 
 class ToolStateCompletedTime(BaseModel):
     start: int
     end: int
-    compacted: Optional[int] = None
+    compacted: int | None = None
 
 
 class ToolStateCompleted(BaseModel):
     status: Literal["completed"]
-    input: Dict[str, Any]
+    input: dict[str, Any]
     output: str
     title: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     time: ToolStateCompletedTime
-    attachments: Optional[List[FilePart]] = None
+    attachments: list[FilePart] | None = None
 
 
 class ToolStateErrorTime(BaseModel):
@@ -318,10 +298,13 @@ class ToolStateErrorTime(BaseModel):
 
 class ToolStateError(BaseModel):
     status: Literal["error"]
-    input: Dict[str, Any]
+    input: dict[str, Any]
     error: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
     time: ToolStateErrorTime
+
+
+ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
 
 
 class ToolPart(BaseModel):
@@ -332,4 +315,22 @@ class ToolPart(BaseModel):
     callID: str
     tool: str
     state: ToolState
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
+
+
+Message = UserMessage | AssistantMessage
+
+Part = (
+    TextPart
+    | SubtaskPart
+    | ReasoningPart
+    | FilePart
+    | StepStartPart
+    | StepFinishPart
+    | SnapshotPart
+    | PatchPart
+    | AgentPart
+    | RetryPart
+    | ToolPart
+    | CompactionPart
+)

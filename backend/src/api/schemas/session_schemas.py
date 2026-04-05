@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -10,15 +10,15 @@ from pydantic import BaseModel
 class SessionTime(BaseModel):
     created: int
     updated: int
-    compacting: Optional[int] = None
-    archived: Optional[int] = None
+    compacting: int | None = None
+    archived: int | None = None
 
 
 class SessionSummary(BaseModel):
     additions: int
     deletions: int
     files: int
-    diffs: Optional[List[Any]] = None  # FileDiff — avoid circular import
+    diffs: list[Any] | None = None  # FileDiff — avoid circular import
 
 
 class SessionShare(BaseModel):
@@ -27,9 +27,9 @@ class SessionShare(BaseModel):
 
 class SessionRevert(BaseModel):
     messageID: str
-    partID: Optional[str] = None
-    snapshot: Optional[str] = None
-    diff: Optional[str] = None
+    partID: str | None = None
+    snapshot: str | None = None
+    diff: str | None = None
 
 
 class SessionStatusIdle(BaseModel):
@@ -47,42 +47,67 @@ class SessionStatusRetry(BaseModel):
     next: int
 
 
-SessionStatus = Union[SessionStatusIdle, SessionStatusBusy, SessionStatusRetry]
+SessionStatus = SessionStatusIdle | SessionStatusBusy | SessionStatusRetry
+
+
+class SessionModelCostCache(BaseModel):
+    read: int
+    write: int
+
+
+class SessionModelCost(BaseModel):
+    input: int
+    output: int
+    cache: SessionModelCostCache | None = None
+
+
+class SessionModelLimit(BaseModel):
+    context: int
+    input: int | None = None
+    output: int | None = None
+
+
+class SessionModelInfo(BaseModel):
+    providerID: str
+    modelID: str
+    cost: SessionModelCost | None = None
+    limit: SessionModelLimit | None = None
 
 
 class SessionMetadataModel(BaseModel):
-    model: Optional[dict[str, Any]] = None
+    model: SessionModelInfo | None = None
+    agent: str | None = None
 
 
 class Session(BaseModel):
     id: str
     slug: str
     projectID: str
-    workspaceID: Optional[str] = None
+    workspaceID: str | None = None
     directory: str
-    parentID: Optional[str] = None
+    parentID: str | None = None
     summary: Optional[SessionSummary] = None
     share: Optional[SessionShare] = None
     title: str
     version: str
     time: SessionTime
-    permission: Optional[Any] = None
+    permission: Any | None = None
     revert: Optional[SessionRevert] = None
-    metadata: Optional[SessionMetadataModel] = None
+    metadata: SessionMetadataModel | None = None
 
 
 class GlobalSession(BaseModel):
     id: str
     slug: str
     projectID: str
-    workspaceID: Optional[str] = None
+    workspaceID: str | None = None
     directory: str
-    parentID: Optional[str] = None
+    parentID: str | None = None
     summary: Optional[SessionSummary] = None
     share: Optional[SessionShare] = None
     title: str
     version: str
     time: SessionTime
-    permission: Optional[Any] = None
+    permission: Any | None = None
     revert: Optional[SessionRevert] = None
-    project: Optional[Any] = None
+    project: Any | None = None

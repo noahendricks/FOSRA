@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel
 
@@ -22,7 +22,7 @@ class EventTuiPromptAppend(BaseModel):
 
 
 class EventTuiCommandExecuteProperties(BaseModel):
-    command: Union[
+    command: (
         Literal[
             "session.list",
             "session.new",
@@ -40,9 +40,9 @@ class EventTuiCommandExecuteProperties(BaseModel):
             "prompt.clear",
             "prompt.submit",
             "agent.cycle",
-        ],
-        str,
-    ]
+        ]
+        | str
+    )
 
 
 class EventTuiCommandExecute(BaseModel):
@@ -51,10 +51,10 @@ class EventTuiCommandExecute(BaseModel):
 
 
 class EventTuiToastShowProperties(BaseModel):
-    title: Optional[str] = None
+    title: str | None = None
     message: str
     variant: Literal["info", "success", "warning", "error"]
-    duration: Optional[int] = None
+    duration: int | None = None
 
 
 class EventTuiToastShow(BaseModel):
@@ -108,6 +108,7 @@ class EventMessagePartDeltaProperties(BaseModel):
     partID: str
     field: str
     delta: str
+    partType: str = "text"
 
 
 class EventMessagePartDelta(BaseModel):
@@ -186,7 +187,7 @@ class EventSessionCompacted(BaseModel):
 
 class EventSessionDiffProperties(BaseModel):
     sessionID: str
-    diff: List[Any]  # FileDiff — avoid circular
+    diff: list[Any]  # FileDiff — avoid circular
 
 
 class EventSessionDiff(BaseModel):
@@ -195,8 +196,8 @@ class EventSessionDiff(BaseModel):
 
 
 class EventSessionErrorProperties(BaseModel):
-    sessionID: Optional[str] = None
-    error: Optional[Any] = None  # ApiError/ProviderAuthError — avoid circular
+    sessionID: str | None = None
+    error: Any | None = None  # ApiError/ProviderAuthError — avoid circular
 
 
 class EventSessionError(BaseModel):
@@ -231,7 +232,7 @@ class EventQuestionAsked(BaseModel):
 class EventQuestionRepliedProperties(BaseModel):
     sessionID: str
     requestID: str
-    answers: List[List[str]]
+    answers: list[list[str]]
 
 
 class EventQuestionReplied(BaseModel):
@@ -286,7 +287,7 @@ class EventTodoDeleted(BaseModel):
 
 
 class EventVcsBranchUpdatedProperties(BaseModel):
-    branch: Optional[str] = None
+    branch: str | None = None
 
 
 class EventVcsBranchUpdated(BaseModel):
@@ -296,7 +297,7 @@ class EventVcsBranchUpdated(BaseModel):
 
 class EventLspUpdated(BaseModel):
     type: Literal["lsp.updated"]
-    properties: Dict[str, Any]
+    properties: dict[str, Any]
 
 
 # ---- MCP EVENTS ----
@@ -328,10 +329,10 @@ class EventPtyCreated(BaseModel):
 
 class EventPtyUpdatedProperties(BaseModel):
     id: str
-    data: Optional[str] = None
-    cols: Optional[int] = None
-    rows: Optional[int] = None
-    title: Optional[str] = None
+    data: str | None = None
+    cols: int | None = None
+    rows: int | None = None
+    title: str | None = None
 
 
 class EventPtyUpdated(BaseModel):
@@ -363,7 +364,7 @@ class EventPtyDeleted(BaseModel):
 
 class EventServerConnected(BaseModel):
     type: Literal["server.connected"]
-    properties: Dict[str, Any] = {}
+    properties: dict[str, Any] = {}
 
 
 class EventServerInstanceDisposedProperties(BaseModel):
@@ -410,7 +411,7 @@ class EventFileWatcherUpdated(BaseModel):
 
 class EventLspClientDiagnosticsProperties(BaseModel):
     uri: str
-    diagnostics: List[Any]
+    diagnostics: list[Any]
 
 
 class EventLspClientDiagnostics(BaseModel):
@@ -459,7 +460,7 @@ class EventMcpBrowserOpenFailed(BaseModel):
 class EventCommandExecutedProperties(BaseModel):
     id: str
     exitCode: int
-    output: Optional[str] = None
+    output: str | None = None
 
 
 class EventCommandExecuted(BaseModel):
@@ -490,9 +491,36 @@ class EventWorktreeFailed(BaseModel):
 # ---- PROJECT / WORKSPACE EVENTS ----
 
 
+class ProjectIcon(BaseModel):
+    url: str | None = None
+    override: str | None = None
+    color: str | None = None
+
+
+class ProjectCommands(BaseModel):
+    start: str | None = None
+
+
+class ProjectTime(BaseModel):
+    created: int
+    updated: int
+    initialized: int | None = None
+
+
+class ProjectProperties(BaseModel):
+    id: str
+    worktree: str
+    vcs: Literal["git"] | None = None
+    name: str | None = None
+    icon: ProjectIcon | None = None
+    commands: ProjectCommands | None = None
+    time: ProjectTime
+    sandboxes: list[str]
+
+
 class EventProjectUpdated(BaseModel):
     type: Literal["project.updated"]
-    properties: Dict[str, Any]
+    properties: ProjectProperties
 
 
 class EventWorkspaceReadyProperties(BaseModel):

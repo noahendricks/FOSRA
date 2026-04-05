@@ -3,8 +3,8 @@ from typing import Any
 
 from pydantic import Field
 
-from backend.src.api.schemas.base import _BaseModelFlex
-from backend.src.domain.enums import DocType, FileType, SourceType
+from backend.src.api.schemas.base import BaseModelFlex
+from backend.src.domain.enums import DocType, SourceType
 from backend.src.storage.utils.converters import utc_now
 
 # ============================================================================
@@ -19,7 +19,7 @@ from backend.src.storage.utils.converters import utc_now
 # ============================================================================
 #
 #
-class ChunkResponse(_BaseModelFlex):
+class ChunkResponse(BaseModelFlex):
     chunk_id: str
     source_id: str
     source_hash: str
@@ -29,13 +29,13 @@ class ChunkResponse(_BaseModelFlex):
     text: str
 
 
-class SourceRequest(_BaseModelFlex):
+class SourceRequest(BaseModelFlex):
     """Response DTO for a source in a directory session."""
 
     source_id: str
 
 
-class SourceResponseBase(_BaseModelFlex):
+class SourceResponseBase(BaseModelFlex):
     """Response DTO for a source in a directory session."""
 
     id: str
@@ -48,7 +48,7 @@ class SourceResponseBase(_BaseModelFlex):
     uploaded_at: datetime = Field(default_factory=utc_now)
 
 
-class SourceResponseShallow(_BaseModelFlex):
+class SourceResponseShallow(BaseModelFlex):
     """Response DTO for a source in a directory session."""
 
     id: str
@@ -66,7 +66,7 @@ class SourceResponseDeep(SourceResponseBase):
     result_score: float = 0.0
 
 
-class ChunkWithScoreResponse(_BaseModelFlex):
+class ChunkWithScoreResponse(BaseModelFlex):
     """Chunk with retrieval scoring."""
 
     chunk: ChunkResponse
@@ -74,7 +74,7 @@ class ChunkWithScoreResponse(_BaseModelFlex):
     reranker_score: float | None = None
 
 
-class SourceGroupResponse(_BaseModelFlex):
+class SourceGroupResponse(BaseModelFlex):
     """Grouped source with chunks for UI display."""
 
     source: SourceResponseDeep

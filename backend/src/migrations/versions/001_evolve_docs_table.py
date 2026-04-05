@@ -1,7 +1,7 @@
 """evolve docs table for file registry
 
 Revision ID: 001_evolve_docs
-Revises: e9ae3c64e926
+Revises: None
 Create Date: 2026-03-20
 
 """
@@ -10,10 +10,9 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 revision: str = "001_evolve_docs"
-down_revision: Union[str, Sequence[str], None] = "e9ae3c64e926"
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
