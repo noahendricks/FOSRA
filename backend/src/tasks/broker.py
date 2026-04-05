@@ -1,3 +1,4 @@
+from typing import Any
 from loguru import logger
 from taskiq import InMemoryBroker, TaskiqEvents, TaskiqState, TaskiqDepends
 from taskiq.middlewares import SmartRetryMiddleware
@@ -19,14 +20,17 @@ broker.add_middlewares(
 
 
 class TaskiqObserverMiddleware(TaskiqMiddleware):
-    async def pre_execute(self, receiver, task) -> None:
-        logger.debug("[taskiq] task queued: {}", task.task_name)
+    async def pre_execute(self, message: Any) -> Any:  # type: ignore[type-arg]
+        logger.debug("[taskiq] task queued: {}", message.task_name)
+        return message
 
-    async def on_error(self, receiver, task, error) -> None:
-        logger.opt(exception=True).error("[taskiq] task failed: {}", task.task_name)
+    async def on_error(  # type: ignore[type-arg]
+        self, message: Any, result: Any, exception: BaseException
+    ) -> None:
+        logger.opt(exception=True).error("[taskiq] task failed: {}", message.task_name)
 
-    async def post_execute(self, receiver, task) -> None:
-        logger.debug("[taskiq] task completed: {}", task.task_name)
+    async def post_execute(self, message: Any, result: Any) -> None:  # type: ignore[type-arg]
+        logger.debug("[taskiq] task completed: {}", message.task_name)
 
 
 broker.add_middlewares(TaskiqObserverMiddleware())
@@ -61,6 +65,8 @@ async def shutdown(state: TaskiqState):
 def get_infra(state: TaskiqState = TaskiqDepends()) -> Infrastructure:
     from backend.src.api.lifecycle import global_infra
 
-    if isinstance(state, TaskiqState):
-        return state.infra
-    return global_infra
+    return (
+        state.infra
+        if hasattr(state, "infra") and state.infra is not None
+        else global_infra
+    )

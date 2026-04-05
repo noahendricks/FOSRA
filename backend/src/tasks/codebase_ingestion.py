@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, TypedDict
 
 from falkordb import FalkorDB
 from loguru import logger
@@ -11,12 +11,20 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.src.domain.enums import FileSourceType
 from backend.src.settings import EmbedderConfig
-from backend.src.domain.schemas.graph import GraphResult
 from backend.src.services.processing.callgraph_service import CallGraphService
 from backend.src.services.retrieval.graph_service import GraphService
 from backend.src.storage.models import DocORM
 
 from .broker import broker
+
+
+class IngestionStats(TypedDict):
+    files_processed: int
+    total_nodes: int
+    total_call_edges: int
+    total_inheritance_edges: int
+    errors: list[dict[str, str]]
+
 
 LANGUAGE_EXTENSIONS = {
     ".py": "python",
@@ -37,7 +45,7 @@ async def ingest_codebase(
     falkordb_client: "FalkorDB",
     session_factory: async_sessionmaker[AsyncSession],
     recursive: bool = True,
-) -> dict[str, Any]:
+) -> IngestionStats:
     """
     ingest a codebase directory into falkordb.
 
@@ -50,7 +58,7 @@ async def ingest_codebase(
 
     graph_service.create_indexes()
 
-    stats = {
+    stats: IngestionStats = {
         "files_processed": 0,
         "total_nodes": 0,
         "total_call_edges": 0,
@@ -89,7 +97,7 @@ async def ingest_codebase(
         await session.commit()
 
     logger.bind(_structured=stats).info("Codebase ingestion complete")
-    return stats
+    return stats  # type: ignore[return-value]
 
 
 @broker.task(max_execution_time=120)
@@ -246,7 +254,7 @@ async def reindex_codebase(
     embedder_config: EmbedderConfig,
     falkordb_client: "FalkorDB",
     session_factory: async_sessionmaker[AsyncSession],
-) -> dict[str, Any]:
+) -> IngestionStats:
     """
     full re-index: clear graph and rebuild from scratch.
     """

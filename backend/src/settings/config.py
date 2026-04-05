@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import pathlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from chonkie.genie import BaseGenie, OpenAIGenie
+from chonkie.genie import BaseGenie
 from langchain_litellm import ChatLiteLLM
-from langchain_qdrant import RetrievalMode
 from msgspec import field
 from pydantic import Field, SecretStr
 
-from backend.src.api.schemas.base import _BaseModelFlexLower as _BaseModelFlex
+from backend.src.api.schemas.base import BaseModelFlexLower as BaseModelFlex
 from backend.src.domain.enums import (
     ChunkerType,
     EmbedderType,
@@ -24,10 +22,10 @@ if TYPE_CHECKING:
     pass
 
 
-from chonkie import RecursiveRules, TokenizerProtocol
+from chonkie import RecursiveRules
 
 
-class SemanticChunkerConfig(_BaseModelFlex):
+class SemanticChunkerConfig(BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     embedding_model: Any = "nomic-ai/nomic-embed-text-v1.5"
@@ -45,7 +43,7 @@ class SemanticChunkerConfig(_BaseModelFlex):
     trust_remote_code: bool = True
 
 
-class LateChunkerConfig(_BaseModelFlex):
+class LateChunkerConfig(BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     embedding_model: Any = "nomic-ai/modernbert-embed-base"
@@ -53,7 +51,7 @@ class LateChunkerConfig(_BaseModelFlex):
     min_characters_per_chunk: int = 24
 
 
-class SlumberChunkerConfig(_BaseModelFlex):
+class SlumberChunkerConfig(BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     genie: BaseGenie | None = None
@@ -64,7 +62,7 @@ class SlumberChunkerConfig(_BaseModelFlex):
     verbose: bool = True
 
 
-class RecursiveChunkerConfig(_BaseModelFlex):
+class RecursiveChunkerConfig(BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     tokenizer: Any = "character"
@@ -74,7 +72,7 @@ class RecursiveChunkerConfig(_BaseModelFlex):
     chunk_overlap: int = 50
 
 
-class CodeChunkerConfig(_BaseModelFlex):
+class CodeChunkerConfig(BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     tokenizer: Any = "character"
@@ -83,7 +81,7 @@ class CodeChunkerConfig(_BaseModelFlex):
     include_nodes: bool = True
 
 
-class NeuralChunkerConfig(_BaseModelFlex):
+class NeuralChunkerConfig(BaseModelFlex):
     model_config = {"arbitrary_types_allowed": True}
 
     model: Any = "mirth/chonky_modernbert_base_1"
@@ -92,13 +90,13 @@ class NeuralChunkerConfig(_BaseModelFlex):
     stride: int | None = None
 
 
-class TokenChunkerConfig(_BaseModelFlex):
+class TokenChunkerConfig(BaseModelFlex):
     tokenizer: str = "character"
     chunk_size: int = 200
     chunk_overlap: int | float = 0
 
 
-class SentenceChunkerConfig(_BaseModelFlex):
+class SentenceChunkerConfig(BaseModelFlex):
     tokenizer: str = "character"
     chunk_size: int = 2048
     chunk_overlap: int = 0
@@ -109,7 +107,7 @@ class SentenceChunkerConfig(_BaseModelFlex):
     include_delim: Literal["prev", "next"] | None = "prev"
 
 
-class ChunkerConfig(_BaseModelFlex):
+class ChunkerConfig(BaseModelFlex):
     """Configuration for chunker behavior."""
 
     chunk_size: int = 2048
@@ -137,7 +135,7 @@ class ChunkerConfig(_BaseModelFlex):
     preferred_strategy: ChunkerType = ChunkerType.NEURAL
 
 
-class LLMConfig(_BaseModelFlex):
+class LLMConfig(BaseModelFlex):
     """User's LLM connection configuration."""
 
     config_id: int = 0
@@ -172,7 +170,7 @@ class LLMConfig(_BaseModelFlex):
         return lite
 
 
-class QdrantConfig(_BaseModelFlex):
+class QdrantConfig(BaseModelFlex):
     api_key: SecretStr | None = None
     api_base: str | None = None
     collection_name: str = "users_vectors"
@@ -191,7 +189,7 @@ class QdrantConfig(_BaseModelFlex):
     filter_conditions: dict[str, Any] = Field(default_factory=dict)
 
 
-class PineconeConfig(_BaseModelFlex):
+class PineconeConfig(BaseModelFlex):
     api_key: SecretStr | None = None
     host: str | None = None
     environment: str | None = None
@@ -200,7 +198,7 @@ class PineconeConfig(_BaseModelFlex):
     region: str | None = None
 
 
-class VectorStoreConfig(_BaseModelFlex):
+class VectorStoreConfig(BaseModelFlex):
     config_id: int | None = None
     preferred_store: VectorStoreType = VectorStoreType.QDRANT
     qdrant_config: QdrantConfig = QdrantConfig()
@@ -214,7 +212,7 @@ def set_model_cache_dir():
     return new_path
 
 
-class ScoredRetrieval(_BaseModelFlex):
+class ScoredRetrieval(BaseModelFlex):
     rank: int | None = None
     score: float
     text: str
@@ -226,7 +224,7 @@ class ScoredRetrieval(_BaseModelFlex):
     end_index: int
 
 
-class EmbedderConfig(_BaseModelFlex):
+class EmbedderConfig(BaseModelFlex):
     """User's embedder connection configuration."""
 
     config_id: int | None = None
@@ -249,6 +247,9 @@ class EmbedderConfig(_BaseModelFlex):
     sparse_enabled: bool = True
     sparse_model: str | None = "BAAI/bge-m3"
 
+    late_enabled: bool = False
+    late_model: str | None = None
+
     cuda_enabled: bool = False
 
     def get_api_key_value(self) -> str | None:
@@ -260,7 +261,7 @@ class EmbedderConfig(_BaseModelFlex):
         return self.api_key
 
 
-class ParserConfig(_BaseModelFlex):
+class ParserConfig(BaseModelFlex):
     """User's parser configuration."""
 
     config_id: int | None = None
@@ -278,7 +279,7 @@ class ParserConfig(_BaseModelFlex):
     generate_summary: bool = True
 
 
-class RerankerConfig(_BaseModelFlex):
+class RerankerConfig(BaseModelFlex):
     """User's reranker configuration."""
 
     user_id: str = ""
@@ -296,7 +297,7 @@ class RerankerConfig(_BaseModelFlex):
     params: dict[str, Any] | None = None
 
 
-class UserPreferences(_BaseModelFlex):
+class UserPreferences(BaseModelFlex):
     """Domain Container for all typed user preferences."""
 
     llm_default: LLMConfig | None = None
@@ -311,7 +312,7 @@ class UserPreferences(_BaseModelFlex):
     chunker: ChunkerConfig | None = None
 
 
-class ModelPrefs(_BaseModelFlex):
+class ModelPrefs(BaseModelFlex):
     stream_chat_response: bool
     stream_delta_chunk_size: int
     seed: str

@@ -1,7 +1,6 @@
 from typing import Any
 
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from backend.src.settings import VectorStoreConfig
 from backend.src.services.retrieval.vector_service import VectorService
 

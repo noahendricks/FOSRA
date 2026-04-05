@@ -11,12 +11,9 @@ Secrets (API keys) stay in environment variables only.
 
 from __future__ import annotations
 
-import os
 import tomllib
-from pathlib import Path
 from typing import Any
 
-from backend.src.api.schemas.config_schemas import Model
 from backend.src.settings.fosra_paths import fosra_paths
 
 

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from qdrant_client import AsyncQdrantClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from taskiq import AsyncTaskiqTask
@@ -54,13 +52,7 @@ async def ingest_docs(
     Returns:
         dict with counts: {chunks_upserted, docs_processed}
     """
-    from backend.src.api.lifecycle import Infrastructure
-
     infra = get_infra()
-    client = infra.qdrant_client
-
-    if not isinstance(client, AsyncQdrantClient):
-        raise RuntimeError("AsyncQdrantClient required for doc ingestion")
 
     # ensure collection exists
     await VectorService.ensure_collection(client, embedder_config)
@@ -70,7 +62,7 @@ async def ingest_docs(
         async with session_factory() as session:
             for doc in docs:
                 checksum = hashlib.sha256(doc.page_content.encode()).hexdigest()[:16]
-                await _upsert_doc_orm(
+                _ = await _upsert_doc_orm(
                     session,
                     doc,
                     checksum=checksum,
@@ -91,7 +83,7 @@ async def ingest_docs(
 
     # step 4: embed all chunks
     embedder = EmbedderService()
-    await embedder.embed_chunks(all_chunks, embedder_config)
+    _ = await embedder.embed_chunks(all_chunks, embedder_config)
 
     # step 5: upsert to single collection
     chunks_upserted = 0
@@ -117,7 +109,7 @@ async def ingest_single_doc(
     vector_config: VectorStoreConfig,
 ) -> AsyncTaskiqTask[dict[str, Any]]:
     """Ingest a single document into Qdrant."""
-    return ingest_docs.kiq(
+    return await ingest_docs.kiq(
         [doc],
         chunker_config,
         embedder_config,
@@ -138,19 +130,13 @@ async def reindex_docs(
     Reads all docs from PostgreSQL where source_type='doc',
     re-chunks, re-embeds, and upserts to fresh collections.
     """
-    from backend.src.api.lifecycle import Infrastructure
-
     infra = get_infra()
-    client = infra.qdrant_client
-
-    if not isinstance(client, AsyncQdrantClient):
-        raise RuntimeError("AsyncQdrantClient required for reindex")
 
     # drop existing collection
-    await VectorService.delete_collection(client, CHUNKS_COLLECTION)
+    _ = await VectorService.delete_collection(client, CHUNKS_COLLECTION)
 
     # recreate
-    await VectorService.ensure_collection(client, embedder_config)
+    _ = await VectorService.ensure_collection(client, embedder_config)
 
     # load all docs from postgres
     async with session_factory() as session:

@@ -11,7 +11,6 @@ On first startup these are created automatically if they don't exist.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from loguru import logger

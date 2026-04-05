@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import (
@@ -11,7 +11,6 @@ from pydantic_settings import (
 )
 
 from backend.src.domain.enums import EmbedderType, SourceType
-from backend.src.settings.fosra_paths import fosra_paths
 
 
 class ConnectorSettings(BaseSettings):
@@ -262,8 +261,8 @@ class Settings(BaseSettings):
     @field_validator("agent", mode="before")
     @classmethod
     def validate_agent(
-        cls, v: int | dict | AgentSettings | None
-    ) -> AgentSettings | dict:
+        cls, v: int | dict[str, Any] | AgentSettings | None
+    ) -> AgentSettings | dict[str, Any]:
         """Handle AGENT env var conflict (e.g., AGENT=1 from system)."""
         if isinstance(v, AgentSettings):
             return v

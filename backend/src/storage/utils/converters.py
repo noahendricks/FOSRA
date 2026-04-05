@@ -1,5 +1,6 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any, Iterator, Type, TypeVar, cast, dataclass_transform
+from typing import Any, TypeVar, cast, dataclass_transform
 
 import msgspec
 from fastapi import HTTPException
@@ -15,7 +16,7 @@ T_ORM = TypeVar("T_ORM", bound=DeclarativeBase)
 
 
 def pydantic_to_domain(
-    pydantic_obj: T_Pydantic, domain_cls: Type[T_Msgspec]
+    pydantic_obj: T_Pydantic, domain_cls: type[T_Msgspec]
 ) -> T_Msgspec:
     return msgspec.convert(
         pydantic_obj.model_dump(),
@@ -23,12 +24,12 @@ def pydantic_to_domain(
     )
 
 
-def domain_to_orm(domain_obj: T_Msgspec, orm_class: Type[T_ORM]) -> T_ORM:
+def domain_to_orm(domain_obj: T_Msgspec, orm_class: type[T_ORM]) -> T_ORM:
     data = msgspec.to_builtins(domain_obj)
     return orm_class(**data)
 
 
-def orm_to_domain(orm_instance: T_ORM, domain_cls: Type[T_Msgspec]) -> T_Msgspec:
+def orm_to_domain(orm_instance: T_ORM, domain_cls: type[T_Msgspec]) -> T_Msgspec:
     try:
         data = _orm_to_safe_dict(orm_instance)
 
@@ -43,7 +44,7 @@ def orm_to_domain(orm_instance: T_ORM, domain_cls: Type[T_Msgspec]) -> T_Msgspec
         raise
 
 
-def _orm_to_safe_dict(orm_instance: DeclarativeBase) -> dict[str, Any] | None:
+def _orm_to_safe_dict(orm_instance: DeclarativeBase | None) -> dict[str, Any] | None:
     if orm_instance is None:
         return None
 
@@ -55,12 +56,22 @@ def _orm_to_safe_dict(orm_instance: DeclarativeBase) -> dict[str, Any] | None:
 
     class_name = orm_instance.__class__.__name__
 
-    if class_name == "ConvoORM":
-        data = _handle_convo_relationships(orm_instance, data, inspector)
+    skipped_relationships = []
+
+    if class_name == "SessionORM":
+        data = _handle_session_relationships(orm_instance, data, inspector)
     elif class_name == "MessageORM":
         pass
     else:
-        logger.debug("Skipping relationships for {} to avoid lazy loading", class_name)
+        if len(skipped_relationships) <= 10:
+            skipped_relationships.append(
+                f"Skipping relationships for {class_name} to avoid lazy loading"
+            )
+        else:
+            logger.bind(_structured={"relationships": skipped_relationships}).debug(
+                "Skipped Relationships"
+            )
+            skipped_relationships.clear()
 
     return data
 
@@ -68,7 +79,7 @@ def _orm_to_safe_dict(orm_instance: DeclarativeBase) -> dict[str, Any] | None:
 def _handle_metadata_mapping(
     orm_instance: DeclarativeBase, data: dict[str, Any]
 ) -> None:
-    metadata_keys = ["convo_metadata", "message_metadata", "metadata"]
+    metadata_keys = ["session_metadata", "message_metadata", "metadata"]
 
     for key in metadata_keys:
         if key in data:
@@ -77,15 +88,15 @@ def _handle_metadata_mapping(
             break
 
 
-def _handle_convo_relationships(
-    convo_orm: DeclarativeBase, data: dict[str, Any], inspector: Any
+def _handle_session_relationships(
+    session_orm: DeclarativeBase, data: dict[str, Any], inspector: Any
 ) -> dict[str, Any]:
-    from backend.src.storage.models import ConvoORM
+    from backend.src.storage.models import SessionORM
 
-    if "messages" not in inspector.unloaded and hasattr(convo_orm, "messages"):
+    if "messages" not in inspector.unloaded and hasattr(session_orm, "messages"):
         data["messages"] = []
 
-        for message in cast(ConvoORM, convo_orm).messages:
+        for message in cast(SessionORM, session_orm).messages:
             msg_inspector = inspect(message)
             msg_data = msg_inspector.dict.copy()
 
@@ -98,7 +109,7 @@ def _handle_convo_relationships(
 
 
 def domain_to_response(
-    domain_obj: T_Msgspec, response_cls: Type[T_Pydantic]
+    domain_obj: T_Msgspec, response_cls: type[T_Pydantic]
 ) -> T_Pydantic:
     # logger.debug(f"Converting {type(domain_obj).__name__}")
     # logger.debug(f"Struct fields: {domain_obj.__struct_fields__}")
@@ -134,7 +145,7 @@ class DomainStruct(msgspec.Struct):
         except AttributeError:
             raise KeyError(key)
 
-    def to_orm(self, orm_class: Type[T_ORM]) -> T_ORM:
+    def to_orm(self, orm_class: type[T_ORM]) -> T_ORM:
         return domain_to_orm(self, orm_class)
 
     def to_dict(self) -> dict[str, Any]:

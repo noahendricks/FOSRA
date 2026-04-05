@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.storage.session_state import SessionStateORM
+from backend.src.storage.models import SessionStateORM
 
 
 class SessionStateRepo:
@@ -19,10 +20,10 @@ class SessionStateRepo:
     async def upsert(
         self,
         session_id: str,
-        agent_snapshot: dict | None = None,
-        interaction_snapshot: dict | None = None,
+        agent_snapshot: dict[str, Any] | None = None,
+        interaction_snapshot: dict[str, Any] | None = None,
         workspace_id: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SessionStateORM:
         now = datetime.now(UTC)
         existing = await self.get(session_id)
@@ -60,13 +61,13 @@ class SessionStateRepo:
     async def update(
         self,
         session_id: str,
-        agent_snapshot: dict | None = None,
-        interaction_snapshot: dict | None = None,
+        agent_snapshot: dict[str, Any] | None = None,
+        interaction_snapshot: dict[str, Any] | None = None,
         workspace_id: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SessionStateORM | None:
         now = datetime.now(UTC)
-        updates: dict = {"updated_at": now, "last_active_at": now}
+        updates: dict[str, Any] = {"updated_at": now, "last_active_at": now}
         if agent_snapshot is not None:
             updates["agent_snapshot"] = agent_snapshot
         if interaction_snapshot is not None:
@@ -76,7 +77,7 @@ class SessionStateRepo:
         if metadata is not None:
             updates["metadata_"] = metadata
 
-        await self._session.execute(
+        _ = await self._session.execute(
             update(SessionStateORM)
             .where(SessionStateORM.session_id == session_id)
             .values(**updates)
@@ -89,7 +90,9 @@ class SessionStateRepo:
             delete(SessionStateORM).where(SessionStateORM.session_id == session_id)
         )
         await self._session.commit()
-        return result.rowcount > 0
+        await self._session.refresh(existing := await self.get(session_id))
+        rc = getattr(result, "rowcount", 0) or 0
+        return rc > 0
 
     async def list_active(self, limit: int = 50) -> list[SessionStateORM]:
         result = await self._session.execute(
