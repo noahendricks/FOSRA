@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 from qdrant_client.models import SparseVector
 
-from backend.src.api.schemas.base import _BaseModelFlex
+from backend.src.api.schemas.base import BaseModelFlex
 from backend.src.services.processing.utils.loader import code_mimes, text_mimes
 from backend.src.storage.utils.converters import DomainStruct
 
@@ -123,7 +123,7 @@ CodeMetadataUnion = FunctionsClassesMetadata | SimplifiedCodeMetadata | ImportsM
 # main doc with typed metadata - used everywhere Document(LC) would be
 
 
-class DocMetadata(_BaseModelFlex):
+class DocMetadata(BaseModelFlex):
     source: str
     mime_type: str
     doc_id: str
@@ -157,7 +157,7 @@ class Doc(BaseModel):
         return self.metadata.mime_type in text_mimes.values()
 
 
-class HierarchicalChunk(_BaseModelFlex):
+class HierarchicalChunk(BaseModelFlex):
     """a chunk in the hierarchical tree produced by hichunk."""
 
     text: str
@@ -178,7 +178,7 @@ class HierarchicalChunk(_BaseModelFlex):
         return f"HierarchicalChunk(level={self.level}, tokens={self.token_count}, text='{snippet}…')"
 
 
-class ChunkMetadata(_BaseModelFlex):
+class ChunkMetadata(BaseModelFlex):
     _FLEXIBLE_CONFIG = ConfigDict(
         from_attributes=True,
         arbitrary_types_allowed=True,
@@ -203,7 +203,7 @@ class ChunkMetadata(_BaseModelFlex):
     element_ids: list[str] = Field(default_factory=list)
 
 
-class Chunk(_BaseModelFlex):
+class Chunk(BaseModelFlex):
     text: str
     metadata: ChunkMetadata
 
@@ -220,7 +220,7 @@ class Chunk(_BaseModelFlex):
         return cls(text=chunk.text, metadata=_meta)
 
 
-class ElementPosition(_BaseModelFlex):
+class ElementPosition(BaseModelFlex):
     """Positional metadata for a single kreuzberg element."""
 
     page_number: int
@@ -229,7 +229,7 @@ class ElementPosition(_BaseModelFlex):
     additional: dict[str, Any] | None = None
 
 
-class Section(_BaseModelFlex):
+class Section(BaseModelFlex):
     """A logical section of elements grouped by heading boundary."""
 
     elements: list[dict[str, Any]]  # kreuzberg element dicts

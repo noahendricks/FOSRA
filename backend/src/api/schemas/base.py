@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 
-class _BaseModelFlex(BaseModel):
+class BaseModelFlex(BaseModel):
     _FLEXIBLE_CONFIG = ConfigDict(
         from_attributes=True,
         arbitrary_types_allowed=True,
@@ -15,7 +15,7 @@ class _BaseModelFlex(BaseModel):
     model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
 
 
-class _BaseModelFlexLower(_BaseModelFlex):
+class BaseModelFlexLower(BaseModelFlex):
     """variant with str_to_lower for case-insensitive string fields."""
 
     _FLEXIBLE_CONFIG_LOWER = ConfigDict(

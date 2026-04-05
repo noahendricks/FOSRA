@@ -4,15 +4,14 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import Field as PydanticField
 
-from backend.src.api.schemas.base import _BaseModelFlex
+from backend.src.api.schemas.base import BaseModelFlex
 from backend.src.domain.enums import GraphNodeType
-from backend.src.storage.utils.converters import DomainStruct
 
 if TYPE_CHECKING:
     from backend.src.domain.schemas.retrieval import AccumulatedItem
 
 
-class Signature(_BaseModelFlex):
+class Signature(BaseModelFlex):
     """function signature with parameters and return type."""
 
     parameters: list[Parameter]
@@ -23,7 +22,7 @@ class Signature(_BaseModelFlex):
     decorators: list[str] = []
 
 
-class Parameter(_BaseModelFlex):
+class Parameter(BaseModelFlex):
     """a single function parameter."""
 
     name: str
@@ -33,7 +32,7 @@ class Parameter(_BaseModelFlex):
     is_keyword: bool = False
 
 
-class CallEdge(_BaseModelFlex):
+class CallEdge(BaseModelFlex):
     """represents a call from one function/method to another."""
 
     caller_name: str
@@ -48,7 +47,7 @@ class CallEdge(_BaseModelFlex):
     is_cross_file: bool = False
 
 
-class InheritanceEdge(_BaseModelFlex):
+class InheritanceEdge(BaseModelFlex):
     """represents a class inheritance/implementation relationship."""
 
     child_name: str
@@ -61,7 +60,7 @@ class InheritanceEdge(_BaseModelFlex):
     is_cross_file: bool = False
 
 
-class MethodEdge(_BaseModelFlex):
+class MethodEdge(BaseModelFlex):
     """represents a class defining/containing a method."""
 
     class_name: str
@@ -72,7 +71,7 @@ class MethodEdge(_BaseModelFlex):
     method_file_id: str
 
 
-class ResolvedImport(_BaseModelFlex):
+class ResolvedImport(BaseModelFlex):
     """an import statement resolved to its target file."""
 
     import_statement: str
@@ -85,7 +84,7 @@ class ResolvedImport(_BaseModelFlex):
     is_third_party: bool = False
 
 
-class CodeNode(_BaseModelFlex):
+class CodeNode(BaseModelFlex):
     """a node in the code graph (file, module, class, function, method)."""
 
     node_type: GraphNodeType
@@ -164,7 +163,7 @@ class CodeNode(_BaseModelFlex):
         return f"{decorators}{async_kw}def {receiver}{self.name}({params_str}){return_str}:"
 
 
-class GraphResult(_BaseModelFlex):
+class GraphResult(BaseModelFlex):
     """complete result from code graph extraction."""
 
     file_id: str
@@ -189,7 +188,7 @@ class GraphResult(_BaseModelFlex):
         return [n for n in self.nodes if n.node_type == GraphNodeType.METHOD]
 
 
-class GraphQueryResult(_BaseModelFlex):
+class GraphQueryResult(BaseModelFlex):
     """result from a graph query (semantic or structural)."""
 
     nodes: list[CodeNode]
