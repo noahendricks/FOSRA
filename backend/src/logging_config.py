@@ -1,13 +1,15 @@
 import io
 import logging
 import sys
+from typing import Any
+
 from loguru import logger
 from rich.console import Console
 from rich.pretty import Pretty
 
 
 class InterceptHandler(logging.Handler):
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         try:
             level = logger.level(record.levelname).name
         except (ValueError, KeyError):
@@ -17,43 +19,63 @@ class InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(level, message)
 
 
-def patch_fosra_errors(record):
-    exception = record.get("exception")
-    if exception:
-        exc_value = exception.value
-        if hasattr(exc_value, "__dict__"):
-            for key, value in exc_value.__dict__.items():
-                if value is not None:
-                    record["extra"][key] = value
-
-
 def _pretty_render(obj: object) -> str:
     """Render any object using rich.pretty and return as a plain string with ANSI codes."""
     buf = io.StringIO()
     console = Console(file=buf, highlight=True, no_color=False, width=120)
-    console.print(Pretty(obj, indent_size=2))
+    console.print(Pretty(obj, indent_size=1))
     return buf.getvalue().rstrip("\n")
 
 
-LOGURU_FORMAT = (
-    "<green>{time:HH:mm:ss.SSS}</green> | "
-    "<level>{level: <7}</level> | "
-    "<cyan>{extra[short_name]}</cyan>:<cyan>{line}</cyan> - "
-    "<level>{message}</level>"
-    "{extra[_rich_data]}"
-    "\n"
-)
+LOGURU_FORMAT = "<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <7}</level>|<cyan>{extra[short_name]}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>{extra[_rich_data]}\n"
 
 
-def _process_record(record: dict) -> bool:
+def _format_exception(exc_info: tuple[Any, Any, Any]) -> str:
+    """Format exception info (type, value, traceback) into a rich string."""
+    if not exc_info or exc_info == (None, None, None):
+        return ""
+
+    exc_type, exc_val, exc_tb = exc_info
+    parts = []
+
+    if exc_type is not None:
+        parts.append(f"\033[1m{exc_type.__name__}\033[0m")
+
+    if exc_val is not None:
+        parts.append(f"\033[91m{str(exc_val)}\033[0m")
+
+    if exc_tb is not None:
+        tb_lines = []
+        while exc_tb is not None:
+            frame = exc_tb.tb_frame
+            filename = frame.f_code.co_filename.split("/")[-1]
+            lineno = exc_tb.tb_lineno
+            funcname = frame.f_code.co_name
+            tb_lines.append(
+                f"  File \033[2m{filename}:{lineno}\033[0m in \033[2m{funcname}\033[0m"
+            )
+            exc_tb = exc_tb.tb_next
+
+        if tb_lines:
+            parts.append("\n" + "\n".join(tb_lines))
+
+    return " | ".join(parts)
+
+
+def _process_record(record: dict[str, Any]) -> bool:
     extras = record.get("extra", {})
     parts = record["name"].split(".")
     extras["short_name"] = ".".join(parts[-2:]) if len(parts) >= 2 else record["name"]
 
-    # Patch fosra errors BEFORE rich rendering so exception fields get captured
-    patch_fosra_errors(record)
+    # Extract and pretty-print exception info if present
+    exception_info = record.get("exception")
+    exception_str = ""
+    if exception_info and exception_info != (None, None, None):
+        exception_str = _format_exception(exception_info)
 
-    # Handle _structured extra for rich.pretty rendering of named fields
+    # patch fosra errors BEFORE rich rendering so exception fields get captured
+
+    # handle _structured extra for rich.pretty rendering of named fields
     structured = extras.pop("_structured", None)
     if structured and isinstance(structured, dict):
         rendered_parts = []
@@ -65,11 +87,14 @@ def _process_record(record: dict) -> bool:
             else:
                 rendered_parts.append(f"  \033[2m{key}\033[0m = {val!r}")
         if rendered_parts:
-            extras["_rich_data"] = "\n" + "\n".join(rendered_parts)
+            extra_lines = "\n" + "\n".join(rendered_parts)
+            extras["_rich_data"] = (
+                (exception_str + extra_lines) if exception_str else extra_lines
+            )
         else:
-            extras["_rich_data"] = ""
+            extras["_rich_data"] = exception_str if exception_str else ""
     else:
-        # Original behavior for general extras
+        # original behavior for general extras
         all_extras = {k: v for k, v in extras.items() if not k.startswith("_")}
         rich_parts = {}
         for key, val in all_extras.items():
@@ -77,11 +102,16 @@ def _process_record(record: dict) -> bool:
                 hasattr(val, "__dict__") and not callable(val)
             ):
                 rich_parts[key] = _pretty_render(val)
-        if rich_parts:
+        if rich_parts or exception_str:
             rendered = "\n".join(
                 f"  \033[2m{k}\033[0m = {v}" for k, v in rich_parts.items()
             )
-            extras["_rich_data"] = "\n" + rendered
+            if exception_str:
+                extras["_rich_data"] = exception_str + (
+                    "\n" + rendered if rendered else ""
+                )
+            else:
+                extras["_rich_data"] = "\n" + rendered if rendered else ""
         else:
             extras["_rich_data"] = ""
 
@@ -102,12 +132,12 @@ def setup_logging():
     except Exception:
         pass
 
-    logger.add(
-        sys.stderr,
-        format=LOGURU_FORMAT,
-        filter=_process_record,
+    _ = logger.add(
+        sink=sys.stderr,
         level="DEBUG",
+        format=LOGURU_FORMAT,
         colorize=True,
+        filter=_process_record,
     )
 
     logging.basicConfig(

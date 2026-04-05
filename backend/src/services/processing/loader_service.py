@@ -1,23 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
 from langchain_core.documents.base import Blob
 from ulid import ULID
 
-from backend.src.settings import ChunkerConfig
 from backend.src.domain.schemas.doc import Doc, DocMetadata, MDNFile
-from backend.src.services.processing.chunker_service import ChunkerService
 
 
 def to_bytes(path: str):
     with open(path, "rb") as f:
         return f.read()
-
-
-from rich.traceback import install
 
 
 def ulid_factory() -> str:
@@ -32,12 +26,8 @@ from loguru import logger
 class LoaderService:
     @staticmethod
     def _parse_files(files: list[str | Path | MDNFile]) -> list[Doc]:
-        from content_types import EXTENSION_TO_CONTENT_TYPE
         from content_types import get_content_type as get_mime
         from langchain_community.document_loaders.parsers import PyMuPDFParser
-        from langchain_community.document_loaders.parsers.language.language_parser import (
-            LanguageParser,
-        )
         from langchain_community.document_loaders.parsers.txt import TextParser
         from langchain_core.document_loaders import Blob
 
