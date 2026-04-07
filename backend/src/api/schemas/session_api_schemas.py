@@ -111,7 +111,6 @@ class SessionRequest(SessionRequestBase):
 
 class NewSessionRequest(SessionRequestBase):
     title: str | None = "New Session"
-    workspace_id: str = "default"
     directory: str = ""
     version: str = "1"
     parent_id: str | None = None

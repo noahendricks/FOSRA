@@ -127,14 +127,6 @@ from backend.src.api.schemas.event_schemas import (  # noqa: F401
     EventPermissionReplied,
     EventPermissionRepliedProperties,
     EventProjectUpdated,
-    EventPtyCreated,
-    EventPtyCreatedProperties,
-    EventPtyDeleted,
-    EventPtyDeletedProperties,
-    EventPtyExited,
-    EventPtyExitedProperties,
-    EventPtyUpdated,
-    EventPtyUpdatedProperties,
     EventQuestionAsked,
     EventQuestionRejected,
     EventQuestionRejectedProperties,
@@ -171,14 +163,6 @@ from backend.src.api.schemas.event_schemas import (  # noqa: F401
     EventTuiToastShowProperties,
     EventVcsBranchUpdated,
     EventVcsBranchUpdatedProperties,
-    EventWorkspaceFailed,
-    EventWorkspaceFailedProperties,
-    EventWorkspaceReady,
-    EventWorkspaceReadyProperties,
-    EventWorktreeFailed,
-    EventWorktreeFailedProperties,
-    EventWorktreeReady,
-    EventWorktreeReadyProperties,
     GlobalEvent,
 )
 from backend.src.api.schemas.message_schemas import (  # noqa: F401
@@ -294,7 +278,6 @@ from backend.src.api.schemas.workspace_schemas import (  # noqa: F401,F811
     ProjectIcon,
     ProjectSummary,
     ProjectTime,
-    Pty,
     Range,
     RangeEnd,
     RangeStart,
@@ -357,8 +340,14 @@ def session_full_to_session(session: SessionFullResponse) -> Session:
 def message_to_tui(
     msg: UserMessage | AssistantMessage, session_id: str
 ) -> dict[str, Any]:
-    info = msg.model_dump(mode="json") if hasattr(msg, "model_dump") else {}
-    return {"info": info, "parts": []}
+    info: dict[str, Any] = (
+        msg.model_dump(mode="json") if hasattr(msg, "model_dump") else {}
+    )
+    parts: list[dict[str, Any]] = []
+    if isinstance(msg, AssistantMessage) and msg.parts:
+        for part in msg.parts:
+            parts.append(part.model_dump(mode="json"))
+    return {"info": info, "parts": parts}
 
 
 def get_default_provider() -> dict[str, Any]:

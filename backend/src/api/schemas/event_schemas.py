@@ -2,12 +2,32 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    pass
+try:
+    from backend.src.api.schemas.config_schemas import (  # noqa: F401
+        ApiError,
+        ContextOverflowError,
+        MessageAbortedError,
+        MessageOutputLengthError,
+        ProviderAuthError,
+        StructuredOutputError,
+        UnknownError,
+    )
+
+    SessionErrorType = (
+        ApiError
+        | ProviderAuthError
+        | UnknownError
+        | MessageOutputLengthError
+        | MessageAbortedError
+        | StructuredOutputError
+        | ContextOverflowError
+    )
+except ImportError:
+    SessionErrorType = Any
 
 # ---- TUI EVENTS ----
 
@@ -197,7 +217,16 @@ class EventSessionDiff(BaseModel):
 
 class EventSessionErrorProperties(BaseModel):
     sessionID: str | None = None
-    error: Any | None = None  # ApiError/ProviderAuthError — avoid circular
+    error: Union[
+        "ApiError",
+        "ProviderAuthError",
+        "UnknownError",
+        "MessageOutputLengthError",
+        "MessageAbortedError",
+        "StructuredOutputError",
+        "ContextOverflowError",
+        None,
+    ] = None
 
 
 class EventSessionError(BaseModel):
@@ -265,7 +294,7 @@ class EventTodoCreated(BaseModel):
 
 class EventTodoUpdatedProperties(BaseModel):
     sessionID: str
-    todo: Any  # Todo — avoid circular
+    todos: list[dict[str, Any]]
 
 
 class EventTodoUpdated(BaseModel):
@@ -312,53 +341,6 @@ class EventMcpToolsChanged(BaseModel):
     properties: EventMcpToolsChangedProperties
 
 
-# ---- PTY EVENTS ----
-
-
-class EventPtyCreatedProperties(BaseModel):
-    id: str
-    cwd: str
-    cols: int
-    rows: int
-
-
-class EventPtyCreated(BaseModel):
-    type: Literal["pty.created"]
-    properties: EventPtyCreatedProperties
-
-
-class EventPtyUpdatedProperties(BaseModel):
-    id: str
-    data: str | None = None
-    cols: int | None = None
-    rows: int | None = None
-    title: str | None = None
-
-
-class EventPtyUpdated(BaseModel):
-    type: Literal["pty.updated"]
-    properties: EventPtyUpdatedProperties
-
-
-class EventPtyExitedProperties(BaseModel):
-    id: str
-    exitCode: int
-
-
-class EventPtyExited(BaseModel):
-    type: Literal["pty.exited"]
-    properties: EventPtyExitedProperties
-
-
-class EventPtyDeletedProperties(BaseModel):
-    id: str
-
-
-class EventPtyDeleted(BaseModel):
-    type: Literal["pty.deleted"]
-    properties: EventPtyDeletedProperties
-
-
 # ---- SERVER / GLOBAL EVENTS ----
 
 
@@ -389,7 +371,7 @@ class EventGlobalDisposed(BaseModel):
 
 
 class EventFileEditedProperties(BaseModel):
-    path: str
+    file: str
 
 
 class EventFileEdited(BaseModel):
@@ -424,7 +406,6 @@ class EventLspClientDiagnostics(BaseModel):
 
 class EventInstallationUpdatedProperties(BaseModel):
     version: str
-    releaseNotes: str
 
 
 class EventInstallationUpdated(BaseModel):
@@ -468,26 +449,6 @@ class EventCommandExecuted(BaseModel):
     properties: EventCommandExecutedProperties
 
 
-class EventWorktreeReadyProperties(BaseModel):
-    name: str
-    path: str
-
-
-class EventWorktreeReady(BaseModel):
-    type: Literal["worktree.ready"]
-    properties: EventWorktreeReadyProperties
-
-
-class EventWorktreeFailedProperties(BaseModel):
-    name: str
-    error: str
-
-
-class EventWorktreeFailed(BaseModel):
-    type: Literal["worktree.failed"]
-    properties: EventWorktreeFailedProperties
-
-
 # ---- PROJECT / WORKSPACE EVENTS ----
 
 
@@ -521,26 +482,6 @@ class ProjectProperties(BaseModel):
 class EventProjectUpdated(BaseModel):
     type: Literal["project.updated"]
     properties: ProjectProperties
-
-
-class EventWorkspaceReadyProperties(BaseModel):
-    workspaceID: str
-    directory: str
-
-
-class EventWorkspaceReady(BaseModel):
-    type: Literal["workspace.ready"]
-    properties: EventWorkspaceReadyProperties
-
-
-class EventWorkspaceFailedProperties(BaseModel):
-    workspaceID: str
-    error: str
-
-
-class EventWorkspaceFailed(BaseModel):
-    type: Literal["workspace.failed"]
-    properties: EventWorkspaceFailedProperties
 
 
 # ---- GLOBAL EVENT ENVELOPE ----

@@ -309,9 +309,8 @@ async def create_message(
     # import here to avoid circular imports
     from backend.src.services.session.agent_runner import run_agent_with_events
 
-    # resolve providerID and modelID from body
-    provider_id = body.providerID or (body.model.providerID if body.model else None)
-    model_id = body.modelID or (body.model.modelID if body.model else None)
+    provider_id = (body.model.providerID if body.model else None) or body.providerID
+    model_id = (body.model.modelID if body.model else None) or body.modelID
 
     logger.bind(
         _structured={"prompt request body": body, "session_id": session_id}

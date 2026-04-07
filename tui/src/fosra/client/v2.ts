@@ -28,7 +28,6 @@ import type {
   VcsGetResponse,
   PathGetResponse,
   FindFilesResponse,
-  ExperimentalWorkspaceListResponse,
 } from "../sdk-types";
 import { log } from "../util/log";
 export * from "../sdk-types";
@@ -50,7 +49,6 @@ export const createFosraClient = (options: {
   directory?: string;
   fetch?: typeof fetch;
   headers?: Record<string, string>;
-  experimental_workspaceID?: string;
 }) => {
   const baseUrl = options.baseUrl ?? "http://localhost:8000/oc";
   const fetchFn = options.fetch ?? globalThis.fetch;
@@ -414,24 +412,6 @@ export const createFosraClient = (options: {
       resource: {
         list: async (p: any, o?: any) =>
           api<{}>("/experimental/resource", { method: "GET", ...opts(o) }),
-      },
-      workspace: {
-        list: async (p: any, o?: any) =>
-          api<ExperimentalWorkspaceListResponse>("/experimental/workspace", {
-            method: "GET",
-            ...opts(o),
-          }),
-        create: async (p: any, o?: any) =>
-          api<{}>("/experimental/workspace", {
-            method: "POST",
-            body: JSON.stringify(p),
-            ...opts(o),
-          }),
-        remove: async (p: any, o?: any) =>
-          api<boolean>(`/experimental/workspace/${p.id}`, {
-            method: "DELETE",
-            ...opts(o),
-          }),
       },
     },
     formatter: {
