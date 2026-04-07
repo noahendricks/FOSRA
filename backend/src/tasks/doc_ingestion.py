@@ -55,6 +55,9 @@ async def ingest_docs(
     infra = get_infra()
 
     # ensure collection exists
+    client = infra.qdrant_client
+    if client is None:
+        raise RuntimeError("Qdrant client not initialized in infrastructure")
     await VectorService.ensure_collection(client, embedder_config)
 
     # step 1: register in docs table (optional)
@@ -133,10 +136,13 @@ async def reindex_docs(
     infra = get_infra()
 
     # drop existing collection
+    client = infra.qdrant_client
+    if client is None:
+        raise RuntimeError("Qdrant client not initialized in infrastructure")
     _ = await VectorService.delete_collection(client, CHUNKS_COLLECTION)
 
     # recreate
-    _ = await VectorService.ensure_collection(client, embedder_config)
+    await VectorService.ensure_collection(client, embedder_config)
 
     # load all docs from postgres
     async with session_factory() as session:
@@ -149,51 +155,48 @@ async def reindex_docs(
             logger.info("No docs found in database to reindex")
             return {"docs_processed": 0, "chunks_upserted": 0}
 
-        docs = [_doc_orm_to_domain(d) for d in doc_orms]
+        docs = []
+        for doc_orm in doc_orms:
+            # Load content from file path
+            try:
+                with open(doc_orm.path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception as e:
+                logger.error(
+                    "Failed to read file {} for reindexing: {}", doc_orm.path, e
+                )
+                continue
 
-    # ingest directly (await the result)
-    return await ingest_docs(
-        docs,
-        chunker_config,
-        embedder_config,
-        vector_config,
-        None,
+            docs.append(_doc_orm_to_domain_with_content(doc_orm, content))
+
+        # ingest directly (await the result)
+        return await ingest_docs(
+            docs,
+            chunker_config,
+            embedder_config,
+            vector_config,
+            None,
+        )
+
+
+async def _doc_orm_to_domain_with_content(doc_orm: DocORM, content: str) -> Doc:
+    """Convert DocORM to Doc domain object with provided content."""
+    from backend.src.domain.schemas.doc import DocMetadata
+
+    return Doc(
+        id=doc_orm.doc_id,
+        page_content=content,
+        metadata=DocMetadata(
+            source=doc_orm.path or "",
+            mime_type="text/plain",
+            doc_id=doc_orm.doc_id,
+            doc_title=doc_orm.name or "",
+            path=doc_orm.path,
+            language=doc_orm.language,
+            source_type=doc_orm.source_type,
+            checksum=doc_orm.checksum,
+        ),
     )
-
-
-async def _upsert_doc_orm(
-    session: AsyncSession,
-    doc: Doc,
-    checksum: str,
-    source_type: FileSourceType,
-) -> DocORM:
-    """Upsert a doc to PostgreSQL."""
-    existing = await session.execute(
-        select(DocORM).where(DocORM.path == doc.metadata.source)
-    )
-    existing_doc = existing.scalar_one_or_none()
-
-    if existing_doc:
-        existing_doc.checksum = checksum
-        existing_doc.source_type = source_type.value
-        return existing_doc
-
-    doc_hash = hashlib.sha256(f"{doc.id}:{doc.metadata.source}".encode()).hexdigest()
-
-    new_doc = DocORM(
-        doc_id=doc.id,
-        doc_hash=doc_hash,
-        name=doc.metadata.doc_title or doc.metadata.source.split("/")[-1],
-        type=SourceType.FILESYSTEM,
-        path=doc.metadata.path or doc.metadata.source,
-        language=doc.metadata.language,
-        source_type=source_type.value,
-        checksum=checksum,
-        doc_summary="",
-        summary_embedding="",
-    )
-    session.add(new_doc)
-    return new_doc
 
 
 def _doc_orm_to_domain(doc_orm: DocORM) -> Doc:

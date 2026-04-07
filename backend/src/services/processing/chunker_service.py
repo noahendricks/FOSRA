@@ -154,6 +154,7 @@ class ChunkerService:
         structurer = HiChunkStructurer(config=config)
 
         for section in doc.metadata.sections:
+            # check if kruezberg is necessary here ; might not be getting hit
             section_text = (
                 section.section_text
                 if section.section_text

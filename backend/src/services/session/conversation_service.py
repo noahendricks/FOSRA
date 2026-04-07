@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import msgspec
 from loguru import logger
 from qdrant_client.conversions.common_types import QueryResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,26 +24,41 @@ from backend.src.api.schemas.session_api_schemas import (
     SessionDeleteRequest,
     SessionFullResponse,
     SessionListItemResponse,
+    SessionTime,
     SessionUpdateRequest,
+)
+from backend.src.api.schemas.tui_control_schemas import (
+    TextPart,
+    UIMessage,
 )
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_MODEL_ID,
     DEFAULT_PROVIDER_ID,
     PROJECT_DIR,
 )
-from backend.src.api.schemas.tui_control_schemas import (
-    TextPart,
-    UIMessage,
-)
 from backend.src.domain.enums import MessageRole, VectorStoreType
-from backend.src.domain.schemas.session import Session, Message, NewSession
 from backend.src.domain.schemas.doc import MDNFile
+from backend.src.domain.schemas.session import Message, NewSession, Session
 from backend.src.settings import ScoredRetrieval
 from backend.src.storage.session import SessionRepo
-from backend.src.storage.utils.converters import domain_to_response
+from backend.src.storage.utils.converters import domain_to_response, utc_now
 
 if TYPE_CHECKING:
     from backend.src.storage.models import MessageORM
+
+
+def _ts_to_dt(ts: int | float | datetime | None) -> datetime:
+    if isinstance(ts, datetime):
+        return ts
+    if ts is None:
+        return utc_now()
+    return datetime.fromtimestamp(ts, tz=UTC)
+
+
+def _session_time_to_dts(time_obj) -> tuple[datetime, datetime]:
+    created = getattr(time_obj, "created", 0) if time_obj else 0
+    updated = getattr(time_obj, "updated", created) if time_obj else created
+    return _ts_to_dt(created), _ts_to_dt(updated)
 
 
 def _build_tui_message(msg: Message, session_id: str) -> UserMessage | AssistantMessage:
@@ -99,9 +116,19 @@ class SessionService:
 
         logger.success("Created session: {}", session_obj.session_id)
 
-        return domain_to_response(
-            session_obj,
-            NewSessionResponse,
+        created_at, updated_at = _session_time_to_dts(session_obj.time)
+
+        return NewSessionResponse(
+            user_id=session_obj.user_id,
+            session_id=session_obj.session_id,
+            title=session_obj.title,
+            directory=session_obj.directory or "",
+            version=session_obj.version or "1",
+            parent_id=session_obj.parent_id,
+            session_metadata=session_obj.session_metadata,
+            time=SessionTime(
+                created=int(created_at.timestamp()), updated=int(updated_at.timestamp())
+            ),
         )
 
     @staticmethod
@@ -126,14 +153,29 @@ class SessionService:
             _build_tui_message(msg, session_id) for msg in (session_obj.messages or [])
         ]
 
+        created_at, updated_at = _session_time_to_dts(session_obj.time)
+
         return SessionFullResponse(
             user_id=session_obj.user_id,
             session_id=session_obj.session_id,
             title=session_obj.title or "New Session",
-            created_at=session_obj.created_at,
-            updated_at=session_obj.created_at,
+            created_at=created_at,
+            updated_at=updated_at,
             message_count=len(tui_messages),
             messages=tui_messages,
+            directory=session_obj.directory or PROJECT_DIR,
+            version=session_obj.version or "1",
+            parent_id=session_obj.parent_id,
+            permission=session_obj.permission,
+            revert=msgspec.to_builtins(session_obj.revert)
+            if session_obj.revert
+            else None,
+            metadata=msgspec.to_builtins(session_obj.metadata)
+            if session_obj.metadata
+            else None,
+            time=SessionTime(
+                created=int(created_at.timestamp()), updated=int(updated_at.timestamp())
+            ),
         )
 
     @staticmethod
@@ -149,7 +191,27 @@ class SessionService:
         )
 
         logger.success("Retrieved {} sessions for user {}", len(sessions), user_id)
-        return [domain_to_response(s, SessionListItemResponse) for s in sessions]
+
+        results = []
+        for s in sessions:
+            created_at, updated_at = _session_time_to_dts(s.time)
+            results.append(
+                SessionListItemResponse(
+                    user_id=s.user_id,
+                    session_id=s.session_id,
+                    title=s.title or "",
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    message_count=0,
+                    directory=s.directory or PROJECT_DIR,
+                    version=s.version or "1",
+                    parent_id=s.parent_id,
+                    permission=s.permission,
+                    revert=msgspec.to_builtins(s.revert) if s.revert else None,
+                    metadata=msgspec.to_builtins(s.metadata) if s.metadata else None,
+                )
+            )
+        return results
 
     @staticmethod
     async def update_session(
@@ -165,7 +227,29 @@ class SessionService:
 
         logger.success("Updated session: {}", session_update.session_id)
 
-        return domain_to_response(session_obj, SessionFullResponse)
+        created_at, updated_at = _session_time_to_dts(session_obj.time)
+
+        return SessionFullResponse(
+            user_id=session_obj.user_id,
+            session_id=session_obj.session_id,
+            title=session_obj.title or "",
+            created_at=created_at,
+            updated_at=updated_at,
+            message_count=0,
+            directory=session_obj.directory or PROJECT_DIR,
+            version=session_obj.version or "1",
+            parent_id=session_obj.parent_id,
+            permission=session_obj.permission,
+            revert=msgspec.to_builtins(session_obj.revert)
+            if session_obj.revert
+            else None,
+            metadata=msgspec.to_builtins(session_obj.metadata)
+            if session_obj.metadata
+            else None,
+            time=SessionTime(
+                created=int(created_at.timestamp()), updated=int(updated_at.timestamp())
+            ),
+        )
 
     @staticmethod
     async def delete_session(
@@ -240,8 +324,13 @@ class SessionService:
             "processing user message for session"
         )
 
+        logger.bind(_structured={"ui message": message}).debug("[UI MESSAGE]")
         msg: Message = await SessionService.unpack_message(
             message, session_id=session_id, user_id=user_id
+        )
+
+        logger.bind(_structured={"backend message": msg.to_dict()}).debug(
+            "[BACKEND MESSAGE]"
         )
         _: MessageORM = await SessionRepo.add_message(
             session=session,
