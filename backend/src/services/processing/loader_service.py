@@ -59,6 +59,7 @@ class LoaderService:
                     )
                     from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
+                        DoclingParseError,
                     )
 
                     try:
@@ -71,6 +72,8 @@ class LoaderService:
                             d.id,
                         )
                         continue
+                    except DoclingParseError:
+                        raise
                     except Exception as ex:
                         logger.warning(
                             "Docling failed for {}, falling back to PyMuPDFParser: {}",
@@ -98,6 +101,7 @@ class LoaderService:
                 case "text/markdown" | "text/plain":
                     from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
+                        DoclingParseError,
                     )
 
                     try:
@@ -110,6 +114,8 @@ class LoaderService:
                             d.id,
                         )
                         continue
+                    except DoclingParseError:
+                        raise
                     except Exception as ex:
                         logger.warning(
                             "Docling failed for {}, falling back to TextParser: {}",

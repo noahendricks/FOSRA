@@ -68,9 +68,9 @@ async def ingest_codebase(
         force: If True, re-index even if checksum unchanged
 
     Returns:
-        Summary of indexed files, nodes, and edges
+        Job ID and status for tracking ingestion progress
     """
-    from backend.src.tasks.codebase_ingestion import ingest_codebase as _ingest
+    from backend.src.tasks.codebase_ingestion import ingest_codebase
 
     path = Path(directory_path)
     if not path.exists():
@@ -94,7 +94,7 @@ async def ingest_codebase(
 
     try:
         embedder_config = _default_embedder_config()
-        result = await _ingest(
+        task = await ingest_codebase.delay(
             directory_path=str(path.absolute()),
             repo_name=repo,
             embedder_config=embedder_config,
@@ -103,18 +103,12 @@ async def ingest_codebase(
             recursive=True,
         )
 
-        logger.bind(
-            _structured={
-                "files_indexed": result.get("files_indexed", 0),
-                "nodes_created": result.get("nodes_created", 0),
-                "edges_created": result.get("edges_created", 0),
-            }
-        ).info("Codebase ingestion complete")
+        logger.bind(job_id=task.task_id).info("Codebase ingestion task queued")
 
-        return result | {}  # type: ignore[return-value]
+        return {"job_id": task.task_id, "status": "pending"}
 
     except Exception as e:
-        logger.error("Codebase ingestion failed: {}", e)
+        logger.error("Failed to queue codebase ingestion: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -133,9 +127,9 @@ async def ingest_single_file(
         force: If True, re-index even if checksum unchanged
 
     Returns:
-        Summary of nodes and edges created
+        job ID and status for tracking ingestion progress
     """
-    from backend.src.tasks.codebase_ingestion import ingest_single_file as _ingest
+    from backend.src.tasks.codebase_ingestion import ingest_single_file
 
     path = Path(file_path)
     if not path.exists():
@@ -153,7 +147,7 @@ async def ingest_single_file(
 
     try:
         embedder_config = _default_embedder_config()
-        result = await _ingest(
+        task = await ingest_single_file.delay(
             file_path=str(path.absolute()),
             repo_name=repo_name,
             embedder_config=embedder_config,
@@ -161,10 +155,12 @@ async def ingest_single_file(
             session_factory=global_infra.session_factory,
         )
 
-        return result
+        logger.bind(job_id=task.task_id).info("Single file ingestion task queued")
+
+        return {"job_id": task.task_id, "status": "pending"}
 
     except Exception as e:
-        logger.error("Single file ingestion failed: {}", e)
+        logger.error("Failed to queue single file ingestion: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -183,9 +179,9 @@ async def ingest_documents(
         force: If True, re-index even if checksum unchanged
 
     Returns:
-        Summary of documents and chunks indexed
+        job ID and status for tracking ingestion progress
     """
-    from backend.src.tasks.doc_ingestion import ingest_docs as _ingest
+    from backend.src.tasks.doc_ingestion import ingest_docs
 
     paths = [Path(p) for p in file_paths]
     missing = [str(p) for p in paths if not p.exists()]
@@ -196,10 +192,26 @@ async def ingest_documents(
     for p in paths:
         from backend.src.services.processing.docling_loader import (
             DoclingLoader,
+            DoclingParseError,
         )
 
         mime = _guess_mime(p)
-        doc = DoclingLoader.parse_file_sync(str(p.absolute()), mime_type=mime)
+        try:
+            doc = DoclingLoader.parse_file_sync(str(p.absolute()), mime_type=mime)
+        except DoclingParseError as e:
+            logger.error("Docling failed to parse {}: {}", p, e.reason)
+            raise HTTPException(
+                status_code=422,
+                detail=f"Failed to parse document {p}: {e.reason}",
+            )
+
+        if not doc.page_content and not doc.metadata.sections:
+            logger.error("Docling returned empty content for {}", p)
+            raise HTTPException(
+                status_code=422,
+                detail=f"Document {p} has no extractable content",
+            )
+
         doc.metadata.source_type = (
             FileSourceType.DOC if source_type == "doc" else FileSourceType.CODEBASE
         )
@@ -210,7 +222,7 @@ async def ingest_documents(
     vector_config = _default_vector_config()
 
     try:
-        result = await _ingest(
+        task = await ingest_docs.delay(
             docs=docs,
             chunker_config=chunker_config,
             embedder_config=embedder_config,
@@ -220,16 +232,17 @@ async def ingest_documents(
 
         logger.bind(
             _structured={
+                "job_id": task.task_id,
                 "docs_indexed": result.get("docs_indexed", 0),
                 "parent_chunks": result.get("parent_chunks", 0),
                 "child_chunks": result.get("child_chunks", 0),
             }
         ).info("Document ingestion complete")
 
-        return result
+        return {"job_id": task.task_id, "status": "pending"}
 
     except Exception as e:
-        logger.error("Document ingestion failed: {}", e)
+        logger.error("Failed to queue document ingestion: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

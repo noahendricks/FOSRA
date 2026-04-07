@@ -9,7 +9,7 @@ from docling_core.transforms.chunker import HierarchicalChunker
 from loguru import logger
 
 from backend.src.domain.schemas.doc import Doc, DocMetadata, Section
-from backend.src.storage.utils.converters import ulid_factory
+from backend.src.storage.utils.converters import DomainStruct, ulid_factory
 
 _MARKDOWN_ANCHOR_RE = re.compile(r"\s*\{#[^}]+\}\s*$")
 _CALLOUT_HEADING_RE = re.compile(r"^(:::|!!!).*")
@@ -17,6 +17,28 @@ _YAML_FRONTMATTER_RE = re.compile(r"^---\n[\s\S]*?\n---\n\n?")
 _YAML_KEY_VALUE_RE = re.compile(
     r"^[a-z_][a-z0-9_]*:(?:[ \t]+[^\n]*)?\n(?:[ \t]+[^\n]*\n)*(?:\n+)?"
 )
+
+
+class DoclingParseError(Exception):
+    def __init__(
+        self,
+        file_path: str | Path,
+        reason: str,
+        original_error: Exception | None = None,
+    ):
+        self.file_path = str(file_path)
+        self.reason = reason
+        self.original_error = original_error
+        super().__init__(f"Docling failed to parse {file_path}: {reason}")
+
+
+class DoclingIngestionResult(DomainStruct, kw_only=True):
+    file_path: str
+    success: bool
+    sections_count: int
+    page_content_length: int
+    error: str | None = None
+    failed_pages: list[int] = []
 
 
 def _clean_heading(heading: str | None) -> str | None:
@@ -88,10 +110,10 @@ class DoclingLoader:
             chunks = list(chunker.chunk(result.document))
         except Exception as ex:
             logger.warning("Docling failed for {}: {}", file_path, ex)
-            return []
+            raise DoclingParseError(file_path, str(ex), original_error=ex)
 
         if not chunks:
-            return []
+            raise DoclingParseError(file_path, "No content extracted from document")
 
         sections: list[Section] = []
         current_section_chunks: list[

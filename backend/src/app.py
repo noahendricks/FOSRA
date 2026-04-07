@@ -13,6 +13,7 @@ from loguru import logger
 from backend.src.api.exception_handlers import register_exception_handlers
 from backend.src.api.lifecycle import global_infra
 from backend.src.api.routes.ingestion import router as ingestion_router
+from backend.src.api.routes.ingestion_status import router as ingestion_status_router
 from backend.src.api.routes.retrieval import router as retrieval_router
 from backend.src.api.routes.tui import router as tui_router
 from backend.src.api.routes.workspace import router as workspace_router
@@ -105,6 +106,7 @@ register_exception_handlers(app=app)
 
 app.include_router(workspace_router)
 app.include_router(ingestion_router)
+app.include_router(ingestion_status_router)
 app.include_router(retrieval_router)
 app.include_router(tui_router)
 
