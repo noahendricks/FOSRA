@@ -90,6 +90,7 @@ class AssistantMessage(BaseModel):
     structured: Any | None = None
     variant: str | None = None
     finish: str | None = None
+    parts: list[Part] | None = None
 
 
 # ---- PART TYPES ----

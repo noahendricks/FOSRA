@@ -4,7 +4,7 @@ tui-compatible types and fosra → tui shape transformers.
 maps fosra domain objects (sessions, messages) into the shapes the
 solidjs tui expects for sessions, messages, parts, and events.
 
-All schema classes have been moved to focused modules:
+all schema classes have been moved to focused modules:
 - session_schemas: Session, SessionTime, SessionSummary, SessionStatus, etc.
 - message_schemas: UserMessage, AssistantMessage, all Part types, ToolState, etc.
 - event_schemas: all Event* types
@@ -13,7 +13,7 @@ All schema classes have been moved to focused modules:
 - source_schemas: FileNode, FileContent, VcsInfo, LspStatus, ToolList, etc.
 - workspace_schemas: Workspace, Project, Worktree, Auth, Symbol, error responses, Pty
 
-This file re-exports everything for backward compatibility.
+this file re-exports everything for backward compatibility.
 """
 
 from __future__ import annotations
@@ -229,12 +229,10 @@ from backend.src.api.schemas.session_schemas import (  # noqa: F401
     GlobalSession,
     Session,
     SessionRevert,
-    SessionShare,
     SessionStatus,
     SessionStatusBusy,
     SessionStatusIdle,
     SessionStatusRetry,
-    SessionSummary,
     SessionTime,
 )
 from backend.src.api.schemas.source_schemas import (  # noqa: F401,F811
@@ -324,12 +322,10 @@ def session_to_session(
 ) -> Session:
     return Session(
         id=item.session_id,
-        slug="",
-        projectID="",
-        workspaceID="default",
-        directory=PROJECT_DIR,
+        directory=item.directory or PROJECT_DIR,
         title=item.title or "",
-        version="",
+        version=item.version or "1",
+        parent_id=item.parent_id,
         time=SessionTime(
             created=_ts(item.created_at),
             updated=_ts(item.updated_at),
@@ -344,12 +340,13 @@ def session_list_item_to_session(item: SessionListItemResponse) -> Session:
 def session_full_to_session(session: SessionFullResponse) -> Session:
     return Session(
         id=session.session_id,
-        slug="",
-        projectID="",
-        workspaceID="default",
-        directory=PROJECT_DIR,
+        directory=session.directory or PROJECT_DIR,
         title=session.title or "",
-        version="",
+        version=session.version or "1",
+        parent_id=session.parent_id,
+        permission=session.permission,
+        revert=session.revert,
+        metadata=session.metadata,
         time=SessionTime(
             created=_ts(session.created_at),
             updated=_ts(session.updated_at),

@@ -10,10 +10,9 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+from collections.abc import AsyncIterable
 from datetime import datetime, timezone
 from typing import Annotated, Any, cast
-
-from collections.abc import AsyncIterable
 
 from fastapi import (
     APIRouter,
@@ -45,25 +44,25 @@ from backend.src.api.routes.oc.state import (
     session_diffs,
     session_status,
 )
-from backend.src.api.schemas.session_api_schemas import (
-    SessionDeleteRequest,
-    SessionUpdateRequest,
-    NewSessionRequest,
-)
 from backend.src.api.schemas.provider_registry import (
     get_config_providers_response,
     get_provider_list_response,
+)
+from backend.src.api.schemas.session_api_schemas import (
+    NewSessionRequest,
+    SessionDeleteRequest,
+    SessionUpdateRequest,
 )
 from backend.src.api.schemas.tui_schemas import (
     PROJECT_DIR,
     PromptRequest,
     Session,
     SessionTime,
-    session_full_to_session,
-    session_list_item_to_session,
     get_agents,
     get_default_config,
     message_to_tui,
+    session_full_to_session,
+    session_list_item_to_session,
 )
 from backend.src.services.session.conversation_service import SessionService
 from backend.src.services.session.event_emitter import get_event_emitter
@@ -141,7 +140,7 @@ async def sse_endpoint(
 @router.get("/session")
 async def list_sessions(
     user_id: Annotated[str, Depends(get_current_user_id)],
-    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
+    session: AsyncSession = Depends(get_db_session),
 ):
     items = await SessionService.list_sessions(
         session=session,
@@ -151,10 +150,10 @@ async def list_sessions(
 
     for item, result in zip(items, results):
         persisted = await get_persisted_session_state(item.session_id)
-        if persisted and persisted.get("metadata"):  # type: ignore[reportUnknownMemberType]
+        if persisted and persisted.get("metadata"):
             from backend.src.api.schemas.session_schemas import SessionMetadataModel
 
-            result.metadata = SessionMetadataModel(**persisted["metadata"])  # type: ignore[reportUnknownMemberType]
+            result.metadata = SessionMetadataModel(**persisted["metadata"])
 
     return results
 
@@ -200,9 +199,6 @@ async def create_session(
     now = int(datetime.now(timezone.utc).timestamp())
     session_info = Session(
         id=result.session_id,
-        slug="",
-        projectID="",
-        workspaceID="default",
         directory=PROJECT_DIR,
         title=result.title or "New Session",
         version="",
@@ -249,9 +245,6 @@ async def delete_session(
         await cleanup_session(session_id)
         session_info = Session(
             id=session_id,
-            slug="",
-            projectID="",
-            workspaceID="default",
             directory=PROJECT_DIR,
             title="",
             version="",
@@ -320,12 +313,20 @@ async def create_message(
     provider_id = body.providerID or (body.model.providerID if body.model else None)
     model_id = body.modelID or (body.model.modelID if body.model else None)
 
+    logger.bind(
+        _structured={"prompt request body": body, "session_id": session_id}
+    ).debug("[PROMPT REQUEST BODY]")
+
     # store model info in session metadata synchronously
     existing = await check_session_existing(session_id=session_id)
     if not existing:
         existing = await persist_session_state(
             session_id=session_id,
             metadata={"model": {"providerID": provider_id, "modelID": model_id}},
+        )
+
+        logger.bind(_structured={"persist session state": existing}).debug(
+            "[PERSIST SESSION STATE]"
         )
     else:
         existing = True
@@ -362,6 +363,10 @@ async def create_message(
                             model=updated_session["metadata"].get("model"),  # type: ignore[reportUnknownMemberType]
                             agent=updated_session["metadata"].get("agent"),  # type: ignore[reportUnknownMemberType]
                         ).model_dump()
+
+                    logger.bind(
+                        _structured={"emitted session data": session_data}
+                    ).debug("[EMITTED SESSION DATA]")
 
                     await event_emitter.emit_session_updated(session_data)
 

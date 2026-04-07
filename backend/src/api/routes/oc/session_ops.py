@@ -80,9 +80,6 @@ def _session_to_session_with_parent(
     parent_id = _get_parent_id(meta)
     return {
         "id": session_id,
-        "slug": session_id[:8],
-        "projectID": "default",
-        "workspaceID": None,
         "directory": PROJECT_DIR,
         "parentID": parent_id,
         "title": title or "New Session",

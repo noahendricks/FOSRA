@@ -3,6 +3,11 @@ from typing import Any
 
 from backend.src.api.schemas.message_schemas import AssistantMessage, UserMessage
 from backend.src.api.schemas.base import BaseModelFlex
+from backend.src.api.schemas.session_schemas import (
+    SessionMetadataModel,
+    SessionRevert,
+    SessionTime,
+)
 from backend.src.api.schemas.source_api_schemas import (
     SourceResponseDeep,
     SourceResponseShallow,
@@ -107,6 +112,9 @@ class SessionRequest(SessionRequestBase):
 class NewSessionRequest(SessionRequestBase):
     title: str | None = "New Session"
     workspace_id: str = "default"
+    directory: str = ""
+    version: str = "1"
+    parent_id: str | None = None
 
 
 class SessionDeleteRequest(SessionRequestBase):
@@ -120,6 +128,11 @@ class SessionUpdateRequest(SessionRequestBase):
     session_metadata: dict[str, Any] | None = None
     messages: list[MessageAPI] | None = None
     data: dict[str, Any] | None = None
+    directory: str | None = None
+    version: str | None = None
+    permission: dict[str, Any] | None = None
+    revert: SessionRevert | None = None
+    metadata: SessionMetadataModel | None = None
 
 
 class SessionListItemResponse(SessionRequestBase):
@@ -128,12 +141,22 @@ class SessionListItemResponse(SessionRequestBase):
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     message_count: int = Field(default=0)
+    directory: str = ""
+    version: str = "1"
+    parent_id: str | None = None
+    permission: dict[str, Any] | None = None
+    revert: SessionRevert | None = None
+    metadata: SessionMetadataModel | None = None
 
 
 class NewSessionResponse(SessionRequestBase):
     session_id: str
     title: str | None = "New Session"
     session_metadata: dict[str, Any] | None = None
+    directory: str = ""
+    version: str = "1"
+    parent_id: str | None = None
+    time: SessionTime | None = None
 
 
 class SessionFullResponse(SessionRequestBase):
@@ -142,6 +165,14 @@ class SessionFullResponse(SessionRequestBase):
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     message_count: int = 0
+
+    directory: str = ""
+    version: str = "1"
+    parent_id: str | None = None
+    permission: dict[str, Any] | None = None
+    revert: SessionRevert | None = None
+    metadata: SessionMetadataModel | None = None
+    time: SessionTime | None = None
 
     knowledge_sources: list[SourceResponseDeep | SourceResponseShallow] = Field(
         default_factory=list,

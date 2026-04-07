@@ -14,20 +14,9 @@ class SessionTime(BaseModel):
     archived: int | None = None
 
 
-class SessionSummary(BaseModel):
-    additions: int
-    deletions: int
-    files: int
-    diffs: list[Any] | None = None  # FileDiff — avoid circular import
-
-
-class SessionShare(BaseModel):
-    url: str
-
-
 class SessionRevert(BaseModel):
-    messageID: str
-    partID: str | None = None
+    message_id: str
+    part_id: str | None = None
     snapshot: str | None = None
     diff: str | None = None
 
@@ -51,25 +40,25 @@ SessionStatus = SessionStatusIdle | SessionStatusBusy | SessionStatusRetry
 
 
 class SessionModelCostCache(BaseModel):
-    read: int
-    write: int
+    read: int | float
+    write: int | float
 
 
 class SessionModelCost(BaseModel):
-    input: int
-    output: int
+    input: int | float
+    output: int | float
     cache: SessionModelCostCache | None = None
 
 
 class SessionModelLimit(BaseModel):
     context: int
-    input: int | None = None
-    output: int | None = None
+    input: int | float | None = None
+    output: int | float | None = None
 
 
 class SessionModelInfo(BaseModel):
-    providerID: str
-    modelID: str
+    provider_id: str
+    model_id: str
     cost: SessionModelCost | None = None
     limit: SessionModelLimit | None = None
 
@@ -81,33 +70,24 @@ class SessionMetadataModel(BaseModel):
 
 class Session(BaseModel):
     id: str
-    slug: str
-    projectID: str
-    workspaceID: str | None = None
+    user_id: str | None = None
     directory: str
-    parentID: str | None = None
-    summary: Optional[SessionSummary] = None
-    share: Optional[SessionShare] = None
+    parent_id: str | None = None
     title: str
     version: str
     time: SessionTime
     permission: Any | None = None
-    revert: Optional[SessionRevert] = None
+    revert: SessionRevert | None = None
     metadata: SessionMetadataModel | None = None
 
 
 class GlobalSession(BaseModel):
     id: str
-    slug: str
-    projectID: str
-    workspaceID: str | None = None
+    user_id: str | None = None
     directory: str
-    parentID: str | None = None
-    summary: Optional[SessionSummary] = None
-    share: Optional[SessionShare] = None
+    parent_id: str | None = None
     title: str
     version: str
     time: SessionTime
     permission: Any | None = None
     revert: Optional[SessionRevert] = None
-    project: Any | None = None
