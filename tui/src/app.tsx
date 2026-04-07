@@ -202,7 +202,6 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
-                                              <UIHandlers />
                                               <App />
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
@@ -755,6 +754,8 @@ function App() {
   ]);
 
   return (
+    <>
+    <UIHandlers />
     <box
       width={dimensions().width}
       height={dimensions().height}
@@ -782,6 +783,7 @@ function App() {
         </Match>
       </Switch>
     </box>
+    </>
   );
 }
 

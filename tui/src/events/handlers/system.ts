@@ -2,6 +2,14 @@ import type { EventRouter } from "../router";
 import type { StoreActions } from "../../store/actions";
 import type { AppState } from "../../store/state";
 import { log } from "@/util/log";
+import {
+  PermissionRequestSchema,
+  EventPermissionRepliedSchema,
+  QuestionRequestSchema,
+  EventQuestionRepliedSchema,
+  EventQuestionRejectedSchema,
+  EventVcsBranchUpdatedSchema,
+} from "@/schemas";
 
 export function registerSystemHandlers(
   router: EventRouter["store"],
@@ -10,28 +18,53 @@ export function registerSystemHandlers(
   state: AppState,
 ) {
   router.on("permission.asked", (props: any) => {
-    log.store.info("PERMISSION_ASKED", { props });
-    actions.setPermission(props.sessionID, props);
+    const result = PermissionRequestSchema.safeParse(props);
+    if (!result.success) {
+      log.store.warn("PERMISSION_ASKED_INVALID", { props });
+      return;
+    }
+    log.store.info("PERMISSION_ASKED", { props: result.data });
+    actions.setPermission(result.data.sessionID, result.data);
   });
 
   router.on("permission.replied", (props: any) => {
-    log.store.debug("PERMISSION_REPLIED", { sessionID: props.sessionID });
-    actions.clearPermission(props.sessionID);
+    const result = EventPermissionRepliedSchema.safeParse(props);
+    if (!result.success) {
+      log.store.warn("PERMISSION_REPLIED_INVALID", { props });
+      return;
+    }
+    log.store.debug("PERMISSION_REPLIED", { sessionID: result.data.sessionID });
+    actions.clearPermission(result.data.sessionID);
   });
 
   router.on("question.asked", (props: any) => {
-    log.store.info("QUESTION_ASKED", { props });
-    actions.setQuestion(props.sessionID, props);
+    const result = QuestionRequestSchema.safeParse(props);
+    if (!result.success) {
+      log.store.warn("QUESTION_ASKED_INVALID", { props });
+      return;
+    }
+    log.store.info("QUESTION_ASKED", { props: result.data });
+    actions.setQuestion(result.data.sessionID, result.data);
   });
 
   router.on("question.replied", (props: any) => {
-    log.store.debug("QUESTION_REPLIED", { sessionID: props.sessionID });
-    actions.clearQuestion(props.sessionID);
+    const result = EventQuestionRepliedSchema.safeParse(props);
+    if (!result.success) {
+      log.store.warn("QUESTION_REPLIED_INVALID", { props });
+      return;
+    }
+    log.store.debug("QUESTION_REPLIED", { sessionID: result.data.sessionID });
+    actions.clearQuestion(result.data.sessionID);
   });
 
   router.on("question.rejected", (props: any) => {
-    log.store.debug("QUESTION_REJECTED", { sessionID: props.sessionID });
-    actions.clearQuestion(props.sessionID);
+    const result = EventQuestionRejectedSchema.safeParse(props);
+    if (!result.success) {
+      log.store.warn("QUESTION_REJECTED_INVALID", { props });
+      return;
+    }
+    log.store.debug("QUESTION_REJECTED", { sessionID: result.data.sessionID });
+    actions.clearQuestion(result.data.sessionID);
   });
 
   router.on("server.instance.disposed", () => {
@@ -44,8 +77,13 @@ export function registerSystemHandlers(
   });
 
   router.on("vcs.branch.updated", (props: any) => {
-    log.store.debug("VCS_BRANCH_UPDATED", { branch: props.branch });
-    state.setVcs({ branch: props.branch ?? "" });
+    const result = EventVcsBranchUpdatedSchema.safeParse(props);
+    if (!result.success) {
+      log.store.warn("VCS_BRANCH_UPDATED_INVALID", { props });
+      return;
+    }
+    log.store.debug("VCS_BRANCH_UPDATED", { branch: result.data.branch });
+    state.setVcs({ branch: result.data.branch ?? "" });
   });
 
   router.on("mcp.tools.changed", (_props: any) => {

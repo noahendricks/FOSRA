@@ -45,20 +45,7 @@ import type {
 } from "@fosra/api/v2";
 import { useLocal } from "@tui/context/local";
 import { Locale } from "@/util/locale";
-import type { Tool } from "@/tool/tool";
-import type { ReadTool } from "@/tool/read";
-import type { WriteTool } from "@/tool/write";
-import { BashTool } from "@/tool/bash";
-import type { GlobTool } from "@/tool/glob";
-import { TodoWriteTool } from "@/tool/todo";
-import type { GrepTool } from "@/tool/grep";
-import type { ListTool } from "@/tool/ls";
-import type { EditTool } from "@/tool/edit";
-import type { ApplyPatchTool } from "@/tool/apply_patch";
-import type { WebFetchTool } from "@/tool/webfetch";
-import type { TaskTool } from "@/tool/task";
-import type { QuestionTool } from "@/tool/question";
-import type { SkillTool } from "@/tool/skill";
+
 import {
   useKeyboard,
   useRenderer,
@@ -1836,15 +1823,15 @@ function ToolPart(props: {
   );
 }
 
-type ToolProps<T extends Tool.Info> = {
-  input: Partial<Tool.InferParameters<T>>;
-  metadata: Partial<Tool.InferMetadata<T>>;
+type ToolProps = {
+  input: Record<string, any>;
+  metadata: Record<string, any>;
   permission: Record<string, any>;
   tool: string;
   output?: string;
   part: ToolPart;
 };
-function GenericTool(props: ToolProps<any>) {
+function GenericTool(props: ToolProps) {
   const { theme } = useTheme();
   const ctx = use();
   const { output, lines, overflow, limited, expanded, setExpanded } =
@@ -1886,13 +1873,19 @@ function ToolTitle(props: {
   fallback: string;
   when: any;
   icon: string;
+  iconColor?: RGBA;
+  paddingLeft?: number;
+  color?: RGBA | string;
   children: JSX.Element;
 }) {
   const { theme } = useTheme();
+  const pad = props.paddingLeft ?? 3;
+  const fg = () => props.color ?? (props.when ? theme.text : theme.textMuted);
   return (
-    <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
+    <text paddingLeft={pad} fg={fg()}>
       <Show fallback={<>~ {props.fallback}</>} when={props.when}>
-        <span style={{ bold: true }}>{props.icon}</span> {props.children}
+        <span style={{ fg: props.iconColor }}>{props.icon}</span>{" "}
+        {props.children}
       </Show>
     </text>
   );
@@ -1977,16 +1970,16 @@ function InlineTool(props: {
           <Spinner color={fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <text
-            paddingLeft={3}
-            fg={fg()}
-            attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+          <ToolTitle
+            when={props.complete}
+            icon={props.icon}
+            iconColor={props.iconColor}
+            fallback={props.pending}
+            color={fg()}
+            paddingLeft={0}
           >
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              <span style={{ fg: props.iconColor }}>{props.icon}</span>{" "}
-              {props.children}
-            </Show>
-          </text>
+            {props.children}
+          </ToolTitle>
         </Match>
       </Switch>
       <Show when={error() && !denied()}>
@@ -2027,18 +2020,18 @@ function BlockTool(props: {
         props.onClick?.();
       }}
     >
-      <Show
-        when={props.spinner}
+      <ToolTitle
+        when={!props.spinner}
+        icon=""
         fallback={
-          <text paddingLeft={3} fg={theme.textMuted}>
-            {props.title}
-          </text>
+          <Spinner color={theme.textMuted}>
+            {props.title.replace(/^# /, "")}
+          </Spinner>
         }
+        color={theme.textMuted}
       >
-        <Spinner color={theme.textMuted}>
-          {props.title.replace(/^# /, "")}
-        </Spinner>
-      </Show>
+        {props.title}
+      </ToolTitle>
       {props.children}
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
@@ -2047,7 +2040,7 @@ function BlockTool(props: {
   );
 }
 
-function Bash(props: ToolProps<typeof BashTool>) {
+function Bash(props: ToolProps) {
   const { theme } = useTheme();
   const store = useStore();
   const isRunning = createMemo(() => props.part.state.status === "running");
@@ -2115,7 +2108,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   );
 }
 
-function Write(props: ToolProps<typeof WriteTool>) {
+function Write(props: ToolProps) {
   const { theme, syntax } = useTheme();
   const code = createMemo(() => {
     if (!props.input.content) return "";
@@ -2164,7 +2157,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
   );
 }
 
-function Glob(props: ToolProps<typeof GlobTool>) {
+function Glob(props: ToolProps) {
   return (
     <InlineTool
       icon="✱"
@@ -2182,7 +2175,7 @@ function Glob(props: ToolProps<typeof GlobTool>) {
   );
 }
 
-function Read(props: ToolProps<typeof ReadTool>) {
+function Read(props: ToolProps) {
   const { theme } = useTheme();
   const isRunning = createMemo(() => props.part.state.status === "running");
   const loaded = createMemo(() => {
@@ -2217,7 +2210,7 @@ function Read(props: ToolProps<typeof ReadTool>) {
   );
 }
 
-function Grep(props: ToolProps<typeof GrepTool>) {
+function Grep(props: ToolProps) {
   return (
     <InlineTool
       icon="✱"
@@ -2235,7 +2228,7 @@ function Grep(props: ToolProps<typeof GrepTool>) {
   );
 }
 
-function List(props: ToolProps<typeof ListTool>) {
+function List(props: ToolProps) {
   const dir = createMemo(() => {
     if (props.input.path) {
       return normalizePath(props.input.path);
@@ -2254,7 +2247,7 @@ function List(props: ToolProps<typeof ListTool>) {
   );
 }
 
-function WebFetch(props: ToolProps<typeof WebFetchTool>) {
+function WebFetch(props: ToolProps) {
   return (
     <InlineTool
       icon="%"
@@ -2267,7 +2260,7 @@ function WebFetch(props: ToolProps<typeof WebFetchTool>) {
   );
 }
 
-function CodeSearch(props: ToolProps<any & { name: string }>) {
+function CodeSearch(props: ToolProps) {
   const input = props.input as any;
   const metadata = props.metadata as any;
   return (
@@ -2283,7 +2276,7 @@ function CodeSearch(props: ToolProps<any & { name: string }>) {
   );
 }
 
-function WebSearch(props: ToolProps<any & { name: string }>) {
+function WebSearch(props: ToolProps) {
   const input = props.input as any;
   const metadata = props.metadata as any;
   return (
@@ -2299,7 +2292,7 @@ function WebSearch(props: ToolProps<any & { name: string }>) {
   );
 }
 
-function Task(props: ToolProps<typeof TaskTool>) {
+function Task(props: ToolProps) {
   const { theme } = useTheme();
   const keybind = useKeybind();
   const { navigate } = useRoute();
@@ -2387,7 +2380,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
   );
 }
 
-function Edit(props: ToolProps<typeof EditTool>) {
+function Edit(props: ToolProps) {
   const ctx = use();
   const { theme, syntax } = useTheme();
 
@@ -2451,7 +2444,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   );
 }
 
-function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
+function ApplyPatch(props: ToolProps) {
   const ctx = use();
   const { theme, syntax } = useTheme();
 
@@ -2542,7 +2535,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   );
 }
 
-function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
+function TodoWrite(props: ToolProps) {
   return (
     <Switch>
       <Match when={props.metadata.todos?.length}>
@@ -2570,7 +2563,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
   );
 }
 
-function Question(props: ToolProps<typeof QuestionTool>) {
+function Question(props: ToolProps) {
   const { theme } = useTheme();
   const count = createMemo(() => props.input.questions?.length ?? 0);
 
@@ -2611,7 +2604,7 @@ function Question(props: ToolProps<typeof QuestionTool>) {
   );
 }
 
-function Skill(props: ToolProps<typeof SkillTool>) {
+function Skill(props: ToolProps) {
   return (
     <InlineTool
       icon="→"

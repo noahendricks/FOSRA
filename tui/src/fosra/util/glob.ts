@@ -28,17 +28,6 @@ export namespace Glob {
     return results
   }
 
-  export function scanSync(pattern: string, options: Options = {}): string[] {
-    const glob = new BunGlob(pattern)
-    return [...glob.scanSync({
-      cwd: options.cwd ?? ".",
-      absolute: options.absolute,
-      dot: options.dot,
-      followSymlinks: options.symlink,
-      onlyFiles: options.include !== "all",
-    })]
-  }
-
   export function match(pattern: string, filepath: string): boolean {
     return minimatch(filepath, pattern, { dot: true })
   }

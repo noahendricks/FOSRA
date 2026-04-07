@@ -8,7 +8,7 @@ export type ExternalEvents = {
   setDirectory?: (directory?: string) => void;
 };
 
-export type ChannelConfig =
+type ChannelConfig =
   | { mode: "sse"; client: ApiClient; signal?: AbortSignal }
   | { mode: "external"; source: ExternalEvents };
 

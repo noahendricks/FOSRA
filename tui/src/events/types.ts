@@ -7,7 +7,7 @@ export type EventHandler<T extends Event["type"]> = (
   raw: EventOfType<T>
 ) => void
 
-export type EventHandlerMap = {
+type EventHandlerMap = {
   [K in Event["type"]]?: EventHandler<K>
 }
 

@@ -7,12 +7,14 @@ import { createEventRouter } from "../events/router";
 import { registerSessionHandlers } from "../events/handlers/session";
 import { registerMessageHandlers } from "../events/handlers/message";
 import { registerSystemHandlers } from "../events/handlers/system";
+import { registerUIHandlers } from "../events/handlers/ui";
 import type { EventChannel } from "../events/channel";
 import { useToast } from "../ui/toast";
 import { useCommandDialog } from "../component/dialog-command";
 import { useRoute } from "./route";
 import { usePromptRef } from "./prompt";
 import type { Message, Part } from "../fosra/sdk-types";
+import { parseMessages, SessionSchema, TodoSchema, ProvidersResponseSchema, AgentSchema, ConfigSchema, CommandSchema, LspStatusSchema, McpStatusSchema, FormatterStatusSchema, VcsInfoSchema, PathSchema } from "@/schemas";
 
 import { log } from "@/util/log";
 
@@ -76,12 +78,17 @@ const ctx = createSimpleContext({
       if (!state.sessions.has(sessionID)) {
         const res = await api.fosra.session.get({ sessionID });
         if (res.data) {
-          state.sessions.set(sessionID, res.data);
-          log.session.info("SESSION_LOADED", {
-            sessionID,
-            totalSessions: state.sessions.size,
-          });
-          state.setSessionsArray([...state.sessions.values()]);
+          const sessionResult = SessionSchema.safeParse(res.data);
+          if (!sessionResult.success) {
+            log.store.warn("SESSION_GET_INVALID", { error: sessionResult.error.format(), sessionID });
+          } else {
+            state.sessions.set(sessionID, sessionResult.data);
+            log.session.info("SESSION_LOADED", {
+              sessionID,
+              totalSessions: state.sessions.size,
+            });
+            state.setSessionsArray([...state.sessions.values()]);
+          }
         }
       }
 
@@ -91,7 +98,8 @@ const ctx = createSimpleContext({
       ]);
       log.startup.debug("CHECKING_STARTUP_CONFIG", { messages });
 
-      for (const msg of messages.data ?? []) {
+      const validatedMessages = parseMessages(messages.data ?? []);
+      for (const msg of validatedMessages) {
         actions.setMessage(msg.info.sessionID, msg.info as Message);
         if (msg.parts?.length) {
           for (const part of msg.parts) {
@@ -99,7 +107,13 @@ const ctx = createSimpleContext({
           }
         }
       }
-      state.todos.set(sessionID, todos.data ?? []);
+      const rawTodos = todos.data ?? [];
+      const validTodos = rawTodos.filter((t: any) => {
+        const r = TodoSchema.safeParse(t);
+        if (!r.success) log.store.warn("TODO_INVALID", { error: r.error.format() });
+        return r.success;
+      });
+      state.todos.set(sessionID, validTodos);
       state.loadedSessions.add(sessionID);
 
       return state.sessions.get(sessionID)?.metadata;
@@ -153,20 +167,35 @@ async function loadInitial(
     api.fosra.app.agents({}, { throwOnError: true }),
     api.fosra.config.get({}, { throwOnError: true }),
   ]);
-  const providerData = providersResult.data as {
-    providers?: any[];
-    default?: Record<string, string>;
-    connected?: string[];
-  } | null;
+  const provResult = ProvidersResponseSchema.safeParse(providersResult.data);
+  if (!provResult.success) {
+    log.store.warn("PROVIDERS_INVALID", { error: provResult.error.format() });
+  }
+  const providerData = provResult.success ? provResult.data : providersResult.data as any;
   state.setProviders(providerData?.providers ?? []);
   state.setProviderDefault(providerData?.default ?? {});
   state.setProviderConnected(providerData?.connected ?? []);
-  state.setAgents(agentsResult.data ?? []);
+  const rawAgents = agentsResult.data ?? [];
+  const validAgents = rawAgents.filter((a: any) => {
+    const r = AgentSchema.safeParse(a);
+    if (!r.success) log.store.warn("AGENT_INVALID", { error: r.error.format(), name: a?.name });
+    return r.success;
+  });
+  state.setAgents(validAgents);
+  const configValidation = ConfigSchema.safeParse(configResult.data);
+  if (!configValidation.success) {
+    log.store.warn("CONFIG_INVALID", { error: configValidation.error.format() });
+  }
   state.setConfig(configResult.data ?? null);
 
   const sessions = await api.fosra.session.list({});
   for (const session of sessions.data ?? []) {
-    state.sessions.set(session.id, session);
+    const r = SessionSchema.safeParse(session);
+    if (!r.success) {
+      log.store.warn("SESSION_LIST_INVALID", { error: r.error.format(), id: session?.id });
+      continue;
+    }
+    state.sessions.set(r.data.id, r.data);
   }
   state.setSessionsArray([...state.sessions.values()]);
 
@@ -188,13 +217,44 @@ async function loadInitial(
     })),
   ]);
 
-  state.setCommand(commandResult.data ?? []);
-  state.setLsp(lspResult.data ?? []);
+  const rawCommands = commandResult.data ?? [];
+  const validCommands = rawCommands.filter((c: any) => {
+    const r = CommandSchema.safeParse(c);
+    if (!r.success) log.store.warn("COMMAND_INVALID", { error: r.error.format(), name: c?.name });
+    return r.success;
+  });
+  state.setCommand(validCommands);
+  const rawLsp = lspResult.data ?? [];
+  const validLsp = rawLsp.filter((l: any) => {
+    const r = LspStatusSchema.safeParse(l);
+    if (!r.success) log.store.warn("LSP_INVALID", { error: r.error.format(), tool: l?.tool });
+    return r.success;
+  });
+  state.setLsp(validLsp);
   for (const [k, v] of Object.entries(mcpResult.data ?? {})) {
-    state.mcp.set(k, v as any);
+    const r = McpStatusSchema.safeParse(v);
+    if (!r.success) {
+      log.store.warn("MCP_INVALID", { error: r.error.format(), server: k });
+    } else {
+      state.mcp.set(k, r.data);
+    }
   }
-  state.setFormatter(formatterResult.data ?? []);
+  const rawFormatter = formatterResult.data ?? [];
+  const validFormatter = rawFormatter.filter((f: any) => {
+    const r = FormatterStatusSchema.safeParse(f);
+    if (!r.success) log.store.warn("FORMATTER_INVALID", { error: r.error.format(), tool: f?.tool });
+    return r.success;
+  });
+  state.setFormatter(validFormatter);
+  const vcsValidation = VcsInfoSchema.safeParse(vcsResult.data);
+  if (!vcsValidation.success) {
+    log.store.warn("VCS_INVALID", { error: vcsValidation.error.format() });
+  }
   state.setVcs(vcsResult.data ?? undefined);
+  const pathValidation = PathSchema.safeParse(pathResult.data);
+  if (!pathValidation.success) {
+    log.store.warn("PATH_INVALID", { error: pathValidation.error.format() });
+  }
   state.setPath(
     pathResult.data ?? {
       home: "",
@@ -209,76 +269,31 @@ async function loadInitial(
 export const StoreProvider = ctx.provider;
 export const useStore = ctx.use;
 
-function UIHandlers() {
+export function UIHandlers() {
   const store = useStore();
   const toast = useToast();
   const command = useCommandDialog();
   const route = useRoute();
   const promptRef = usePromptRef();
 
-  createEffect(() => {
-    const router = store.router;
-
-    router.ui.on("session.deleted" as any, (props: any) => {
-      if (
-        route.data.type === "session" &&
-        route.data.sessionID === props.info.id
-      ) {
-        route.navigate({ type: "home" });
-        toast.show({
-          variant: "info",
-          message: "The current session was deleted",
-        });
-      }
-    });
-
-    router.ui.on("session.error" as any, (props: any) => {
-      const error = props.error;
-      if (!error || typeof error !== "object") return;
-      if (error.name === "MessageAbortedError") return;
-      const data = (error as any).data;
-      const message = data?.message ?? String(error);
-      toast.show({ variant: "error", message, duration: 5000 });
-    });
-
-    router.ui.on("installation.update-available" as any, (props: any) => {
-      toast.show({
-        variant: "info",
-        title: "Update Available",
-        message: `OpenCode v${props.version} is available. Run 'opencode upgrade' to update manually.`,
-        duration: 10000,
-      });
-    });
-
-    router.ui.on("tui.toast.show" as any, (props: any) => {
-      toast.show({
-        variant: props.variant ?? "info",
-        title: props.title,
-        message: props.message,
-        duration: props.duration,
-      });
-    });
-
-    router.ui.on("tui.command.execute" as any, (props: any) => {
-      command.trigger(props.command);
-    });
-
-    router.ui.on("tui.prompt.append" as any, (props: any) => {
-      const ref = promptRef.current;
-      if (ref?.current) {
-        ref.set({
-          ...ref.current,
-          input: (ref.current.input ?? "") + props.text,
-        });
-      }
-    });
-
-    router.ui.on("tui.session.select" as any, (props: any) => {
-      route.navigate({ type: "session", sessionID: props.sessionID });
-    });
+  registerUIHandlers(store.router.ui, {
+    toast,
+    commands: command,
+    prompt: {
+      append: (text: string) => {
+        const ref = promptRef.current;
+        if (ref?.current) {
+          ref.set({
+            ...ref.current,
+            input: (ref.current.input ?? "") + text,
+          });
+        }
+      },
+    },
+    navigate: (sessionID: string) =>
+      route.navigate({ type: "session", sessionID }),
+    route: { data: route.data, navigate: route.navigate },
   });
 
   return null;
 }
-
-export { UIHandlers };

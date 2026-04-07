@@ -100,15 +100,4 @@ export namespace Terminal {
     })
   }
 
-  export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
-    const result = await colors()
-    if (!result.background) return "dark"
-
-    const { r, g, b } = result.background
-    // Calculate luminance using relative luminance formula
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-
-    // Determine if dark or light based on luminance threshold
-    return luminance > 0.5 ? "light" : "dark"
-  }
 }

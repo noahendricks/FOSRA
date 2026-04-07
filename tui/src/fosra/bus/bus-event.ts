@@ -1,7 +1,7 @@
 // Stub for @/bus/bus-event
 import { z } from "zod"
 
-export interface BusEventDefinition<T extends z.ZodType> {
+interface BusEventDefinition<T extends z.ZodType> {
   type: string
   properties: T
 }

@@ -28,6 +28,15 @@ import type {
   VcsGetResponse,
   PathGetResponse,
   FindFilesResponse,
+  IngestCodebaseRequest,
+  IngestCodebaseResponse,
+  IngestCodebaseFileRequest,
+  IngestCodebaseFileResponse,
+  IngestDocsRequest,
+  IngestDocsResponse,
+  IngestStatusResponse,
+  ReindexCodebaseRequest,
+  ReindexDocsRequest,
 } from "../sdk-types";
 import { log } from "../util/log";
 export * from "../sdk-types";
@@ -431,6 +440,51 @@ export const createFosraClient = (options: {
     find: {
       files: async (p: any, o?: any) =>
         api<FindFilesResponse>("/find/file", { method: "GET", ...opts(o) }),
+    },
+    ingest: {
+      codebase: async (p: IngestCodebaseRequest, o?: any) =>
+        api<IngestCodebaseResponse>("/ingest/codebase", {
+          method: "POST",
+          body: JSON.stringify({
+            directory_path: p.directoryPath,
+            repo_name: p.repoName,
+            language_filter: p.languageFilter,
+            force: p.force,
+          }),
+          ...opts(o),
+        }),
+      codebaseFile: async (p: IngestCodebaseFileRequest, o?: any) =>
+        api<IngestCodebaseFileResponse>("/ingest/codebase/file", {
+          method: "POST",
+          body: JSON.stringify({
+            file_path: p.filePath,
+            repo_name: p.repoName,
+            force: p.force,
+          }),
+          ...opts(o),
+        }),
+      docs: async (p: IngestDocsRequest, o?: any) =>
+        api<IngestDocsResponse>("/ingest/docs", {
+          method: "POST",
+          body: JSON.stringify({
+            file_paths: p.filePaths,
+            source_type: p.sourceType,
+            force: p.force,
+          }),
+          ...opts(o),
+        }),
+      status: async (_p?: any, o?: any) =>
+        api<IngestStatusResponse>("/ingest/status", opts(o)),
+      reindexCodebase: async (p: ReindexCodebaseRequest, o?: any) =>
+        api<IngestCodebaseResponse>(
+          `/ingest/codebase?directory_path=${encodeURIComponent(p.directoryPath)}&repo_name=${encodeURIComponent(p.repoName)}`,
+          { method: "DELETE", ...opts(o) },
+        ),
+      reindexDocs: async (p?: ReindexDocsRequest, o?: any) =>
+        api<IngestDocsResponse>(
+          `/ingest/docs${p?.collection ? `?collection=${encodeURIComponent(p.collection)}` : ""}`,
+          { method: "DELETE", ...opts(o) },
+        ),
     },
     auth: {
       set: async (p?: any, o?: any) =>

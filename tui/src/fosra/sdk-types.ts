@@ -5121,3 +5121,62 @@ export type FormatterStatusResponses = {
 
 export type FormatterStatusResponse =
   FormatterStatusResponses[keyof FormatterStatusResponses];
+
+// ─── Ingestion Types ─────────────────────────────────────────────────────────
+
+export type IngestCodebaseRequest = {
+  directoryPath: string;
+  repoName?: string;
+  languageFilter?: Array<string>;
+  force?: boolean;
+};
+
+export type IngestCodebaseResponse = {
+  filesIndexed: number;
+  nodesCreated: number;
+  edgesCreated: number;
+  repoName?: string;
+  directoryPath?: string;
+};
+
+export type IngestCodebaseFileRequest = {
+  filePath: string;
+  repoName?: string;
+  force?: boolean;
+};
+
+export type IngestCodebaseFileResponse = {
+  nodesCreated: number;
+  edgesCreated: number;
+  filePath?: string;
+  repoName?: string;
+};
+
+export type IngestDocsRequest = {
+  filePaths: Array<string>;
+  sourceType?: "doc" | "code-in-doc";
+  force?: boolean;
+};
+
+export type IngestDocsResponse = {
+  docsIndexed: number;
+  parentChunks: number;
+  childChunks: number;
+};
+
+export type IngestStatusResponse = {
+  postgresFiles: number;
+  qdrantParents: number;
+  qdrantChunks: number;
+  falkordbNodes: number;
+  falkordbEdges: number;
+};
+
+export type ReindexCodebaseRequest = {
+  directoryPath: string;
+  repoName: string;
+};
+
+export type ReindexDocsRequest = {
+  collection?: "all" | "parents" | "chunks";
+};
