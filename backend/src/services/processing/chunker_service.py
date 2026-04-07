@@ -68,14 +68,15 @@ class ChunkerService:
 
                         tasks.append(c_task)
 
-                    # elif doc.is_pdf:
-                    #     # if doc is pdf, chunk / (leave as) as pages unless page length > 300 tokens, then chunk w/ text chunker
-                    #
-                    #     cpdf_task = group.create_task(
-                    #         ChunkerService._chunk_pdf(doc, config)
-                    #     )
-                    #
-                    #     tasks.append(cpdf_task)
+                    elif doc.is_pdf:
+                        # if doc is pdf, chunk using sections if available (from docling)
+                        # otherwise fall back to page-level chunking
+
+                        cpdf_task = group.create_task(
+                            ChunkerService._chunk_pdf(doc, config)
+                        )
+
+                        tasks.append(cpdf_task)
                 except:
                     raise
 
@@ -192,7 +193,62 @@ class ChunkerService:
 
         return all_chunks
 
-    # NOTE: ADD PDF CHUNKING LATER
-    #       needs page level chunking,
-    #       page number attribution,
-    #       and metadata attribution
+    @staticmethod
+    async def _chunk_pdf(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
+        """handle PDF file chunking.
+        uses docling-extracted sections if available (with heading hierarchy and page numbers).
+        falls back to page-level chunking when sections are not available.
+        """
+        if doc.metadata.sections:
+            return await ChunkerService._chunk_by_sections(doc, config)
+
+        return await ChunkerService._chunk_pdf_pages(doc, config)
+
+    @staticmethod
+    async def _chunk_pdf_pages(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
+        """fallback page-level chunking for PDFs without sections.
+
+        splits by page markers and applies HiChunk to pages > 300 tokens.
+        """
+        from chonkie import TokenChunker
+
+        page_marker = "\n__PDF_PAGE_BREAK__\n"
+        pages = doc.page_content.split(page_marker)
+
+        all_chunks: list[Chunk] = []
+        token_chunker = TokenChunker(chunk_size=300)
+
+        for page_num, page_text in enumerate(pages, start=1):
+            page_text = page_text.strip()
+            if not page_text:
+                continue
+
+            page_tokens = len(page_text.split())
+            if page_tokens > 300:
+                page_chunks = token_chunker.chunk(page_text)
+                for chunk in page_chunks:
+                    all_chunks.append(
+                        Chunk(
+                            text=chunk.text,
+                            metadata=ChunkMetadata(
+                                chunk_id=str(uuid4()),
+                                page_number=page_num,
+                                token_count=chunk.token_count,
+                                start_char=chunk.start_index,
+                                end_char=chunk.end_index,
+                            ),
+                        )
+                    )
+            else:
+                all_chunks.append(
+                    Chunk(
+                        text=page_text,
+                        metadata=ChunkMetadata(
+                            chunk_id=str(uuid4()),
+                            page_number=page_num,
+                            token_count=page_tokens,
+                        ),
+                    )
+                )
+
+        return all_chunks

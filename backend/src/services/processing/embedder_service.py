@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from loguru import logger
@@ -568,10 +570,69 @@ def _resolve_provider(config: EmbedderConfig) -> EmbedderProvider:
 
 
 # =============================================================================
-# EmbedderService — facade that dispatches to the right provider
+# Embedding Cache — LRU cache for embedding results
 # =============================================================================
+
+
+class EmbeddingCache:
+    """LRU cache for embedding results keyed by content hash.
+
+    cache key = SHA256(model_name + text) so same content with different
+    models produces different embeddings.
+    """
+
+    def __init__(self, max_size: int = 10000):
+        self._cache: OrderedDict[str, EmbeddedQueries] = OrderedDict()
+        self._max_size = max_size
+
+    def _make_key(
+        self, text: str, model_name: str, sparse_model: str | None = None
+    ) -> str:
+        """generate cache key from text and model configuration."""
+        key_parts = f"{model_name}:{text}"
+        if sparse_model:
+            key_parts = f"{key_parts}:{sparse_model}"
+        return hashlib.sha256(key_parts.encode()).hexdigest()
+
+    def get(
+        self, text: str, model_name: str, sparse_model: str | None = None
+    ) -> EmbeddedQueries | None:
+        """retrieve cached embedding or None if not found."""
+        key = self._make_key(text, model_name, sparse_model)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        return None
+
+    def set(
+        self,
+        text: str,
+        model_name: str,
+        result: EmbeddedQueries,
+        sparse_model: str | None = None,
+    ) -> None:
+        """store embedding result in cache with LRU eviction."""
+        key = self._make_key(text, model_name, sparse_model)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        else:
+            if len(self._cache) >= self._max_size:
+                self._cache.pop(next(iter(self._cache)))
+        self._cache[key] = result
+
+    def clear(self) -> None:
+        """clear all cached entries."""
+        self._cache.clear()
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+
 class EmbedderService:
     _semaphore: asyncio.Semaphore = asyncio.Semaphore(3)
+
+    def __init__(self, cache: EmbeddingCache | None = None):
+        self._cache = cache or EmbeddingCache()
 
     async def embed_chunks(
         self, chunks: list[Chunk], config: EmbedderConfig
@@ -580,11 +641,45 @@ class EmbedderService:
             logger.warning("No chunks provided for embedding")
             return chunks
 
-        logger.info("Embedding {} chunks with {}", len(chunks), config.embedder_type)
+        chunks_to_embed: list[Chunk] = []
+        for chunk in chunks:
+            cached = self._cache.get(
+                chunk.text,
+                config.dense_model,
+                config.sparse_model if config.sparse_enabled else None,
+            )
+            if cached:
+                chunk.metadata.dense_embedding = cached.dense
+                if cached.sparse:
+                    chunk.metadata.sparse_embedding = cached.sparse
+            else:
+                chunks_to_embed.append(chunk)
+
+        if not chunks_to_embed:
+            logger.debug("All {} chunks served from cache", len(chunks))
+            return chunks
+
+        logger.info(
+            "Embedding {} chunks with {} ({} served from cache)",
+            len(chunks_to_embed),
+            config.embedder_type,
+            len(chunks) - len(chunks_to_embed),
+        )
 
         try:
             provider = _resolve_provider(config)
-            return await provider.embed_chunks(chunks, config)
+            embedded = await provider.embed_chunks(chunks_to_embed, config)
+            for chunk in embedded:
+                result = EmbeddedQueries()
+                result.dense = chunk.metadata.dense_embedding
+                result.sparse = chunk.metadata.sparse_embedding
+                self._cache.set(
+                    chunk.text,
+                    config.dense_model,
+                    result,
+                    config.sparse_model if config.sparse_enabled else None,
+                )
+            return chunks
         except Exception as e:
             logger.opt(exception=True).warning("Batch embedding failed")
             raise RuntimeError(f"Embedding Failed: {e}")
@@ -592,11 +687,28 @@ class EmbedderService:
     async def embed_query(
         self, query: str, config: EmbedderConfig
     ) -> EmbeddedQueries | None:
+        cached = self._cache.get(
+            query,
+            config.dense_model,
+            config.sparse_model if config.sparse_enabled else None,
+        )
+        if cached:
+            logger.debug("Query embedding served from cache")
+            return cached
+
         logger.debug("Embedding query with {}", config.embedder_type)
 
         try:
             provider = _resolve_provider(config)
-            return await provider.embed_query(query, config)
+            result = await provider.embed_query(query, config)
+            if result:
+                self._cache.set(
+                    query,
+                    config.dense_model,
+                    result,
+                    config.sparse_model if config.sparse_enabled else None,
+                )
+            return result
         except Exception as e:
             logger.opt(exception=True).error("Query embedding failed")
             return None
