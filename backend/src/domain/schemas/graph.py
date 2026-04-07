@@ -2,27 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pydantic import Field as PydanticField
-
-from backend.src.api.schemas.base import BaseModelFlex
 from backend.src.domain.enums import GraphNodeType
+from backend.src.storage.utils.converters import DomainStruct
 
 if TYPE_CHECKING:
     from backend.src.domain.schemas.retrieval import AccumulatedItem
 
 
-class Signature(BaseModelFlex):
-    """function signature with parameters and return type."""
-
-    parameters: list[Parameter]
-    return_type: str | None = None
-    is_async: bool = False
-    is_method: bool = False
-    receiver: str | None = None
-    decorators: list[str] = []
-
-
-class Parameter(BaseModelFlex):
+class Parameter(DomainStruct):
     """a single function parameter."""
 
     name: str
@@ -32,7 +19,31 @@ class Parameter(BaseModelFlex):
     is_keyword: bool = False
 
 
-class CallEdge(BaseModelFlex):
+class Signature(DomainStruct):
+    """function signature with parameters and return type."""
+
+    parameters: list[Parameter] = []
+    return_type: str | None = None
+    is_async: bool = False
+    is_method: bool = False
+    receiver: str | None = None
+    decorators: list[str] = []
+
+
+class ResolvedImport(DomainStruct, kw_only=True):
+    """an import statement resolved to its target file."""
+
+    import_statement: str
+    imported_names: list[str]
+    source_file_id: str
+    target_file_id: str | None = None
+    target_file_path: str | None = None
+    line_number: int
+    is_stdlib: bool = False
+    is_third_party: bool = False
+
+
+class CallEdge(DomainStruct, kw_only=True):
     """represents a call from one function/method to another."""
 
     caller_name: str
@@ -47,7 +58,7 @@ class CallEdge(BaseModelFlex):
     is_cross_file: bool = False
 
 
-class InheritanceEdge(BaseModelFlex):
+class InheritanceEdge(DomainStruct):
     """represents a class inheritance/implementation relationship."""
 
     child_name: str
@@ -60,7 +71,7 @@ class InheritanceEdge(BaseModelFlex):
     is_cross_file: bool = False
 
 
-class MethodEdge(BaseModelFlex):
+class MethodEdge(DomainStruct):
     """represents a class defining/containing a method."""
 
     class_name: str
@@ -71,20 +82,7 @@ class MethodEdge(BaseModelFlex):
     method_file_id: str
 
 
-class ResolvedImport(BaseModelFlex):
-    """an import statement resolved to its target file."""
-
-    import_statement: str
-    imported_names: list[str]
-    source_file_id: str
-    target_file_id: str | None = None
-    target_file_path: str | None = None
-    line_number: int
-    is_stdlib: bool = False
-    is_third_party: bool = False
-
-
-class CodeNode(BaseModelFlex):
+class CodeNode(DomainStruct):
     """a node in the code graph (file, module, class, function, method)."""
 
     node_type: GraphNodeType
@@ -163,17 +161,17 @@ class CodeNode(BaseModelFlex):
         return f"{decorators}{async_kw}def {receiver}{self.name}({params_str}){return_str}:"
 
 
-class GraphResult(BaseModelFlex):
+class GraphResult(DomainStruct):
     """complete result from code graph extraction."""
 
     file_id: str
     file_path: str
     language: str
     nodes: list[CodeNode]
-    call_edges: list[CallEdge] = PydanticField(default_factory=list)
-    inheritance_edges: list[InheritanceEdge] = PydanticField(default_factory=list)
-    method_edges: list[MethodEdge] = PydanticField(default_factory=list)
-    imports: list[ResolvedImport] = PydanticField(default_factory=list)
+    call_edges: list[CallEdge] = []
+    inheritance_edges: list[InheritanceEdge] = []
+    method_edges: list[MethodEdge] = []
+    imports: list[ResolvedImport] = []
 
     @property
     def functions(self) -> list[CodeNode]:
@@ -188,7 +186,7 @@ class GraphResult(BaseModelFlex):
         return [n for n in self.nodes if n.node_type == GraphNodeType.METHOD]
 
 
-class GraphQueryResult(BaseModelFlex):
+class GraphQueryResult(DomainStruct):
     """result from a graph query (semantic or structural)."""
 
     nodes: list[CodeNode]

@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal
 
-from chonkie.types import Chunk as ChonkieChunk
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from pydantic.alias_generators import to_camel
 from qdrant_client.models import SparseVector
 
-from backend.src.api.schemas.base import BaseModelFlex
+import msgspec
 from backend.src.services.processing.utils.loader import code_mimes, text_mimes
 from backend.src.storage.utils.converters import DomainStruct
 
@@ -24,106 +21,109 @@ class MDNFile(DomainStruct):
     webkit_relative_path: str | None = None
 
 
-class BaseDocumentMetadata(BaseModel):
+# ─── Document metadata for various source types ─────────────────────────────────
+
+
+class BaseDocumentMetadata(DomainStruct):
     source: str | None = None
     mime_type: str | None = None
 
 
-class PDFMetadata(BaseDocumentMetadata):
+class PDFMetadata(BaseDocumentMetadata, kw_only=True):
     content_type: Literal["pdf"] = "pdf"
-
     producer: str | None = None
     creator: str | None = None
     creationdate: datetime | str | None = None
     moddate: datetime | str | None = None
-    modDate: str | None = Field(None, alias="modDate")
-    creationDate: str | None = Field(None, alias="creationDate")
-    total_pages: int = Field(..., gt=0)
-    format: str | None = None  # e.g., "PDF 1.7"
+    modDate: str | None = None
+    creationDate: str | None = None
+    total_pages: int
+    format: str | None = None
     title: str | None = None
     author: str | None = None
     subject: str | None = None
     keywords: str | None = None
     trapped: str | None = None
     file_path: str | None = None
+    page: int | None = None
 
-    page: int | None = Field(None, ge=0)
-
-    @field_validator("creationdate", "moddate", mode="before")
-    @classmethod
-
-    # handle pdf date strings like 'D:20200331174925+02'00''
-    def parse_pdf_date(cls, v):
-        if isinstance(v, str) and v.startswith("D:"):
-            # strip the d: prefix and try to parse
-            try:
-                # extract just the datetime part, ignore timezone offset for simplicity
-                clean = v[2:].split("+")[0].split("-")[0].replace("'", "")
-                return datetime.strptime(clean[:14], "%Y%m%d%H%M%S")
-            except ValueError:
-                return v  # return as string if parsing fails
-        return v
+    def __post_init__(self) -> None:
+        for field in ("creationdate", "moddate"):
+            raw = getattr(self, field, None)
+            if isinstance(raw, str) and raw.startswith("D:"):
+                try:
+                    clean = raw[2:].split("+")[0].split("-")[0].replace("'", "")
+                    parsed = datetime.strptime(clean[:14], "%Y%m%d%H%M%S")
+                    object.__setattr__(self, field, parsed)
+                except ValueError:
+                    pass
 
 
 class TextMetadata(BaseDocumentMetadata):
     content_type: Literal["text", "html", "markdown", "txt", "csv"] = "text"
 
 
-class CodeMetadata(BaseDocumentMetadata):
-    language: Literal[
-        "python",
-        "cpp",
-        "csharp",
-        "cobol",
-        "elixir",
-        "go",
-        "java",
-        "js",
-        "kotlin",
-        "lua",
-        "perl",
-        "python",
-        "ruby",
-        "rust",
-        "scala",
-        "sql",
-        "typescript",
-    ]
+class CodeMetadata(BaseDocumentMetadata, kw_only=True):
+    content_type: (
+        Literal[
+            "python",
+            "cpp",
+            "csharp",
+            "cobol",
+            "elixir",
+            "go",
+            "java",
+            "js",
+            "kotlin",
+            "lua",
+            "perl",
+            "python",
+            "ruby",
+            "rust",
+            "scala",
+            "sql",
+            "typescript",
+        ]
+        | None
+    ) = None
 
 
-# extracted functions and classes from code.
-class FunctionsClassesMetadata(CodeMetadata):
-    content_type: Literal["functions_classes"] = "functions_classes"
+class FunctionsClassesMetadata(CodeMetadata, kw_only=True):
     class_name: str | None = None
     function_name: str | None = None
-    decorators: list[str] = Field(default_factory=list)
+    decorators: list[str] = []
     is_async: bool = False
     is_class_method: bool = False
     is_static_method: bool = False
 
-
-# simplified/minified code representation.
-class SimplifiedCodeMetadata(CodeMetadata):
-    content_type: Literal["simplified_code"] = "simplified_code"
-    original_length: int | None = Field(None, ge=0)
-    simplified_ratio: float | None = Field(None, ge=0.0, le=1.0)
+    def __post_init__(self) -> None:
+        if self.content_type is None:
+            object.__setattr__(self, "content_type", "functions_classes")
 
 
-# extracted import statements
-class ImportsMetadata(CodeMetadata):
-    content_type: Literal["imports"] = "imports"
+class SimplifiedCodeMetadata(CodeMetadata, kw_only=True):
+    original_length: Annotated[int | None, msgspec.Meta(ge=0)] = None
+    simplified_ratio: Annotated[float | None, msgspec.Meta(ge=0.0, le=1.0)] = None
+
+    def __post_init__(self) -> None:
+        if self.content_type is None:
+            object.__setattr__(self, "content_type", "simplified_code")
+
+
+class ImportsMetadata(CodeMetadata, kw_only=True):
     is_third_party: bool = False
     is_stdlib: bool = False
-    import_names: list[str] = Field(default_factory=list)
+    import_names: list[str] = []
+
+    def __post_init__(self) -> None:
+        if self.content_type is None:
+            object.__setattr__(self, "content_type", "imports")
 
 
 CodeMetadataUnion = FunctionsClassesMetadata | SimplifiedCodeMetadata | ImportsMetadata
 
 
-# main doc with typed metadata - used everywhere Document(LC) would be
-
-
-class DocMetadata(BaseModelFlex):
+class DocMetadata(DomainStruct, kw_only=True):
     source: str
     mime_type: str
     doc_id: str
@@ -133,13 +133,11 @@ class DocMetadata(BaseModelFlex):
     repo: str | None = None
     source_type: str = "doc"
     checksum: str | None = None
-    sections: list[Section] = Field(
-        default_factory=list
-    )  # populated by kreuzberg extraction
+    sections: list[Section] = []
     section_heading: str | None = None  # active section heading during chunking
 
 
-class Doc(BaseModel):
+class Doc(DomainStruct, kw_only=True):
     id: str
     page_content: str
     metadata: DocMetadata
@@ -157,7 +155,7 @@ class Doc(BaseModel):
         return self.metadata.mime_type in text_mimes.values()
 
 
-class HierarchicalChunk(BaseModelFlex):
+class HierarchicalChunk(DomainStruct, kw_only=True):
     """a chunk in the hierarchical tree produced by hichunk."""
 
     text: str
@@ -165,8 +163,8 @@ class HierarchicalChunk(BaseModelFlex):
     level: int  # 1 = coarsest section, 2 = subsection, …
     start_char: int = 0
     end_char: int = 0
-    children: list["HierarchicalChunk"] = Field(default_factory=list)
-    parent: "HierarchicalChunk | None" = Field(default=None, validate_default=False)
+    children: list["HierarchicalChunk"] = []
+    parent: "HierarchicalChunk | None" = None  # forward reference — OK in msgspec
     metadata: DocMetadata
 
     @property
@@ -178,17 +176,7 @@ class HierarchicalChunk(BaseModelFlex):
         return f"HierarchicalChunk(level={self.level}, tokens={self.token_count}, text='{snippet}…')"
 
 
-class ChunkMetadata(BaseModelFlex):
-    _FLEXIBLE_CONFIG = ConfigDict(
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        alias_generator=to_camel,
-        populate_by_name=True,
-        validate_default=False,
-    )
-
-    model_config: ConfigDict = _FLEXIBLE_CONFIG  # pyright: ignore
-
+class ChunkMetadata(DomainStruct, kw_only=True):
     chunk_id: str | None = None
     doc_id: str | None = None
     doc_title: str | None = None
@@ -198,29 +186,39 @@ class ChunkMetadata(BaseModelFlex):
     end_char: int | None = None
     dense_embedding: list[float] = []
     sparse_embedding: Any | SparseVector = None
-    parent: HierarchicalChunk | None = Field(default=None, validate_default=False)
+    parent: Any = None  # typed as Any to skip msgspec structural validation
     section_heading: str | None = None
-    element_ids: list[str] = Field(default_factory=list)
+    element_ids: list[str] = []
+
+    def to_dict(self) -> dict[str, Any]:
+        """Custom serialization — avoids recursive serialization of parent HierarchicalChunk (circular refs)."""
+        d = {}
+        for f in self.__struct_fields__:
+            if f == "parent":
+                continue
+            v = getattr(self, f)
+            d[f] = v
+        if self.parent is not None:
+            d["parent_text"] = getattr(self.parent, "text", None)
+            d["parent_token_count"] = getattr(self.parent, "token_count", 0)
+            d["parent_start_char"] = getattr(self.parent, "start_char", None)
+            d["parent_end_char"] = getattr(self.parent, "end_char", None)
+            d["parent_level"] = getattr(self.parent, "level", None)
+        else:
+            d["parent_text"] = None
+            d["parent_token_count"] = 0
+            d["parent_start_char"] = None
+            d["parent_end_char"] = None
+            d["parent_level"] = None
+        return d
 
 
-class Chunk(BaseModelFlex):
+class Chunk(DomainStruct, kw_only=True):
     text: str
     metadata: ChunkMetadata
 
-    @classmethod
-    def from_chonkie(cls, chunk: ChonkieChunk) -> Self:
 
-        _meta = ChunkMetadata(
-            chunk_id=chunk.id,
-            start_char=chunk.start_index,
-            end_char=chunk.end_index,
-            token_count=chunk.token_count,
-        )
-
-        return cls(text=chunk.text, metadata=_meta)
-
-
-class ElementPosition(BaseModelFlex):
+class ElementPosition(DomainStruct, kw_only=True):
     """Positional metadata for a single kreuzberg element."""
 
     page_number: int
@@ -229,7 +227,7 @@ class ElementPosition(BaseModelFlex):
     additional: dict[str, Any] | None = None
 
 
-class Section(BaseModelFlex):
+class Section(DomainStruct, kw_only=True):
     """A logical section of elements grouped by heading boundary."""
 
     elements: list[dict[str, Any]]  # kreuzberg element dicts
@@ -238,5 +236,5 @@ class Section(BaseModelFlex):
     heading_path: list[str] | None = None  # docling: full heading hierarchy
     start_page: int | None = None
     end_page: int | None = None
-    element_ids: list[str] = Field(default_factory=list)
+    element_ids: list[str] = []
     section_index: int = 0

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from backend.src.storage.utils.converters import DomainStruct
 
 
 class RetrievalTarget(StrEnum):
@@ -25,59 +25,47 @@ class RetrievalTarget(StrEnum):
     BOTH = "both"
 
 
-class RetrievalFilters(BaseModel):
+class RetrievalFilters(DomainStruct, kw_only=True, frozen=True):
     """Filters for retrieval queries."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     file_ids: list[str] | None = None
     node_type: str | None = None
     language: str | None = None
 
 
-class ChecklistItem(BaseModel):
+class ChecklistItem(DomainStruct, kw_only=True, frozen=True):
     """A single coverage question with answered status."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: int
     question: str
     answered: bool = False
 
 
-class QueryExpansion(BaseModel):
+class QueryExpansion(DomainStruct, kw_only=True, frozen=True):
     """Result of query expansion (Phase 1 of retrieval)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     rewritten_query: str
     checklist: list[ChecklistItem]
 
 
-class RetrievalQuery(BaseModel):
+class RetrievalQuery(DomainStruct, kw_only=True, frozen=True):
     """A targeted retrieval command emitted by the subagent."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     query: str
     target: RetrievalTarget = RetrievalTarget.VECTOR
     filters: RetrievalFilters | None = None
 
 
-class SubagentResult(BaseModel):
+class SubagentResult(DomainStruct, kw_only=True, frozen=True):
     """Result of a single subagent iteration."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     checklist: list[ChecklistItem]
     all_answered: bool = False
     retrieval_queries: list[RetrievalQuery] = []
 
 
-class AccumulatedItem(BaseModel):
+class AccumulatedItem(DomainStruct, kw_only=True, frozen=True):
     """A single item in the accumulated context."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     file_id: str
     path: str
@@ -90,10 +78,8 @@ class AccumulatedItem(BaseModel):
     qdrant_point_id: str | None = None
 
 
-class AccumulatedContext(BaseModel):
+class AccumulatedContext(DomainStruct, kw_only=True, frozen=True):
     """Context accumulated across retrieval iterations."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     items: list[AccumulatedItem] = []
 
@@ -126,10 +112,8 @@ class AccumulatedContext(BaseModel):
         return "<documents>\n" + "\n".join(parts) + "\n</documents>"
 
 
-class GraphSearchResult(BaseModel):
+class GraphSearchResult(DomainStruct, kw_only=True, frozen=True):
     """Result from a graph search (semantic or structural)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     node_type: str
     name: str

@@ -351,7 +351,7 @@ class VectorService:
                     if isinstance(store, VectorStore):
                         ids: list[str] = await store.aadd_texts(
                             texts=[c.text for c in chunks],
-                            metadatas=[c.metadata.model_dump() for c in chunks],
+                            metadatas=[c.metadata.to_dict() for c in chunks],
                         )
                         return None
                 except Exception as e:
