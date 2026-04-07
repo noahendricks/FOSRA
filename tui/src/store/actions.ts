@@ -86,6 +86,9 @@ export function createStoreActions(state: {
     },
 
     setMessage(sessionId: string, message: Message) {
+      log.store.debug("CHECKING_STORE_CONFIG", {
+        message,
+      });
       upsertItem(
         state.messages,
         sessionId,

@@ -820,20 +820,8 @@ export type PermissionRuleset = Array<PermissionRule>;
 
 export type Session = {
   id: string;
-  slug: string;
-  projectID: string;
-  workspaceID?: string;
   directory: string;
   parentID?: string;
-  summary?: {
-    additions: number;
-    deletions: number;
-    files: number;
-    diffs?: Array<FileDiff>;
-  };
-  share?: {
-    url: string;
-  };
   title: string;
   version: string;
   time: {
@@ -1725,20 +1713,8 @@ export type ProjectSummary = {
 
 export type GlobalSession = {
   id: string;
-  slug: string;
-  projectID: string;
-  workspaceID?: string;
   directory: string;
   parentID?: string;
-  summary?: {
-    additions: number;
-    deletions: number;
-    files: number;
-    diffs?: Array<FileDiff>;
-  };
-  share?: {
-    url: string;
-  };
   title: string;
   version: string;
   time: {
@@ -1754,7 +1730,6 @@ export type GlobalSession = {
     snapshot?: string;
     diff?: string;
   };
-  project: ProjectSummary | null;
 };
 
 export type McpResource = {

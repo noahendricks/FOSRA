@@ -128,9 +128,9 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 type EventSource = {
-  on: (handler: (event: any) => void) => () => void
-  setWorkspace?: (workspaceID?: string) => void
-}
+  on: (handler: (event: any) => void) => () => void;
+  setWorkspace?: (workspaceID?: string) => void;
+};
 
 export function tui(input: {
   url: string;
@@ -143,7 +143,10 @@ export function tui(input: {
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
-    log.startup.info("TUI_STARTED", { url: input.url, directory: input.directory });
+    log.startup.info("TUI_STARTED", {
+      url: input.url,
+      directory: input.directory,
+    });
     const unguard = win32InstallCtrlCGuard();
     win32DisableProcessedInput();
 
@@ -183,7 +186,9 @@ export function tui(input: {
                             baseUrl: input.url,
                             directory: input.directory ?? "",
                             fetch: input.fetch,
-                            headers: input.headers as Record<string, string> | undefined,
+                            headers: input.headers as
+                              | Record<string, string>
+                              | undefined,
                           }}
                           events={input.events}
                         >
@@ -245,7 +250,7 @@ function App() {
   const route = useRoute();
   const dimensions = useTerminalDimensions();
   const renderer = useRenderer();
-  renderer.disableStdoutInterception();
+  renderer.externalOutputMode = "passthrough";
   const dialog = useDialog();
   const local = useLocal();
   const kv = useKV();
@@ -259,7 +264,9 @@ function App() {
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      log.keybind.debug("CTRL_C_DETECTED", { selection: !!renderer.getSelection() });
+      log.keybind.debug("CTRL_C_DETECTED", {
+        selection: !!renderer.getSelection(),
+      });
       if (
         Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT &&
         renderer.getSelection()
@@ -305,8 +312,6 @@ function App() {
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(
     kv.get("terminal_title_enabled", true),
   );
-
-
 
   // Update terminal window title based on current route and session
   createEffect(() => {
@@ -360,8 +365,10 @@ function App() {
   let continued = false;
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
-    if (continued || store.state.providers().length === 0 || !args.continue) return;
-    const match = store.state.sessionsArray()
+    if (continued || store.state.providers().length === 0 || !args.continue)
+      return;
+    const match = store.state
+      .sessionsArray()
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id;
     if (match) {
@@ -385,10 +392,15 @@ function App() {
   // to avoid a race where reconcile overwrites the newly forked session)
   let forked = false;
   createEffect(() => {
-    if (forked || store.state.providers().length === 0 || !args.sessionID || !args.fork)
+    if (
+      forked ||
+      store.state.providers().length === 0 ||
+      !args.sessionID ||
+      !args.fork
+    )
       return;
     forked = true;
-        api.fosra.session.fork({ sessionID: args.sessionID }).then((result) => {
+    api.fosra.session.fork({ sessionID: args.sessionID }).then((result) => {
       if (result.data?.id) {
         route.navigate({ type: "session", sessionID: result.data.id });
       } else {
@@ -399,7 +411,9 @@ function App() {
 
   createEffect(
     on(
-      () => store.state.providers().length > 0 && store.state.providers().length === 0,
+      () =>
+        store.state.providers().length > 0 &&
+        store.state.providers().length === 0,
       (isEmpty, wasEmpty) => {
         // only trigger when we transition into an empty-provider state
         if (!isEmpty || wasEmpty) return;

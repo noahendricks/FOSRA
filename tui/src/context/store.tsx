@@ -55,7 +55,9 @@ const ctx = createSimpleContext({
 
     const SNAPSHOT_MS =
       (parseInt(process.env.FOSRA_LOG_SNAPSHOT_INTERVAL ?? "30") || 30) * 1000;
+    
     let snapshotTimer: ReturnType<typeof setInterval> | undefined;
+
     if (SNAPSHOT_MS > 0) {
       snapshotTimer = setInterval(() => {
         log.store.debug("STATE_SNAPSHOT", snapshotState(state));

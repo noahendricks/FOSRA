@@ -325,7 +325,7 @@ export function Session() {
     }
   });
 
-  // Helper: Find next visible message boundary in direction
+  // helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (
     direction: "next" | "prev",
   ): string | null => {
@@ -333,7 +333,7 @@ export function Session() {
     const messagesList = messages();
     const scrollTop = scroll.y;
 
-    // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
+    // get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
       .filter((c) => {
         if (!c.id) return false;
@@ -364,7 +364,7 @@ export function Session() {
     );
   };
 
-  // Helper: Scroll to message in direction or fallback to page scroll
+  // helper: Scroll to message in direction or fallback to page scroll
   const scrollToMessage = (
     direction: "next" | "prev",
     dialog: ReturnType<typeof useDialog>,
