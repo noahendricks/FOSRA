@@ -40,7 +40,7 @@ class SourceResponseBase(BaseModelFlex):
 
     id: str
     type: SourceType | str | None
-    hash: str | None = None  # WARN: Change this to Non-Nullable
+    hash: str
     name: str = ""
     document_type: DocType | None = None
     source_summary: str = ""

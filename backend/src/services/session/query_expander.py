@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
+from ulid import ULID
 
 from backend.src.domain.schemas.retrieval import ChecklistItem, QueryExpansion
 from backend.src.services.session.utils.llm_utils import build_llm
@@ -78,7 +79,7 @@ class QueryExpander:
 
             checklist = [
                 ChecklistItem(
-                    id=item.get("id", i + 1),
+                    id=item.get("id") or str(ULID()),
                     question=item.get("question", ""),
                     answered=item.get("answered", False),
                 )
@@ -86,7 +87,9 @@ class QueryExpander:
             ]
 
             if not checklist:
-                checklist = [ChecklistItem(id=1, question=user_query, answered=False)]
+                checklist = [
+                    ChecklistItem(id=str(ULID()), question=user_query, answered=False)
+                ]
 
             logger.debug(
                 "Query expansion: {} items in checklist",
@@ -99,5 +102,7 @@ class QueryExpander:
             logger.warning("Query expansion failed, using fallback: {}", e)
             return QueryExpansion(
                 rewritten_query=user_query,
-                checklist=[ChecklistItem(id=1, question=user_query, answered=False)],
+                checklist=[
+                    ChecklistItem(id=str(ULID()), question=user_query, answered=False)
+                ],
             )

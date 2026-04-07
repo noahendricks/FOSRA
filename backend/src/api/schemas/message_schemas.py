@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -305,7 +305,11 @@ class ToolStateError(BaseModel):
     time: ToolStateErrorTime
 
 
-ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
+ToolState = Annotated[
+    Union[ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError],
+    Field(discriminator="status"),
+]
+
 
 
 class ToolPart(BaseModel):

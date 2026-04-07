@@ -57,8 +57,8 @@ class SessionModelLimit(BaseModel):
 
 
 class SessionModelInfo(BaseModel):
-    provider_id: str
-    model_id: str
+    provider_id: str | None = None
+    model_id: str | None = None
     cost: SessionModelCost | None = None
     limit: SessionModelLimit | None = None
 

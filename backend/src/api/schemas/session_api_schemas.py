@@ -1,8 +1,10 @@
 from datetime import datetime
 from typing import Any
 
-from backend.src.api.schemas.message_schemas import AssistantMessage, UserMessage
+from pydantic import Field
+
 from backend.src.api.schemas.base import BaseModelFlex
+from backend.src.api.schemas.message_schemas import AssistantMessage, UserMessage
 from backend.src.api.schemas.session_schemas import (
     SessionMetadataModel,
     SessionRevert,
@@ -14,7 +16,6 @@ from backend.src.api.schemas.source_api_schemas import (
 )
 from backend.src.domain.enums import ConversationStreamType, MessageRole
 from backend.src.storage.utils.converters import utc_now
-from pydantic import Field
 
 
 class ConversationStreamRequest(BaseModelFlex):
@@ -188,3 +189,32 @@ class MessageUpdateRequest(BaseModelFlex):
     role: str | None = None
     text: str | None = None
     message_metadata: dict[str, Any] | None = None
+
+
+class SessionStateResponse(BaseModelFlex):
+    """response schema for full session state.
+
+    mirrors SessionStateORM fields:
+    - session_id: primary key
+    - state: combined agent_snapshot, interaction_snapshot, metadata_
+    - last_active_at: last activity timestamp
+    - workspace_id: optional workspace association
+    """
+
+    session_id: str
+    state: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Full session state combining agent_snapshot, interaction_snapshot, and metadata",
+    )
+    last_active_at: datetime
+    workspace_id: str | None = None
+
+
+class SessionStateUpdate(BaseModelFlex):
+    """request schema for partial session state updates."""
+
+    session_id: str
+    updates: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Partial updates to apply to the session state",
+    )

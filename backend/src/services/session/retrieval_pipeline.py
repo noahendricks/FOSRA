@@ -64,7 +64,7 @@ class RetrievalState(BaseModel):
     ``build_retrieval_pipeline()``.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
 
     user_query: str = ""
     chat_history: str | None = None
@@ -340,7 +340,7 @@ def build_retrieval_pipeline(
 
         file_ids = None
         if filters and filters.file_ids:
-            file_ids = [int(fid) for fid in filters.file_ids if fid.isdigit()]
+            file_ids = [fid for fid in filters.file_ids if fid.isdigit()]
 
         try:
             result = await graph_svc.semantic_search(

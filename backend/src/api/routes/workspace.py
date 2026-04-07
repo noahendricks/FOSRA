@@ -101,6 +101,7 @@ def _chunks_to_source_groups(
                 source=SourceResponseDeep(
                     id=source_id,
                     type=None,
+                    hash="",
                     name=source_id,
                     document_type=DocType.DOC,
                     result_score=top_score,

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
+from ulid import ULID
 
 from backend.src.domain.schemas.retrieval import (
     AccumulatedContext,
@@ -104,7 +105,7 @@ class Subagent:
 
             updated_checklist = [
                 ChecklistItem(
-                    id=item.get("id", i + 1),
+                    id=item.get("id") or str(ULID()),
                     question=item.get("question", ""),
                     answered=item.get("answered", False),
                 )

@@ -36,7 +36,7 @@ class RetrievalFilters(DomainStruct, kw_only=True, frozen=True):
 class ChecklistItem(DomainStruct, kw_only=True, frozen=True):
     """A single coverage question with answered status."""
 
-    id: int
+    id: str
     question: str
     answered: bool = False
 

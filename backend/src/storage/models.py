@@ -218,6 +218,10 @@ class MessageORM(Base):
 
 class SessionStateORM(Base):
     __tablename__ = "session_states"
+    __table_args__ = (
+        Index("ix_session_states_last_active_at", "last_active_at"),
+        Index("ix_session_states_workspace_id", "workspace_id"),
+    )
 
     session_id: Mapped[str] = mapped_column(
         String(26), primary_key=True, default=ulid_factory

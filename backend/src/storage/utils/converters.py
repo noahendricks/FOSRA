@@ -54,9 +54,22 @@ def _map_domain_to_session_orm(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def orm_to_domain(orm_instance: T_ORM, domain_cls: type[T_Msgspec]) -> T_Msgspec:
+_ORM_LIST_TO_NONE_FIELDS = frozenset(["attached_files", "attached_sources"])
+
+
+def _normalize_orm_lists_to_domain(data: dict[str, Any]) -> dict[str, Any]:
+    for field in _ORM_LIST_TO_NONE_FIELDS:
+        if field in data and data[field] == []:
+            data[field] = None
+    return data
+
+
+def orm_to_domain(orm_instance: T_ORM, domain_cls: type[T_Msgspec]) -> T_Msgspec | None:
     try:
         data = _orm_to_safe_dict(orm_instance)
+        if data is None:
+            return None
+        data = _normalize_orm_lists_to_domain(data)
 
         return msgspec.convert(
             data,
