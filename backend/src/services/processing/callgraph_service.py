@@ -240,8 +240,11 @@ class CallGraphService:
             root, source_code, file_path, file_id, language, parse_result
         )
 
+        # extract imports first so we can use them for callee resolution
+        imports = self._extract_imports(parse_result, file_id)
+
         call_edges = self._extract_call_edges(
-            root, source_code, file_path, file_id, language, nodes
+            root, source_code, file_path, file_id, language, nodes, imports
         )
 
         inheritance_edges = self._extract_inheritance(
@@ -249,8 +252,6 @@ class CallGraphService:
         )
 
         method_edges = self._extract_method_edges(nodes, file_id)
-
-        imports = self._extract_imports(parse_result, file_id)
 
         return GraphResult(
             file_id=file_id,
@@ -823,6 +824,7 @@ class CallGraphService:
         file_id: str,
         language: str,
         nodes: list[CodeNode],
+        resolved_imports: list[ResolvedImport] | None = None,
     ) -> list[CallEdge]:
         edges = []
         lang = self._get_language(language)
@@ -833,6 +835,22 @@ class CallGraphService:
         for node in nodes:
             if node.node_type in (GraphNodeType.FUNCTION, GraphNodeType.METHOD):
                 func_map[node.line_start] = node
+
+        # build import lookup: imported_name -> (target_file_path, target_file_id)
+        import_lookup: dict[str, tuple[str, str | None]] = {}
+        if resolved_imports:
+            for imp in resolved_imports:
+                for name in imp.imported_names:
+                    import_lookup[name] = (
+                        imp.target_file_path or "",
+                        imp.target_file_id,
+                    )
+
+        # build local symbol table: local_name -> qualified_name (for same-file calls)
+        local_symbols: dict[str, str] = {}
+        for node in nodes:
+            if node.node_type in (GraphNodeType.FUNCTION, GraphNodeType.METHOD):
+                local_symbols[node.name] = node.qualified_name
 
         cursor = QueryCursor(query)
         for pattern_idx, captures in cursor.matches(root):
@@ -855,18 +873,49 @@ class CallGraphService:
                         call_expression = source_code[
                             call_expr.start_byte : call_expr.end_byte
                         ]
+
+                        # resolve callee: check imports first, then local symbols
+                        callee_qualified: str | None = None
+                        callee_file_id: str | None = None
+                        is_cross_file = False
+
+                        # handle method calls like `parser.parse()` - extract base name
+                        base_name = (
+                            callee_name.split(".")[0]
+                            if "." in callee_name
+                            else callee_name
+                        )
+
+                        if base_name in import_lookup:
+                            target_path, target_id = import_lookup[base_name]
+                            if target_path:
+                                # build qualified name
+                                if "." in callee_name:
+                                    # method call: use path:name for the method
+                                    method_name = callee_name.split(".")[-1]
+                                    callee_qualified = f"{target_path}:{method_name}"
+                                else:
+                                    callee_qualified = f"{target_path}:{callee_name}"
+                            if target_id:
+                                callee_file_id = target_id
+                                is_cross_file = caller_node.file_id != callee_file_id
+                        elif callee_name in local_symbols:
+                            # local call - same file
+                            callee_qualified = local_symbols[callee_name]
+                            is_cross_file = False
+
                         edges.append(
                             CallEdge(
                                 caller_name=caller_node.name,
                                 caller_qualified=caller_node.qualified_name,
                                 caller_file_id=file_id,
                                 callee_name=callee_name,
-                                callee_qualified=None,
-                                callee_file_id=None,
+                                callee_qualified=callee_qualified,
+                                callee_file_id=callee_file_id,
                                 call_expression=call_expression,
                                 line_number=line_number,
                                 confidence=0.7,
-                                is_cross_file=False,
+                                is_cross_file=is_cross_file,
                             )
                         )
 

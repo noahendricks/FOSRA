@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.src.domain.enums import FileSourceType
+from backend.src.domain.schemas.graph import ResolvedImport
 from backend.src.settings import EmbedderConfig
 from backend.src.services.processing.callgraph_service import CallGraphService
 from backend.src.services.retrieval.graph_service import GraphService
@@ -23,6 +24,7 @@ class IngestionStats(TypedDict):
     total_nodes: int
     total_call_edges: int
     total_inheritance_edges: int
+    total_import_edges: int
     errors: list[dict[str, str]]
 
 
@@ -63,6 +65,7 @@ async def ingest_codebase(
         "total_nodes": 0,
         "total_call_edges": 0,
         "total_inheritance_edges": 0,
+        "total_import_edges": 0,
         "errors": [],
     }
 
@@ -73,10 +76,12 @@ async def ingest_codebase(
     files = _collect_code_files(directory, recursive)
     logger.info("Found {} code files in {}", len(files), directory_path)
 
+    all_imports: list[ResolvedImport] = []
+
     async with session_factory() as session:
         for file_path in files:
             try:
-                file_stats = await _process_file(
+                file_stats, file_imports = await _process_file(
                     file_path=file_path,
                     repo_name=repo_name,
                     embedder_config=embedder_config,
@@ -85,6 +90,7 @@ async def ingest_codebase(
                     session=session,
                     base_dir=directory,
                 )
+                all_imports.extend(file_imports)
 
                 stats["files_processed"] += 1
                 stats["total_nodes"] += file_stats.get("nodes_created", 0)
@@ -95,6 +101,9 @@ async def ingest_codebase(
                 stats["errors"].append({"file": str(file_path), "error": str(e)})
 
         await session.commit()
+
+    resolve_stats = await graph_service.resolve_imports(all_imports)
+    stats["total_import_edges"] = resolve_stats.get("edges_created", 0)
 
     logger.bind(_structured=stats).info("Codebase ingestion complete")
     return stats  # type: ignore[return-value]
@@ -121,7 +130,7 @@ async def ingest_single_file(
         raise ValueError(f"File not found: {file_path}")
 
     async with session_factory() as session:
-        stats = await _process_file(
+        stats, _ = await _process_file(
             file_path=path,
             repo_name=repo_name,
             embedder_config=embedder_config,
@@ -143,14 +152,11 @@ async def _process_file(
     graph_service: GraphService,
     session: AsyncSession,
     base_dir: Path,
-) -> dict[str, Any]:
-    """
-    process a single file: register, extract graph, upsert to falkordb.
-    """
+) -> tuple[dict[str, Any], list[ResolvedImport]]:
     language = LANGUAGE_EXTENSIONS.get(file_path.suffix)
     if not language:
         logger.warning("Skipping unsupported file type: {}", file_path)
-        return {"nodes_created": 0, "edges_created": 0}
+        return {"nodes_created": 0, "edges_created": 0}, []
 
     source_code = file_path.read_text()
 
@@ -173,7 +179,7 @@ async def _process_file(
 
     if existing_doc and existing_doc.checksum == checksum:
         logger.debug("File unchanged, skipping: {}", relative_path)
-        return {"nodes_created": 0, "edges_created": 0, "skipped": True}
+        return {"nodes_created": 0, "edges_created": 0, "skipped": True}, []
 
     if existing_doc:
         file_id = existing_doc.doc_id
@@ -212,7 +218,7 @@ async def _process_file(
     logger.bind(_structured={"path": relative_path, **upsert_stats}).info(
         "Processed file"
     )
-    return upsert_stats
+    return upsert_stats, graph_result.imports
 
 
 def _collect_code_files(directory: Path, recursive: bool) -> list[Path]:

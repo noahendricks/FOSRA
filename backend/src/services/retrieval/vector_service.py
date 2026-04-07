@@ -76,6 +76,16 @@ class VectorService:
                 },
                 sparse_vectors_config={"sparse": models.SparseVectorParams()},
             )
+            await client.create_payload_index(
+                collection_name=CHUNKS_COLLECTION,
+                field_name="doc_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+            await client.create_payload_index(
+                collection_name=CHUNKS_COLLECTION,
+                field_name="chunk_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
 
     @staticmethod
     async def upsert_chunks(
@@ -436,11 +446,30 @@ class VectorService:
                 pass
 
     @staticmethod
-    def delete(config: VectorStoreConfig):
-        store = VectorService._get_store(config, embedder_config=EmbedderConfig())
-
-        if not store:
-            raise ValueError("No Vector Store to Perform Action")
+    async def delete(
+        client: AsyncQdrantClient,
+        collection_name: str,
+        doc_id: str,
+    ) -> bool:
+        try:
+            _ = await client.delete(
+                collection_name=collection_name,
+                points_selector=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="doc_id",
+                            match=models.MatchAny(any=[doc_id]),
+                        )
+                    ]
+                ),
+            )
+            logger.info(
+                f"Deleted all chunks for doc_id: {doc_id} from {collection_name}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete chunks for doc_id {doc_id}: {e}")
+            return False
 
     @staticmethod
     async def build_points(

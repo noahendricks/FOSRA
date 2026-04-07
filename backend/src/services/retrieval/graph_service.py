@@ -37,6 +37,11 @@ class GraphService:
             self._graphs[self._graph_name] = self._client.select_graph(self._graph_name)
         return self._graphs[self._graph_name]
 
+    def create_indexes(self) -> None:
+        graph = self._get_graph()
+        graph.query("CALL db.idx.fulltext.createNodeIndex('File', 'file_id')")
+        logger.info("Created full-text index on File.file_id")
+
     async def upsert_file_graph(
         self,
         graph_result: GraphResult,
@@ -81,6 +86,96 @@ class GraphService:
             "Upserted file"
         )
         return stats
+
+    async def resolve_imports(
+        self,
+        imports: list[ResolvedImport],
+    ) -> dict[str, Any]:
+        graph = self._get_graph()
+        stats = {"resolved": 0, "edges_created": 0, "failed": 0}
+
+        unresolved = [imp for imp in imports if not imp.target_file_id]
+        if not unresolved:
+            return stats
+
+        for imp in unresolved:
+            module_path = imp.imported_names[0] if imp.imported_names else ""
+            if not module_path:
+                stats["failed"] += 1
+                continue
+
+            file_path_pattern = module_path.replace(".", "/")
+            query = """
+            MATCH (f:File)
+            WHERE f.file_path CONTAINS $pattern
+            RETURN f.file_id, f.file_path
+            LIMIT 1
+            """
+            result = graph.query(query, params={"pattern": file_path_pattern})
+            rows = result.result_set
+
+            if rows and rows[0]:
+                imp.target_file_id = str(rows[0][0])
+                imp.target_file_path = str(rows[0][1])
+                stats["resolved"] += 1
+                self._upsert_import_edge(graph, imp)
+                stats["edges_created"] += 1
+            else:
+                stats["failed"] += 1
+
+        logger.info(
+            "Resolved {} imports ({} edges created, {} failed)",
+            stats["resolved"],
+            stats["edges_created"],
+            stats["failed"],
+        )
+        return stats
+
+    def _upsert_import_edge(self, graph: "Graph", imp: ResolvedImport) -> None:
+        query = """
+        MATCH (source:File {file_id: $source_file_id})
+        MERGE (target:File {file_id: $target_file_id})
+        MERGE (source)-[r:IMPORTS]->(target)
+        SET r.names = $names,
+            r.line_number = $line_number
+        """
+        _ = graph.query(
+            query,
+            params={
+                "source_file_id": imp.source_file_id,
+                "target_file_id": imp.target_file_id,
+                "names": imp.imported_names,
+                "line_number": imp.line_number,
+            },
+        )
+
+    def _upsert_call_edge(self, graph: "Graph", edge: CallEdge) -> None:
+        """Create a CALLS relationship between functions."""
+        query = """
+        MATCH (caller:Function {qualified_name: $caller_qualified})
+        MERGE (callee:Function {qualified_name: $callee_qualified})
+        ON CREATE SET callee.name = $callee_name,
+            callee.file_id = $callee_file_id,
+            callee.inferred = true
+        MERGE (caller)-[r:CALLS]->(callee)
+        SET r.line_number = $line_number,
+            r.call_expression = $call_expression,
+            r.confidence = $confidence,
+            r.is_cross_file = $is_cross_file
+        """
+        _ = graph.query(
+            query,
+            params={
+                "caller_qualified": edge.caller_qualified,
+                "callee_name": edge.callee_name,
+                "callee_qualified": edge.callee_qualified or edge.callee_name,
+                "callee_file_id": edge.callee_file_id or "",
+                "line_number": edge.line_number,
+                "call_expression": edge.call_expression,
+                "confidence": edge.confidence,
+                "is_cross_file": edge.is_cross_file,
+            },
+        )
 
     async def _embed_nodes(
         self,
@@ -229,136 +324,23 @@ class GraphService:
             query, params={"qualified_name": node.qualified_name, "props": props}
         )
 
-    def _upsert_call_edge(self, graph: "Graph", edge: CallEdge) -> None:
-        """create a CALLS relationship between functions."""
+    def _upsert_contains_edge(
+        self,
+        graph: "Graph",
+        node: CodeNode,
+    ) -> None:
         query = """
-        MATCH (caller:Function {qualified_name: $caller_qualified})
-        MERGE (callee:Function {name: $callee_name})
-        ON CREATE SET callee.inferred = true
-        MERGE (caller)-[r:CALLS]->(callee)
-        SET r.line_number = $line_number,
-            r.call_expression = $call_expression,
-            r.confidence = $confidence,
-            r.is_cross_file = $is_cross_file
+        MATCH (file:File {file_id: $file_id})
+        MERGE (file)-[r:CONTAINS]->(n)
         """
         _ = graph.query(
             query,
             params={
-                "caller_qualified": edge.caller_qualified,
-                "callee_name": edge.callee_name,
-                "line_number": edge.line_number,
-                "call_expression": edge.call_expression,
-                "confidence": edge.confidence,
-                "is_cross_file": edge.is_cross_file,
+                "file_id": node.file_id,
+                "qualified_name": node.qualified_name,
+                "node_label": node.node_type.value,
             },
         )
-
-    def _upsert_inheritance_edge(self, graph: "Graph", edge: InheritanceEdge) -> None:
-        """create an INHERITS relationship between classes."""
-        rel_type = "IMPLEMENTS" if edge.inheritance_type == "implements" else "INHERITS"
-
-        query = f"""
-        MATCH (child:Class {{qualified_name: $child_qualified}})
-        MERGE (parent:Class {{name: $parent_name}})
-        ON CREATE SET parent.inferred = true
-        MERGE (child)-[r:{rel_type}]->(parent)
-        SET r.is_cross_file = $is_cross_file
-        """
-
-        _ = graph.query(
-            query,
-            params={
-                "child_qualified": edge.child_qualified,
-                "parent_name": edge.parent_name,
-                "is_cross_file": edge.is_cross_file,
-            },
-        )
-
-    def _upsert_import_edge(self, graph: "Graph", imp: ResolvedImport) -> None:
-        """create an IMPORTS relationship between files/modules."""
-        query = """
-        MATCH (source:File {file_id: $source_file_id})
-        MERGE (target:File {file_id: $target_file_id})
-        MERGE (source)-[r:IMPORTS]->(target)
-        SET r.names = $names,
-            r.line_number = $line_number
-        """
-        _ = graph.query(
-            query,
-            params={
-                "source_file_id": imp.source_file_id,
-                "target_file_id": imp.target_file_id,
-                "names": imp.imported_names,
-                "line_number": imp.line_number,
-            },
-        )
-
-    def _upsert_method_edge(self, graph: "Graph", edge: MethodEdge) -> None:
-        """create a DEFINES_METHOD relationship from Class to Method."""
-        query = """
-        MATCH (c:Class {qualified_name: $class_qualified})
-        MATCH (m:Method {qualified_name: $method_qualified})
-        MERGE (c)-[r:DEFINES_METHOD]->(m)
-        """
-        _ = graph.query(
-            query,
-            params={
-                "class_qualified": edge.class_qualified,
-                "method_qualified": edge.method_qualified,
-            },
-        )
-
-    def create_indexes(self, embedder_config: "EmbedderConfig | None" = None) -> None:
-        """create indexes for the graph (idempotent)."""
-        graph = self._get_graph()
-
-        for label, prop in [
-            ("File", "file_id"),
-            ("File", "path"),
-            ("Function", "qualified_name"),
-            ("Function", "name"),
-            ("Class", "qualified_name"),
-            ("Class", "name"),
-        ]:
-            try:
-                _ = graph.create_node_range_index(label, prop)
-            except Exception as e:
-                if "already indexed" not in str(e).lower():
-                    logger.warning(
-                        "Index creation warning for {}.{}: {}", label, prop, e
-                    )
-
-        dim = embedder_config.dense_dimensions if embedder_config else 896
-        for label, prop, vector_dim in [
-            ("Function", "embedding", dim),
-            ("Method", "embedding", dim),
-            ("Class", "embedding", dim),
-        ]:
-            try:
-                _ = graph.create_node_vector_index(
-                    label,
-                    prop,
-                    dim=dim,
-                    similarity_function="cosine",
-                )
-            except Exception as e:
-                if "already indexed" not in str(e).lower():
-                    logger.warning(
-                        "Vector index creation warning for {}.{}: {}", label, prop, e
-                    )
-
-        for label in ("Function", "Method", "Class"):
-            try:
-                _ = graph.query(
-                    f"CALL db.idx.fulltext.createNodeIndex('{label}', 'name', 'qualified_name', 'docstring')"
-                )
-            except Exception as e:
-                if "already indexed" not in str(e).lower():
-                    logger.warning(
-                        "Fulltext index creation warning for {}: {}", label, e
-                    )
-
-        logger.info("Ensured indexes for graph '{}'", self._graph_name)
 
     async def semantic_search(
         self,
@@ -408,7 +390,9 @@ class GraphService:
                 continue
 
             code_node = self._node_to_code_node(node_data)
-            if file_ids is not None and int(code_node.file_id) not in file_ids:
+            if file_ids is not None and code_node.file_id not in {
+                str(fid) for fid in file_ids
+            }:
                 continue
 
             node_emb = np.array(emb_list, dtype=np.float32)
@@ -469,7 +453,9 @@ class GraphService:
                 score = row[1] if len(row) > 1 else 0.0
                 if node_data:
                     code_node = self._node_to_code_node(node_data)
-                    if file_ids is None or int(code_node.file_id) in file_ids:
+                    if file_ids is None or code_node.file_id in {
+                        str(fid) for fid in file_ids
+                    }:
                         results.append((code_node, float(score)))
                         if abs(score) > max_score:
                             max_score = abs(score)
