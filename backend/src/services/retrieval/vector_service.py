@@ -17,8 +17,7 @@ if TYPE_CHECKING:
     pass
 
 
-from qdrant_client import QdrantClient, models
-from qdrant_client.async_qdrant_client import AsyncQdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient, models
 
 CHUNKS_COLLECTION = "chunks"
 RRF_K = 60
@@ -93,7 +92,7 @@ class VectorService:
 
     @staticmethod
     async def search_collection(
-        client: QdrantClient,
+        client: AsyncQdrantClient,
         collection_name: str,
         embed_config: EmbedderConfig,
         query: str,
@@ -126,7 +125,7 @@ class VectorService:
         try:
             match retrieval_mode:
                 case RetrievalMode.STANDARD:
-                    results = client.query_points(
+                    results = await client.query_points(
                         collection_name=collection_name,
                         query=embedded_queries.dense,
                         query_filter=query_filter,
@@ -146,7 +145,7 @@ class VectorService:
                             query=embedded_queries.sparse, using="sparse", limit=limit
                         ),
                     ]
-                    results = client.query_points(
+                    results = await client.query_points(
                         collection_name=collection_name,
                         prefetch=prefetch,
                         query=models.FusionQuery(fusion=models.Fusion.RRF),
@@ -161,7 +160,7 @@ class VectorService:
 
     @staticmethod
     async def weighted_search(
-        client: QdrantClient,
+        client: AsyncQdrantClient,
         collection_name: str,
         embed_config: EmbedderConfig,
         query: str,
@@ -188,7 +187,7 @@ class VectorService:
             if conditions:
                 query_filter = models.Filter(must=conditions)
 
-        dense_results = client.query_points(
+        dense_results = await client.query_points(
             collection_name=collection_name,
             query=embedded_queries.dense,
             using="dense",
@@ -197,7 +196,7 @@ class VectorService:
             limit=limit,
         )
 
-        sparse_results = client.query_points(
+        sparse_results = await client.query_points(
             collection_name=collection_name,
             query=embedded_queries.sparse,
             using="sparse",
@@ -216,7 +215,7 @@ class VectorService:
 
     @staticmethod
     async def retrieve(
-        client: QdrantClient,
+        client: AsyncQdrantClient,
         embed_config: EmbedderConfig,
         query: str,
         filters: dict[str, Any] | None = None,

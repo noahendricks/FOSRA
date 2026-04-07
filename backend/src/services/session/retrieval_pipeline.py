@@ -17,7 +17,7 @@ from falkordb import FalkorDB
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http.models.models import (
     FeedbackItem,
     NaiveFeedbackStrategy,
@@ -155,7 +155,17 @@ def build_retrieval_pipeline(
     if not isinstance(store, QdrantClient):
         raise RuntimeError("Vector store must be QdrantClient for evolved pipeline")
 
-    qdrant_client: QdrantClient = store
+    # Create AsyncQdrantClient from the same connection params
+    qdrant_config = vector_config.qdrant_config
+    if qdrant_config.data_path:
+        qdrant_client = AsyncQdrantClient(path=qdrant_config.data_path)
+    elif qdrant_config.url:
+        qdrant_client = AsyncQdrantClient(url=qdrant_config.url)
+    else:
+        qdrant_client = AsyncQdrantClient(
+            host=qdrant_config.host,
+            port=qdrant_config.port,
+        )
 
     graph_service: GraphService | None = None
     if falkordb_client:
@@ -268,7 +278,7 @@ def build_retrieval_pipeline(
     async def _execute_vector_retrieval(
         query: str,
         filters: Any | None,
-        client: QdrantClient,
+        client: AsyncQdrantClient,
         embed_config: EmbedderConfig,
         dense_weight: float = 1.0,
         sparse_weight: float = 1.0,
@@ -409,15 +419,11 @@ def build_retrieval_pipeline(
         )
 
         try:
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(
-                None,
-                lambda: qdrant_client.query_points(
-                    collection_name=CHUNKS_COLLECTION,
-                    query=feedback_query,
-                    with_payload=True,
-                    limit=15,
-                ),
+            results = await qdrant_client.query_points(
+                collection_name=CHUNKS_COLLECTION,
+                query=feedback_query,
+                with_payload=True,
+                limit=15,
             )
         except Exception as e:
             logger.warning("Pipeline: relevance feedback query failed: {}", e)

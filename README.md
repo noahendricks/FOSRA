@@ -188,21 +188,21 @@ fosra/
 
 <div align="center">
 
-    ## Tech Stack
-    
-    | Layer | Technology |
-    |-------|-----------|
-    | Backend | Python 3.12+, FastAPI, uvicorn, uvloop |
-    | Terminal UI | OpenTUI 0.1.86, SolidJS, Bun, TypeScript |
-    | Vector DB | Qdrant |
-    | Graph DB | FalkorDB |
-    | Relational DB | PostgreSQL (asyncpg, SQLAlchemy) |
-    | LLM Gateway | LiteLLM (universal model routing) |
-    | Task Queue | Taskiq |
-    | Observability | OpenTelemetry, Loguru, structlog |
-    | Migrations | Alembic |
-    
-    ---
+  ## Tech Stack
+  
+  | Layer | Technology |
+  |-------|-----------|
+  | Backend | Python 3.12+, FastAPI, uvicorn, uvloop |
+  | Terminal UI | OpenTUI 0.1.86, SolidJS, Bun, TypeScript |
+  | Vector DB | Qdrant |
+  | Graph DB | FalkorDB |
+  | Relational DB | PostgreSQL (asyncpg, SQLAlchemy) |
+  | LLM Gateway | LiteLLM (universal model routing) |
+  | Task Queue | Taskiq |
+  | Observability | OpenTelemetry, Loguru, structlog |
+  | Migrations | Alembic |
+  
+  ---
 
 ```
 +--------------------------------------+

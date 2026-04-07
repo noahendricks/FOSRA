@@ -1,48 +1,61 @@
-import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, Match, on, onMount, Show, Switch } from "solid-js"
-import { useTheme } from "@tui/context/theme"
-import { useKeybind } from "@tui/context/keybind"
-import { Logo } from "../component/logo"
-import { Tips } from "../component/tips"
-import { Locale } from "@/util/locale"
-import { useStore } from "../context/store"
-import { Toast } from "../ui/toast"
-import { useArgs } from "../context/args"
-import { useDirectory } from "../context/directory"
-import { useRouteData } from "@tui/context/route"
-import { usePromptRef } from "../context/prompt"
-import { Installation } from "@/installation"
-import { useKV } from "../context/kv"
-import { useCommandDialog } from "../component/dialog-command"
-import { useLocal } from "../context/local"
+import { Prompt, type PromptRef } from "@tui/component/prompt";
+import {
+  createEffect,
+  createMemo,
+  Match,
+  on,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js";
+import { useTheme } from "@tui/context/theme";
+import { useKeybind } from "@tui/context/keybind";
+import { Logo } from "../component/logo";
+import { Tips } from "../component/tips";
+import { Locale } from "@/util/locale";
+import { useStore } from "../context/store";
+import { Toast } from "../ui/toast";
+import { useArgs } from "../context/args";
+import { useDirectory } from "../context/directory";
+import { useRouteData } from "@tui/context/route";
+import { usePromptRef } from "../context/prompt";
+import { Installation } from "@/installation";
+import { useKV } from "../context/kv";
+import { useCommandDialog } from "../component/dialog-command";
+import { useLocal } from "../context/local";
 
 // TODO: what is the best way to do this?
-let once = false
+let once = false;
 
 export function Home() {
-  const store = useStore()
-  const kv = useKV()
-  const { theme } = useTheme()
-  const route = useRouteData("home")
-  const promptRef = usePromptRef()
-  const command = useCommandDialog()
-  const mcpEntries = createMemo(() => Object.entries(Object.fromEntries([...store.state.mcp.entries()])))
-  const mcp = createMemo(() => mcpEntries().length > 0)
+  const store = useStore();
+  const kv = useKV();
+  const { theme } = useTheme();
+  const route = useRouteData("home");
+  const promptRef = usePromptRef();
+  const command = useCommandDialog();
+  const mcpEntries = createMemo(() =>
+    Object.entries(Object.fromEntries([...store.state.mcp.entries()])),
+  );
+  const mcp = createMemo(() => mcpEntries().length > 0);
   const mcpError = createMemo(() => {
-    return mcpEntries().some(([_, x]) => x.status === "failed")
-  })
+    return mcpEntries().some(([_, x]) => x.status === "failed");
+  });
 
   const connectedMcpCount = createMemo(() => {
-    return mcpEntries().filter(([_, x]) => x.status === "connected").length
-  })
+    return mcpEntries().filter(([_, x]) => x.status === "connected").length;
+  });
 
-  const isFirstTimeUser = createMemo(() => store.state.sessionsArray().length === 0)
-  const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
+  const isFirstTimeUser = createMemo(
+    () => store.state.sessionsArray().length === 0,
+  );
+  const tipsHidden = createMemo(() => kv.get("tips_hidden", false));
+
   const showTips = createMemo(() => {
-    // Don't show tips for first-time users
-    if (isFirstTimeUser()) return false
-    return !tipsHidden()
-  })
+    // don't show tips for first-time users
+    if (isFirstTimeUser()) return false;
+    return !tipsHidden();
+  });
 
   command.register(() => [
     {
@@ -51,11 +64,11 @@ export function Home() {
       keybind: "tips_toggle",
       category: "System",
       onSelect: (dialog) => {
-        kv.set("tips_hidden", !tipsHidden())
-        dialog.clear()
+        kv.set("tips_hidden", !tipsHidden());
+        dialog.clear();
       },
     },
-  ])
+  ]);
 
   const Hint = (
     <Show when={connectedMcpCount() > 0}>
@@ -68,46 +81,50 @@ export function Home() {
             </Match>
             <Match when={true}>
               <span style={{ fg: theme.success }}>•</span>{" "}
-              {Locale.pluralize(connectedMcpCount(), "{} mcp server", "{} mcp servers")}
+              {Locale.pluralize(
+                connectedMcpCount(),
+                "{} mcp server",
+                "{} mcp servers",
+              )}
             </Match>
           </Switch>
         </text>
       </box>
     </Show>
-  )
+  );
 
-  let prompt: PromptRef
-  const args = useArgs()
-  const local = useLocal()
+  let prompt: PromptRef;
+  const args = useArgs();
+  const local = useLocal();
   onMount(() => {
-    if (once) return
+    if (once) return;
     if (route.initialPrompt) {
-      prompt.set(route.initialPrompt)
-      once = true
+      prompt.set(route.initialPrompt);
+      once = true;
     } else if (args.prompt) {
-      prompt.set({ input: args.prompt, parts: [] })
-      once = true
+      prompt.set({ input: args.prompt, parts: [] });
+      once = true;
     }
-  })
+  });
 
   // Wait for model store to be ready before auto-submitting --prompt
-  let submitted = false
+  let submitted = false;
   createEffect(
     on(
       () => local.model.ready,
       (ready) => {
-        if (!ready) return
-        if (submitted) return
-        if (!args.prompt) return
-        if (prompt.current?.input !== args.prompt) return
-        submitted = true
-        prompt.submit()
+        if (!ready) return;
+        if (submitted) return;
+        if (!args.prompt) return;
+        if (prompt.current?.input !== args.prompt) return;
+        submitted = true;
+        prompt.submit();
       },
     ),
-  )
-  const directory = useDirectory()
+  );
+  const directory = useDirectory();
 
-  const keybind = useKeybind()
+  const keybind = useKeybind();
 
   return (
     <>
@@ -118,17 +135,31 @@ export function Home() {
           <Logo />
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
+        <box
+          width="100%"
+          maxWidth={75}
+          zIndex={1000}
+          paddingTop={1}
+          flexShrink={0}
+        >
           <Prompt
             ref={(r) => {
-              prompt = r
-              promptRef.set(r)
+              prompt = r;
+              promptRef.set(r);
             }}
             hint={Hint}
             workspaceID={route.workspaceID}
           />
         </box>
-        <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
+        <box
+          height={4}
+          minHeight={0}
+          width="100%"
+          maxWidth={75}
+          alignItems="center"
+          paddingTop={3}
+          flexShrink={1}
+        >
           <Show when={showTips()}>
             <Tips />
           </Show>
@@ -136,7 +167,15 @@ export function Home() {
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>
-      <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
+      <box
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={2}
+        flexDirection="row"
+        flexShrink={0}
+        gap={2}
+      >
         <text fg={theme.textMuted}>{directory()}</text>
         <box gap={1} flexDirection="row" flexShrink={0}>
           <Show when={mcp()}>
@@ -146,7 +185,16 @@ export function Home() {
                   <span style={{ fg: theme.error }}>⊙ </span>
                 </Match>
                 <Match when={true}>
-                  <span style={{ fg: connectedMcpCount() > 0 ? theme.success : theme.textMuted }}>⊙ </span>
+                  <span
+                    style={{
+                      fg:
+                        connectedMcpCount() > 0
+                          ? theme.success
+                          : theme.textMuted,
+                    }}
+                  >
+                    ⊙{" "}
+                  </span>
                 </Match>
               </Switch>
               {connectedMcpCount()} MCP
@@ -160,5 +208,5 @@ export function Home() {
         </box>
       </box>
     </>
-  )
+  );
 }
