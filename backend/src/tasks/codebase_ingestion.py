@@ -56,7 +56,7 @@ async def ingest_codebase(
     callgraph_service = CallGraphService()
     graph_service = GraphService(falkordb_client, graph_name=repo_name or "codebase")
 
-    graph_service.create_indexes()
+    graph_service.create_indexes(embedder_config)
 
     stats: IngestionStats = {
         "files_processed": 0,
@@ -114,7 +114,7 @@ async def ingest_single_file(
     callgraph_service = CallGraphService()
     graph_service = GraphService(falkordb_client, graph_name=repo_name or "codebase")
 
-    graph_service.create_indexes()
+    graph_service.create_indexes(embedder_config)
 
     path = Path(file_path)
     if not path.exists():

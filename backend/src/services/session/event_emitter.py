@@ -121,7 +121,11 @@ class EventEmitter:
     async def emit_session_diff(self, session_id: str, diff: dict[str, Any]) -> None:
         await self.emit("session.diff", {"sessionID": session_id, "diff": diff})
 
-    async def emit_session_error(self, session_id: str | None, error: str) -> None:
+    async def emit_session_error(
+        self, session_id: str | None, error: dict[str, Any] | str
+    ) -> None:
+        if isinstance(error, str):
+            error = {"message": error, "type": "unknown"}
         await self.emit("session.error", {"sessionID": session_id, "error": error})
 
     async def emit_permission_asked(self, permission: dict[str, Any]) -> None:

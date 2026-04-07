@@ -337,5 +337,5 @@ class EventFormatter:
         ).model_dump()
         await self._emitter.emit_message_updated(msg)
 
-    async def emit_session_error(self, error_msg: str) -> None:
-        await self._emitter.emit_session_error(self._session_id, error_msg)
+    async def emit_session_error(self, error: dict[str, Any] | str) -> None:
+        await self._emitter.emit_session_error(self._session_id, error)

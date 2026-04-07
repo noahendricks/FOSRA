@@ -308,7 +308,7 @@ class GraphService:
             },
         )
 
-    def create_indexes(self) -> None:
+    def create_indexes(self, embedder_config: "EmbedderConfig | None" = None) -> None:
         """create indexes for the graph (idempotent)."""
         graph = self._get_graph()
 
@@ -328,10 +328,11 @@ class GraphService:
                         "Index creation warning for {}.{}: {}", label, prop, e
                     )
 
-        for label, prop, dim in [
-            ("Function", "embedding", 896),
-            ("Method", "embedding", 896),
-            ("Class", "embedding", 896),
+        dim = embedder_config.dense_dimensions if embedder_config else 896
+        for label, prop, vector_dim in [
+            ("Function", "embedding", dim),
+            ("Method", "embedding", dim),
+            ("Class", "embedding", dim),
         ]:
             try:
                 _ = graph.create_node_vector_index(

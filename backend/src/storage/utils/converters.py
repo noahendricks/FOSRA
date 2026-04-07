@@ -109,7 +109,7 @@ def _orm_to_safe_dict(orm_instance: DeclarativeBase | None) -> dict[str, Any] | 
 def _handle_metadata_mapping(
     orm_instance: DeclarativeBase, data: dict[str, Any]
 ) -> None:
-    metadata_keys = ["session_metadata", "message_metadata", "metadata"]
+    metadata_keys = ["session_metadata", "message_metadata", "metadata", "metadata_"]
 
     for key in metadata_keys:
         if key in data:
