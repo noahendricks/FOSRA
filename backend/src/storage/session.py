@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, cast, cast
+from typing import Any, cast
 
 import msgspec
 from loguru import logger
@@ -15,14 +15,19 @@ from backend.src.api.schemas.session_api_schemas import (
     SessionDeleteRequest,
     SessionUpdateRequest,
 )
-from backend.src.domain.schemas.session import Session, SessionFull, Message, NewSession
+from backend.src.api.schemas.session_schemas import SessionTime
 from backend.src.domain.schemas.doc import MDNFile
-from backend.src.storage.models import SessionORM, MessageORM
+from backend.src.domain.schemas.session import Message, NewSession, Session, SessionFull
+from backend.src.storage.models import MessageORM, SessionORM
 from backend.src.storage.utils.converters import orm_to_domain
 
 
 class SessionError(Exception):
-    pass
+    def __init__(self, session_id: str, user_id: str, entity: str = "Conversation"):
+        super().__init__(session_id, user_id, entity)
+        self.session_id = session_id
+        self.user_id = user_id
+        self.entity = entity
 
 
 def file_part_to_dict(file_part: MDNFile) -> dict[str, Any]:
@@ -39,6 +44,10 @@ def dict_to_file_part(d: dict[str, Any]) -> MDNFile:
 
 
 class SessionRepo:
+    @staticmethod
+    def _raise_if_not_found(session_id: str, user_id: str) -> None:
+        raise SessionError(session_id=session_id, user_id=user_id)
+
     @staticmethod
     async def _get_session_orm(
         session: AsyncSession,
@@ -59,16 +68,6 @@ class SessionRepo:
         return chat.scalar_one_or_none()
 
     @staticmethod
-    def _raise_if_not_found(
-        session_id: str,
-        user_id: str,
-        entity: str = "Conversation",
-    ) -> None:
-        raise SessionError(
-            f"{entity} not found or access denied: session_id={session_id}, user_id={user_id}"
-        )
-
-    @staticmethod
     async def _get_message_orm(
         session: AsyncSession,
         message_id: str,
@@ -87,21 +86,24 @@ class SessionRepo:
         try:
             logger.info("Creating session for user {}", new_session.user_id)
 
-            db_chat: SessionORM = SessionORM(
+            db_session: SessionORM = SessionORM(
                 user_id=new_session.user_id,
                 workspace_id=getattr(new_session, "workspace_id", "default"),
                 title=new_session.title or "New Session",
+                directory=getattr(new_session, "directory", ""),
+                version=getattr(new_session, "version", "1"),
+                parent_id=getattr(new_session, "parentID", None),
             )
 
-            session.add(db_chat)
+            session.add(db_session)
 
             await session.commit()
 
-            await session.refresh(db_chat)
+            await session.refresh(db_session)
 
-            logger.success("Created session {}", db_chat.session_id)
+            logger.success("Created session {}", db_session.session_id)
 
-            return orm_to_domain(db_chat, NewSession)
+            return orm_to_domain(db_session, NewSession)
 
         except Exception as e:
             await session.rollback()
@@ -118,22 +120,41 @@ class SessionRepo:
             logger.info(
                 "Retrieving session: user_id={}, session_id={}", user_id, session_id
             )
-            db_chat = await SessionRepo._get_session_orm(
+
+            db_session = await SessionRepo._get_session_orm(
                 session,
                 session_id,
                 user_id=user_id,
             )
 
-            if db_chat is None:
-                SessionRepo._raise_if_not_found(session_id, user_id)
+            logger.bind(_structured={"DB SESSION": vars(db_session)}).debug(
+                "[DB SESSION]"
+            )
+            if not db_session:
+                raise RuntimeError(
+                    f"No DB returned when attempting query in get_by_id w/ id {session_id}"
+                )
 
-            return orm_to_domain(cast(SessionORM, db_chat), SessionFull)
+            logger.bind(
+                _structured={
+                    "session messages": orm_to_domain(
+                        domain_cls=Session, orm_instance=db_session
+                    )
+                }
+            ).debug("[MESSAGES IN SESSION]")
+
+            if db_session is None:
+                raise SessionError(
+                    session_id=session_id, user_id=user_id, entity="session"
+                )
+
+            return orm_to_domain(cast(SessionORM, db_session), SessionFull)
 
         except SessionError:
             raise
         except Exception as e:
-            logger.opt(exception=True).error("Error retrieving session {}", session_id)
-            raise SessionError(f"Failed to retrieve conversation: {e}")
+            logger.opt(exception=e).error("Error retrieving session {}", session_id)
+            raise SessionError(session_id=session_id, user_id=user_id)
 
     @staticmethod
     async def get_all_by_user_id(
@@ -166,19 +187,27 @@ class SessionRepo:
         session_update: SessionUpdateRequest,
     ) -> Session:
         try:
-            db_chat = await SessionRepo._get_session_orm(
+            db_session = await SessionRepo._get_session_orm(
                 session,
                 session_update.session_id,
                 session_update.user_id,
             )
 
-            if db_chat is None:
+            if db_session is None:
                 SessionRepo._raise_if_not_found(
                     session_update.session_id, session_update.user_id
                 )
 
-            chat: SessionORM = cast(SessionORM, db_chat)
-            _UPDATE_ALLOWLIST = {"title", "archived", "meta"}
+            chat: SessionORM = cast(SessionORM, db_session)
+            _UPDATE_ALLOWLIST = {
+                "title",
+                "archived",
+                "meta",
+                "directory",
+                "version",
+                "permission",
+                "revert",
+            }
             update_data: dict[str, Any] = session_update.model_dump(exclude_unset=True)
 
             for key, value in update_data.items():
@@ -197,7 +226,9 @@ class SessionRepo:
         except Exception as e:
             await session.rollback()
             logger.opt(exception=True).error("Error updating session")
-            raise SessionError(f"Failed to update conversation: {e}")
+            raise SessionError(
+                session_id=session_update.session_id, user_id=session_update.user_id
+            )
 
     @staticmethod
     async def delete(
@@ -205,18 +236,18 @@ class SessionRepo:
         session_request: SessionDeleteRequest,
     ) -> bool:
         try:
-            db_chat = await SessionRepo._get_session_orm(
+            db_session = await SessionRepo._get_session_orm(
                 session,
                 session_request.session_id,
                 session_request.user_id,
             )
 
-            if db_chat is None:
+            if db_session is None:
                 SessionRepo._raise_if_not_found(
                     session_request.session_id, session_request.user_id
                 )
 
-            await session.delete(db_chat)
+            await session.delete(db_session)
             await session.commit()
 
             logger.info("Deleted session {}", session_request.session_id)
@@ -227,7 +258,9 @@ class SessionRepo:
         except Exception as e:
             await session.rollback()
             logger.opt(exception=True).error("Error deleting session")
-            raise SessionError(f"Failed to delete conversation: {e}")
+            raise SessionError(
+                session_id=session_request.session_id, user_id=session_request.user_id
+            )
 
     @staticmethod
     async def add_message(

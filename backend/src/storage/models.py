@@ -117,26 +117,37 @@ class SessionORM(Base):
 
     title: Mapped[str | None] = mapped_column(String(500), default="New Session")
 
-    dynamic_prefs: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSONB)
+    directory: Mapped[str] = mapped_column(Text, nullable=False)
+
+    version: Mapped[str] = mapped_column(String(50), nullable=False, default="1")
+
+    parent_id: Mapped[str | None] = mapped_column(
+        String(26), ForeignKey("sessions.session_id"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
 
     archived: Mapped[Boolean] = mapped_column(Boolean, default=False)
-
     pinned: Mapped[Boolean] = mapped_column(Boolean, default=False)
 
     messages: Mapped[list["MessageORM"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
     )
-
     folder_id = mapped_column(Text, nullable=True)
 
+    dynamic_prefs: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSONB)
+    )
     meta: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSONB))
+
+    permission: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    revert: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
 
 class MessageORM(Base):

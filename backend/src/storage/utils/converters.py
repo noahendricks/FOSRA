@@ -26,7 +26,32 @@ def pydantic_to_domain(
 
 def domain_to_orm(domain_obj: T_Msgspec, orm_class: type[T_ORM]) -> T_ORM:
     data = msgspec.to_builtins(domain_obj)
+    if orm_class.__name__ == "SessionORM":
+        data = _map_domain_to_session_orm(data)
     return orm_class(**data)
+
+
+def _map_domain_to_session_orm(data: dict[str, Any]) -> dict[str, Any]:
+    if "id" in data:
+        data["session_id"] = data.pop("id")
+
+    if "time" in data:
+        time_data = data.pop("time")
+        if isinstance(time_data, dict):
+            data["created_at"] = datetime.fromtimestamp(
+                time_data.get("created", 0), UTC
+            )
+            data["updated_at"] = datetime.fromtimestamp(
+                time_data.get("updated", 0), UTC
+            )
+
+    if "parentID" in data:
+        data["parent_id"] = data.pop("parentID")
+
+    if "metadata" in data:
+        data["meta"] = data.pop("metadata")
+
+    return data
 
 
 def orm_to_domain(orm_instance: T_ORM, domain_cls: type[T_Msgspec]) -> T_Msgspec:
@@ -52,6 +77,10 @@ def _orm_to_safe_dict(orm_instance: DeclarativeBase | None) -> dict[str, Any] | 
 
     data = inspector.dict.copy()
 
+    logger.bind(_structured={"orm safe dict inspection": data}).debug(
+        "[ORM SAFE INPSECTOR DATA]"
+    )
+
     _handle_metadata_mapping(orm_instance, data)
 
     class_name = orm_instance.__class__.__name__
@@ -60,6 +89,7 @@ def _orm_to_safe_dict(orm_instance: DeclarativeBase | None) -> dict[str, Any] | 
 
     if class_name == "SessionORM":
         data = _handle_session_relationships(orm_instance, data, inspector)
+        data = _map_session_orm_to_domain(data)
     elif class_name == "MessageORM":
         pass
     else:
@@ -104,6 +134,36 @@ def _handle_session_relationships(
                 msg_data["metadata"] = msg_data.pop("message_metadata")
 
             data["messages"].append(msg_data)
+
+    return data
+
+
+def _map_session_orm_to_domain(data: dict[str, Any]) -> dict[str, Any]:
+    from backend.src.domain.schemas.session import (
+        SessionMetadata,
+        SessionRevert,
+        SessionTime,
+    )
+
+    created = data.pop("created_at", None)
+    updated = data.pop("updated_at", None)
+    created_ts = (
+        int(created.timestamp()) if isinstance(created, datetime) else (created or 0)
+    )
+    updated_ts = (
+        int(updated.timestamp())
+        if isinstance(updated, datetime)
+        else (updated or created_ts or 0)
+    )
+    data["time"] = SessionTime(created=created_ts, updated=updated_ts)
+
+    if "meta" in data:
+        meta = data.pop("meta")
+        data["metadata"] = SessionMetadata(**meta) if meta else None
+
+    if "revert" in data:
+        revert = data.pop("revert")
+        data["revert"] = SessionRevert(**revert) if revert else None
 
     return data
 
