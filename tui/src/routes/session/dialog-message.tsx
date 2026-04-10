@@ -1,11 +1,11 @@
 import { createMemo } from "solid-js"
-import { useStore } from "../../context/store"
-import { DialogSelect } from "@tui/ui/dialog-select"
-import { useApi } from "../../context/api"
+import { useStore } from "@tui/context/store"
+import { DialogSelect } from "@tui/components/dialogs/dialog-select"
+import { useApi } from "@tui/context/api"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
-import type { PromptInfo } from "@tui/component/prompt/history"
-import { strip } from "@tui/component/prompt/part"
+import type { PromptInfo } from "@tui/components/prompt/history"
+import { strip } from "@tui/components/prompt/part"
 
 export function DialogMessage(props: {
   messageID: string

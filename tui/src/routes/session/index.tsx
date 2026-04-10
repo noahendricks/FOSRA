@@ -18,8 +18,8 @@ import { log } from "@/util/log";
 import path from "path";
 import { useRoute, useRouteData } from "@tui/context/route";
 import { useStore } from "@tui/context/store";
-import { SplitBorder } from "@tui/component/border";
-import { Spinner } from "@tui/component/spinner";
+import { SplitBorder } from "@tui/components/border";
+import { Spinner } from "@tui/components/spinner";
 import {
   selectedForeground,
   ThemeProvider,
@@ -34,7 +34,7 @@ import {
   TextAttributes,
   RGBA,
 } from "@opentui/core";
-import { Prompt, type PromptRef } from "@tui/component/prompt";
+import { Prompt, type PromptRef } from "@tui/components/prompt";
 import type {
   AssistantMessage,
   Part,
@@ -53,39 +53,39 @@ import {
   type JSX,
 } from "@opentui/solid";
 import { useApi } from "@tui/context/api";
-import { useCommandDialog } from "@tui/component/dialog-command";
-import type { DialogContext } from "@tui/ui/dialog";
+import { useCommandDialog } from "@tui/components/dialogs/dialog-command";
+import type { DialogContext } from "@tui/components/dialogs/dialog";
 import { useKeybind } from "@tui/context/keybind";
 import { Header } from "./header";
 import { parsePatch } from "diff";
-import { useDialog } from "../../ui/dialog";
-import { TodoItem } from "../../component/todo-item";
+import { useDialog } from "@tui/components/dialogs/dialog";
+import { TodoItem } from "@tui/components/todo-item";
 import { DialogMessage } from "./dialog-message";
-import type { PromptInfo } from "../../component/prompt/history";
-import { DialogConfirm } from "@tui/ui/dialog-confirm";
+import type { PromptInfo } from "@tui/components/prompt/history";
+import { DialogConfirm } from "@tui/components/dialogs/dialog-confirm";
 import { DialogTimeline } from "./dialog-timeline";
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline";
-import { DialogSessionRename } from "../../component/dialog-session-rename";
+import { DialogSessionRename } from "@tui/components/dialogs/dialog-session-rename";
 import { Sidebar } from "./sidebar";
 import { Flag } from "@/flag/flag";
-import { LANGUAGE_EXTENSIONS } from "@/lsp/language";
-import parsers from "../../parsers-config";
-import { Clipboard } from "../../util/clipboard";
-import { Toast, useToast } from "../../ui/toast";
-import { useKV } from "../../context/kv.tsx";
-import { Editor } from "../../util/editor";
+import { LANGUAGE_EXTENSIONS } from "@/language-server";
+import parsers from "../../tree-sitter-config";
+import { Clipboard } from "@tui/util/clipboard";
+import { Toast, useToast } from "@tui/components/dialogs/toast";
+import { useKV } from "@tui/context/kv";
+import { Editor } from "@tui/util/editor";
 import stripAnsi from "strip-ansi";
 import { Footer } from "./footer.tsx";
-import { usePromptRef } from "../../context/prompt";
-import { useExit } from "../../context/exit";
+import { usePromptRef } from "@tui/context/prompt";
+import { useExit } from "@tui/context/exit";
 import { Filesystem } from "@/util/filesystem";
 import { Global } from "@/global";
 import { PermissionPrompt } from "./permission";
 import { QuestionPrompt } from "./question";
-import { DialogExportOptions } from "../../ui/dialog-export-options";
-import { formatTranscript } from "../../util/transcript";
-import { UI } from "@/cli/ui.ts";
-import { useTuiConfig } from "../../context/tui-config";
+import { DialogExportOptions } from "@tui/components/dialogs/dialog-export-options";
+import { formatTranscript } from "@tui/util/transcript";
+import { UI } from "@/cli/ui";
+import { useTuiConfig } from "@tui/context/tui-config";
 
 addDefaultParsers(parsers.parsers);
 

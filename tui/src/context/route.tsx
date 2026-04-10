@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import type { PromptInfo } from "../component/prompt/history"
+import type { PromptInfo } from "@tui/components/prompt/history"
 import { log } from "@/util/log"
 
 export type HomeRoute = {

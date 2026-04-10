@@ -24,48 +24,50 @@ import {
   win32DisableProcessedInput,
   win32FlushInputBuffer,
   win32InstallCtrlCGuard,
-} from "./win32";
+} from "./windows-kernel32";
 
 import { Flag } from "@/flag/flag";
 import { Installation } from "@/installation";
 import { log } from "@/util/log";
-import { DialogProvider, useDialog } from "@tui/ui/dialog";
-import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider";
+import { DialogProvider, useDialog } from "@tui/components/dialogs/dialog";
+import { DialogProvider as DialogProviderList } from "@tui/components/dialogs/dialog-provider";
 import { ApiProvider, useApi } from "@tui/context/api";
 import { StoreProvider, useStore, UIHandlers } from "@tui/context/store";
 import { LocalProvider, useLocal } from "@tui/context/local";
-import { DialogModel, useConnected } from "@tui/component/dialog-model";
-import { DialogMcp } from "@tui/component/dialog-mcp";
-import { DialogStatus } from "@tui/component/dialog-status";
-import { DialogThemeList } from "@tui/component/dialog-theme-list";
-import { DialogHelp } from "./ui/dialog-help";
+import {
+  DialogModel,
+  useConnected,
+} from "@tui/components/dialogs/dialog-model";
+import { DialogMcp } from "@tui/components/dialogs/dialog-mcp";
+import { DialogStatus } from "@tui/components/dialogs/dialog-status";
+import { DialogThemeList } from "@tui/components/dialogs/dialog-theme-list";
+import { DialogHelp } from "@tui/components/dialogs/dialog-help";
 import {
   CommandProvider,
   useCommandDialog,
-} from "@tui/component/dialog-command";
-import { DialogAgent } from "@tui/component/dialog-agent";
-import { DialogSessionList } from "@tui/component/dialog-session-list";
-import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list";
+} from "@tui/components/dialogs/dialog-command";
+import { DialogAgent } from "@tui/components/dialogs/dialog-agent";
+import { DialogSessionList } from "@tui/components/dialogs/dialog-session-list";
 import { KeybindProvider } from "@tui/context/keybind";
 import { ThemeProvider, useTheme } from "@tui/context/theme";
 import { Home } from "@tui/routes/home";
 import { Session } from "@tui/routes/session";
-import { PromptHistoryProvider } from "./component/prompt/history";
-import { FrecencyProvider } from "./component/prompt/frecency";
-import { PromptStashProvider } from "./component/prompt/stash";
-import { DialogAlert } from "./ui/dialog-alert";
-import { ToastProvider, useToast } from "./ui/toast";
-import { ExitProvider, useExit } from "./context/exit";
+import { PromptHistoryProvider } from "@tui/components/prompt/history";
+import { FrecencyProvider } from "@tui/components/prompt/frecency";
+import { PromptStashProvider } from "@tui/components/prompt/stash";
+import { DialogAlert } from "@tui/components/dialogs/dialog-alert";
+import { ToastProvider, useToast } from "@tui/components/dialogs/toast";
+import { ExitProvider, useExit } from "@tui/context/exit";
 import { Session as SessionApi } from "@/session";
 
-import { KVProvider, useKV } from "./context/kv";
-import { Provider } from "@/provider/provider";
+import { KVProvider, useKV } from "@tui/context/kv";
+import { Provider } from "@/provider";
 import { ArgsProvider, useArgs, type Args } from "./context/args";
 import open from "open";
 import { writeHeapSnapshot } from "v8";
-import { PromptRefProvider, usePromptRef } from "./context/prompt";
-import { TuiConfigProvider } from "./context/tui-config";
-import { TuiConfig } from "@/config/tui";
+import { PromptRefProvider, usePromptRef } from "@tui/context/prompt";
+import { TuiConfigProvider } from "@tui/context/tui-config";
+import { TuiConfig } from "@/config";
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -351,7 +353,7 @@ function App() {
           });
         local.model.set({ providerID, modelID }, { recent: true });
       }
-      // Handle --session without --fork immediately (fork is handled in createEffect below)
+      // handle --session without --fork immediately (fork is handled in createEffect below)
       if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
@@ -369,13 +371,16 @@ function App() {
     const match = store.state
       .sessionsArray()
       .toSorted((a, b) => b.time.updated - a.time.updated)
-      .find((x) => x.parentID === undefined)?.id;
+      .find((x) => x.parentID === undefined)?.session_id;
     if (match) {
       continued = true;
       if (args.fork) {
         api.fosra.session.fork({ sessionID: match }).then((result) => {
-          if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id });
+          if (result.data?.session_id) {
+            route.navigate({
+              type: "session",
+              sessionID: result.data.session_id,
+            });
           } else {
             toast.show({ message: "Failed to fork session", variant: "error" });
           }
@@ -400,8 +405,8 @@ function App() {
       return;
     forked = true;
     api.fosra.session.fork({ sessionID: args.sessionID }).then((result) => {
-      if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id });
+      if (result.data?.session_id) {
+        route.navigate({ type: "session", sessionID: result.data.session_id });
       } else {
         toast.show({ message: "Failed to fork session", variant: "error" });
       }
@@ -437,22 +442,22 @@ function App() {
         dialog.replace(() => <DialogSessionList />);
       },
     },
-    ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-      ? [
-          {
-            title: "Manage workspaces",
-            value: "workspace.list",
-            category: "Workspace",
-            suggested: true,
-            slash: {
-              name: "workspaces",
-            },
-            onSelect: () => {
-              dialog.replace(() => <DialogWorkspaceList />);
-            },
-          },
-        ]
-      : []),
+    // ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+    //   ? [
+    //       {
+    //         title: "Manage workspaces",
+    //         value: "workspace.list",
+    //         category: "Workspace",
+    //         suggested: true,
+    //         slash: {
+    //           name: "workspaces",
+    //         },
+    //         onSelect: () => {
+    //           dialog.replace(() => <DialogWorkspaceList />);
+    //         },
+    //       },
+    //     ]
+    //   : []),
     {
       title: "New session",
       suggested: route.data.type === "session",
@@ -755,34 +760,34 @@ function App() {
 
   return (
     <>
-    <UIHandlers />
-    <box
-      width={dimensions().width}
-      height={dimensions().height}
-      backgroundColor={theme.background}
-      onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return;
-        if (evt.button !== MouseButton.RIGHT) return;
+      <UIHandlers />
+      <box
+        width={dimensions().width}
+        height={dimensions().height}
+        backgroundColor={theme.background}
+        onMouseDown={(evt) => {
+          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return;
+          if (evt.button !== MouseButton.RIGHT) return;
 
-        if (!Selection.copy(renderer, toast)) return;
-        evt.preventDefault();
-        evt.stopPropagation();
-      }}
-      onMouseUp={
-        Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? undefined
-          : () => Selection.copy(renderer, toast)
-      }
-    >
-      <Switch>
-        <Match when={route.data.type === "home"}>
-          <Home />
-        </Match>
-        <Match when={route.data.type === "session"}>
-          <Session />
-        </Match>
-      </Switch>
-    </box>
+          if (!Selection.copy(renderer, toast)) return;
+          evt.preventDefault();
+          evt.stopPropagation();
+        }}
+        onMouseUp={
+          Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
+            ? undefined
+            : () => Selection.copy(renderer, toast)
+        }
+      >
+        <Switch>
+          <Match when={route.data.type === "home"}>
+            <Home />
+          </Match>
+          <Match when={route.data.type === "session"}>
+            <Session />
+          </Match>
+        </Switch>
+      </box>
     </>
   );
 }

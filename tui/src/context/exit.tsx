@@ -1,7 +1,7 @@
 import { useRenderer } from "@opentui/solid";
 import { createSimpleContext } from "./helper";
 import { FormatError, FormatUnknownError } from "@/cli/error";
-import { win32FlushInputBuffer } from "../win32";
+import { win32FlushInputBuffer } from "../windows-kernel32";
 import { log } from "@/util/log";
 type Exit = ((reason?: unknown) => Promise<void>) & {
   message: {

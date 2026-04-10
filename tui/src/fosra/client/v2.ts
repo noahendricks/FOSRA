@@ -74,16 +74,29 @@ export const createFosraClient = (options: {
     },
   ): Promise<Result<T>> {
     const headers: Record<string, string> = { ...baseHeaders };
+
     if (init?.body) headers["Content-Type"] = "application/json";
+
     const start = Date.now();
 
     let res: Response;
+
     try {
+      log.sse.debug("FET_BASEURL_PATH", {
+        baseUrl,
+        path,
+        init,
+      });
+
       res = await fetchFn(`${baseUrl}${path}`, {
         method: init?.method ?? "GET",
         headers,
         body: init?.body,
         signal: init?.signal ?? signal,
+      });
+
+      log.sse.debug("FETCH RES", {
+        res,
       });
     } catch (e) {
       log.api.error("API_FETCH_ERROR", {
@@ -112,6 +125,7 @@ export const createFosraClient = (options: {
     }
 
     const text = await res.text();
+
     if (!text) {
       log.api.debug("API_RESPONSE", {
         method: init?.method ?? "GET",
@@ -120,8 +134,13 @@ export const createFosraClient = (options: {
         durationMs: Date.now() - start,
         bodyEmpty: true,
       });
+      log.store.debug("INSIDE_!TEXT_RETURN", {
+        text: text,
+        response: res,
+      });
       return { data: undefined as T, response: res };
     }
+
     try {
       const data = JSON.parse(text) as T;
       log.api.debug("API_RESPONSE", {
@@ -130,6 +149,11 @@ export const createFosraClient = (options: {
         status: res.status,
         durationMs: Date.now() - start,
         dataKeys: Object.keys(data as object),
+        // data: data,
+      });
+      log.store.debug("INSIDE_DATA_SUCCESS_RETURN", {
+        data: data != undefined,
+        res_: res,
       });
       return { data, response: res };
     } catch {
@@ -181,9 +205,6 @@ export const createFosraClient = (options: {
   }
 
   // stub for endpoints the backend doesn't support
-  function mock<T>(data: T): Result<T> {
-    return { data, response: new Response() };
-  }
 
   return {
     event: {
@@ -263,22 +284,24 @@ export const createFosraClient = (options: {
     provider: {
       list: async (_p?: any, o?: any) =>
         api<ProviderListResponse>("/provider", opts(o)),
-      auth: async (_p?: any, o?: any) =>
-        api<ProviderAuthResponse>("/provider/auth", opts(o)),
-      oauth: {
-        authorize: async (_p?: any, _o?: any) =>
-          mock<ProviderAuthAuthorization>({
-            url: "",
-            method: "auto",
-            instructions: "",
-          }),
-        callback: async (_p?: any, _o?: any) => mock(true),
-      },
+
+      // auth: async (_p?: any, o?: any) =>
+      //   api<ProviderAuthResponse>("/provider/auth", opts(o)),
+
+      // oauth: {
+      //   authorize: async (_p?: any, _o?: any) =>
+      //     api<ProviderAuthAuthorization>({
+      //       url: "",
+      //       method: "auto",
+      //       instructions: "",
+      //     }),
+      //   callback: async (_p?: any, _o?: any) => mock(true),
+      // },
     },
     app: {
       agents: async (_p?: any, o?: any) =>
         api<AppAgentsResponse>("/agent", opts(o)),
-      skills: async (_p?: any, _o?: any) => mock<AppAgentsResponse>([]),
+      // skills: async (_p?: any, _o?: any) => mock<AppAgentsResponse>([]),
     },
     session: {
       list: async (p?: any, o?: any) =>
@@ -298,10 +321,10 @@ export const createFosraClient = (options: {
         ),
       todo: async (p: any, o?: any) =>
         api<SessionTodoResponse>(`/session/${p.sessionID}/todo`, opts(o)),
-      diff: async (p: any, o?: any) =>
-        api<SessionDiffResponse>(`/session/${p.sessionID}/diff`, opts(o)),
-      status: async (_p?: any, o?: any) =>
-        api<SessionStatusResponse>("/session/status", opts(o)),
+      // diff: async (p: any, o?: any) =>
+      //   api<SessionDiffResponse>(`/session/${p.sessionID}/diff`, opts(o)),
+      // status: async (_p?: any, o?: any) =>
+      //   api<SessionStatusResponse>("/session/status", opts(o)),
       abort: async (p: any, o?: any) =>
         api<boolean>(`/session/${p.sessionID}/abort`, {
           method: "POST",
@@ -417,12 +440,12 @@ export const createFosraClient = (options: {
           ...opts(o),
         }),
     },
-    experimental: {
-      resource: {
-        list: async (p: any, o?: any) =>
-          api<{}>("/experimental/resource", { method: "GET", ...opts(o) }),
-      },
-    },
+    // experimental: {
+    //   resource: {
+    //     list: async (p: any, o?: any) =>
+    //       api<{}>("/experimental/resource", { method: "GET", ...opts(o) }),
+    //   },
+    // },
     formatter: {
       status: async (_p?: any, o?: any) =>
         api<FormatterStatusResponse>("/formatter/status", opts(o)),
@@ -441,51 +464,51 @@ export const createFosraClient = (options: {
       files: async (p: any, o?: any) =>
         api<FindFilesResponse>("/find/file", { method: "GET", ...opts(o) }),
     },
-    ingest: {
-      codebase: async (p: IngestCodebaseRequest, o?: any) =>
-        api<IngestCodebaseResponse>("/ingest/codebase", {
-          method: "POST",
-          body: JSON.stringify({
-            directory_path: p.directoryPath,
-            repo_name: p.repoName,
-            language_filter: p.languageFilter,
-            force: p.force,
-          }),
-          ...opts(o),
-        }),
-      codebaseFile: async (p: IngestCodebaseFileRequest, o?: any) =>
-        api<IngestCodebaseFileResponse>("/ingest/codebase/file", {
-          method: "POST",
-          body: JSON.stringify({
-            file_path: p.filePath,
-            repo_name: p.repoName,
-            force: p.force,
-          }),
-          ...opts(o),
-        }),
-      docs: async (p: IngestDocsRequest, o?: any) =>
-        api<IngestDocsResponse>("/ingest/docs", {
-          method: "POST",
-          body: JSON.stringify({
-            file_paths: p.filePaths,
-            source_type: p.sourceType,
-            force: p.force,
-          }),
-          ...opts(o),
-        }),
-      status: async (_p?: any, o?: any) =>
-        api<IngestStatusResponse>("/ingest/status", opts(o)),
-      reindexCodebase: async (p: ReindexCodebaseRequest, o?: any) =>
-        api<IngestCodebaseResponse>(
-          `/ingest/codebase?directory_path=${encodeURIComponent(p.directoryPath)}&repo_name=${encodeURIComponent(p.repoName)}`,
-          { method: "DELETE", ...opts(o) },
-        ),
-      reindexDocs: async (p?: ReindexDocsRequest, o?: any) =>
-        api<IngestDocsResponse>(
-          `/ingest/docs${p?.collection ? `?collection=${encodeURIComponent(p.collection)}` : ""}`,
-          { method: "DELETE", ...opts(o) },
-        ),
-    },
+    // ingest: {
+    //   codebase: async (p: IngestCodebaseRequest, o?: any) =>
+    //     api<IngestCodebaseResponse>("/ingest/codebase", {
+    //       method: "POST",
+    //       body: JSON.stringify({
+    //         directory_path: p.directoryPath,
+    //         repo_name: p.repoName,
+    //         language_filter: p.languageFilter,
+    //         force: p.force,
+    //       }),
+    //       ...opts(o),
+    //     }),
+    //   codebaseFile: async (p: IngestCodebaseFileRequest, o?: any) =>
+    //     api<IngestCodebaseFileResponse>("/ingest/codebase/file", {
+    //       method: "POST",
+    //       body: JSON.stringify({
+    //         file_path: p.filePath,
+    //         repo_name: p.repoName,
+    //         force: p.force,
+    //       }),
+    //       ...opts(o),
+    //     }),
+    //   docs: async (p: IngestDocsRequest, o?: any) =>
+    //     api<IngestDocsResponse>("/ingest/docs", {
+    //       method: "POST",
+    //       body: JSON.stringify({
+    //         file_paths: p.filePaths,
+    //         source_type: p.sourceType,
+    //         force: p.force,
+    //       }),
+    //       ...opts(o),
+    //     }),
+    //   status: async (_p?: any, o?: any) =>
+    //     api<IngestStatusResponse>("/ingest/status", opts(o)),
+    //   reindexCodebase: async (p: ReindexCodebaseRequest, o?: any) =>
+    //     api<IngestCodebaseResponse>(
+    //       `/ingest/codebase?directory_path=${encodeURIComponent(p.directoryPath)}&repo_name=${encodeURIComponent(p.repoName)}`,
+    //       { method: "DELETE", ...opts(o) },
+    //     ),
+    //   reindexDocs: async (p?: ReindexDocsRequest, o?: any) =>
+    //     api<IngestDocsResponse>(
+    //       `/ingest/docs${p?.collection ? `?collection=${encodeURIComponent(p.collection)}` : ""}`,
+    //       { method: "DELETE", ...opts(o) },
+    //     ),
+    // },
     auth: {
       set: async (p?: any, o?: any) =>
         api<boolean>("/provider/auth", {

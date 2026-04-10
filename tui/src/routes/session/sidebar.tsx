@@ -11,7 +11,7 @@ import { Installation } from "@/installation";
 import { useKeybind } from "../../context/keybind";
 import { useDirectory } from "../../context/directory";
 import { useKV } from "../../context/kv";
-import { TodoItem } from "../../component/todo-item";
+import { TodoItem } from "@tui/components/todo-item";
 import { Log } from "@/util/log";
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {

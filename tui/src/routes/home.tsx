@@ -1,4 +1,4 @@
-import { Prompt, type PromptRef } from "@tui/component/prompt";
+import { Prompt, type PromptRef } from "@tui/components/prompt";
 import {
   createEffect,
   createMemo,
@@ -10,19 +10,19 @@ import {
 } from "solid-js";
 import { useTheme } from "@tui/context/theme";
 import { useKeybind } from "@tui/context/keybind";
-import { Logo } from "../component/logo";
-import { Tips } from "../component/tips";
+import { Logo } from "@tui/components/logo";
+import { Tips } from "@tui/components/tips";
 import { Locale } from "@/util/locale";
-import { useStore } from "../context/store";
-import { Toast } from "../ui/toast";
-import { useArgs } from "../context/args";
-import { useDirectory } from "../context/directory";
+import { useStore } from "@tui/context/store";
+import { Toast } from "@tui/components/dialogs/toast";
+import { useArgs } from "@tui/context/args";
+import { useDirectory } from "@tui/context/directory";
 import { useRouteData } from "@tui/context/route";
-import { usePromptRef } from "../context/prompt";
+import { usePromptRef } from "@tui/context/prompt";
 import { Installation } from "@/installation";
-import { useKV } from "../context/kv";
-import { useCommandDialog } from "../component/dialog-command";
-import { useLocal } from "../context/local";
+import { useKV } from "@tui/context/kv";
+import { useCommandDialog } from "@tui/components/dialogs/dialog-command";
+import { useLocal } from "@tui/context/local";
 
 // TODO: what is the best way to do this?
 let once = false;

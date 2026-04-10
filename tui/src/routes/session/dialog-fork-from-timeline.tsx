@@ -1,13 +1,13 @@
 import { createMemo, onMount } from "solid-js"
-import { useStore } from "../../context/store"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { useStore } from "@tui/context/store"
+import { DialogSelect, type DialogSelectOption } from "@tui/components/dialogs/dialog-select"
 import type { TextPart } from "@fosra/api/v2"
 import { Locale } from "@/util/locale"
-import { useApi } from "../../context/api"
+import { useApi } from "@tui/context/api"
 import { useRoute } from "@tui/context/route"
-import { useDialog } from "../../ui/dialog"
-import type { PromptInfo } from "@tui/component/prompt/history"
-import { strip } from "@tui/component/prompt/part"
+import { useDialog } from "@tui/components/dialogs/dialog"
+import type { PromptInfo } from "@tui/components/prompt/history"
+import { strip } from "@tui/components/prompt/part"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
   const store = useStore()

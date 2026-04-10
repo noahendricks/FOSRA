@@ -1,6 +1,6 @@
 import { createSimpleContext } from "./helper"
 import { createFosraClient } from "@fosra/api/v2"
-import { createEventChannel, type ExternalEvents } from "../events/channel"
+import { createEventChannel, type ExternalEvents } from "@tui/bus/channel"
 
 export type ApiConfig = {
   baseUrl: string

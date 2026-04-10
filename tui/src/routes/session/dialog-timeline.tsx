@@ -1,11 +1,11 @@
 import { createMemo, onMount } from "solid-js"
 import { useStore } from "../../context/store"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "@tui/components/dialogs/dialog-select"
 import type { TextPart } from "@fosra/api/v2"
 import { Locale } from "@/util/locale"
 import { DialogMessage } from "./dialog-message"
-import { useDialog } from "../../ui/dialog"
-import type { PromptInfo } from "../../component/prompt/history"
+import { useDialog } from "@tui/components/dialogs/dialog"
+import type { PromptInfo } from "@tui/components/prompt/history"
 
 export function DialogTimeline(props: {
   sessionID: string

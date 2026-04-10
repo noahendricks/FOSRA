@@ -2,7 +2,7 @@ import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useStore } from "../../context/store"
 import { useDirectory } from "../../context/directory"
-import { useConnected } from "../../component/dialog-model"
+import { useConnected } from "@tui/components/dialogs/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
 

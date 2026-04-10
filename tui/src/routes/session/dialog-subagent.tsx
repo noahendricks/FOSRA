@@ -1,4 +1,4 @@
-import { DialogSelect } from "@tui/ui/dialog-select"
+import { DialogSelect } from "@tui/components/dialogs/dialog-select"
 import { useRoute } from "@tui/context/route"
 
 export function DialogSubagent(props: { sessionID: string }) {

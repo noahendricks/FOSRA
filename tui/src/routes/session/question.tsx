@@ -6,9 +6,9 @@ import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@fosra/api/v2"
 import { useApi } from "../../context/api"
-import { SplitBorder } from "../../component/border"
-import { useTextareaKeybindings } from "../../component/textarea-keybindings"
-import { useDialog } from "../../ui/dialog"
+import { SplitBorder } from "@tui/components/border"
+import { useTextareaKeybindings } from "@tui/components/prompt/keybindings"
+import { useDialog } from "@tui/components/dialogs/dialog"
 import { log } from "@/util/log"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
