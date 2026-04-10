@@ -65,7 +65,12 @@ class SessionRepo:
 
         chat = await session.execute(statement=stmt)
 
-        return chat.scalar_one_or_none()
+        the_chat = chat.scalar_one_or_none()
+
+        logger.bind(_structured={"chat from session orm": vars(the_chat)}).debug(
+            "[CHAT SESSION ORM]"
+        )
+        return the_chat
 
     @staticmethod
     async def _get_message_orm(
@@ -318,6 +323,10 @@ class SessionRepo:
                 ]
             elif new_message.attached_sources:
                 db_message.attached_sources = new_message.attached_sources
+
+            logger.bind(_structured={"prior to add": vars(db_message)}).debug(
+                "[PRIOR TO ADD - MESSAGE"
+            )
 
             session.add(db_message)
 

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import msgspec
+from litellm.proxy.ui_crud_endpoints.proxy_setting_endpoints import UIThemeConfig
 from loguru import logger
 from qdrant_client.conversions.common_types import QueryResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,9 @@ from backend.src.api.schemas.message_schemas import (
     AssistantMessageTime,
     AssistantMessageTokens,
     AssistantMessageTokensCache,
+    Part,
+    TextPart,
+    UIMessageFull,
     UserMessage,
     UserMessageModel,
     UserMessageTime,
@@ -28,7 +32,9 @@ from backend.src.api.schemas.session_api_schemas import (
     SessionUpdateRequest,
 )
 from backend.src.api.schemas.tui_control_schemas import (
-    TextPart,
+    TextPart as LegacyTextPart,
+)
+from backend.src.api.schemas.tui_control_schemas import (
     UIMessage,
 )
 from backend.src.api.schemas.tui_schemas import (
@@ -61,13 +67,14 @@ def _session_time_to_dts(time_obj) -> tuple[datetime, datetime]:
     return _ts_to_dt(created), _ts_to_dt(updated)
 
 
-def _build_tui_message(msg: Message, session_id: str) -> UserMessage | AssistantMessage:
+def _build_tui_message(msg: Message, session_id: str) -> UIMessageFull:
     role_val = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
     ts = int(msg.timestamp.timestamp()) if msg.timestamp else 0
     msg_id = msg.message_id or ""
 
+    parts: list[Part] = []
     if role_val == "user":
-        return UserMessage(
+        message_part = UserMessage(
             id=msg_id,
             sessionID=session_id,
             role="user",
@@ -78,8 +85,20 @@ def _build_tui_message(msg: Message, session_id: str) -> UserMessage | Assistant
                 modelID=DEFAULT_MODEL_ID,
             ),
         )
+        """
+        TODO: below needs to be expanded to transform all other part types
+              currently only text parts supported
+              tui and backend don't currently have support to send or store other types
+              storage and transformation of both is necessary
+        """
+        if msg.text:
+            parts.append(TextPart(text=msg.text, type="text"))
+
+        # TODO: change UIMessageFull naming
+        message = UIMessageFull(info=message_part, parts=parts)
+        return message
     else:
-        return AssistantMessage(
+        message_part = AssistantMessage(
             id=msg_id,
             sessionID=session_id,
             role="assistant",
@@ -99,6 +118,12 @@ def _build_tui_message(msg: Message, session_id: str) -> UserMessage | Assistant
             ),
             finish="stop",
         )
+
+        if msg.text:
+            parts.append(TextPart(text=msg.text, type="text"))
+        message = UIMessageFull(info=message_part, parts=parts)
+
+        return message
 
 
 class SessionService:
@@ -148,10 +173,15 @@ class SessionService:
             user_id=user_id,
             session_id=session_id,
         )
+        logger.bind(_structured={"SESSION FROM REPO": session_obj}).debug(
+            "[SESSION FROM REPO]"
+        )
 
         tui_messages = [
             _build_tui_message(msg, session_id) for msg in (session_obj.messages or [])
         ]
+
+        logger.bind(_structured={"TUI MESSAGES": tui_messages}).debug("[TUI MESSAGES]")
 
         created_at, updated_at = _session_time_to_dts(session_obj.time)
 
@@ -298,7 +328,7 @@ class SessionService:
         )
 
         for part in message.parts:
-            if isinstance(part, TextPart) and part.type == "text":
+            if isinstance(part, LegacyTextPart) and part.type == "text":
                 if not unpacked.text or unpacked.text == "":
                     unpacked.text += part.text
                 else:
@@ -324,7 +354,9 @@ class SessionService:
             "processing user message for session"
         )
 
-        logger.bind(_structured={"ui message": message}).debug("[UI MESSAGE]")
+        logger.bind(_structured={"ui message": message}).debug(
+            "[UI MESSAGE TO BE SAVED]"
+        )
         msg: Message = await SessionService.unpack_message(
             message, session_id=session_id, user_id=user_id
         )
