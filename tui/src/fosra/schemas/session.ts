@@ -83,8 +83,8 @@ const SessionMetadataModelLimitSchema = z
 
 const SessionMetadataModelSchema = z
   .object({
-    providerID: z.string(),
-    modelID: z.string(),
+    providerID: z.string().nullish(),
+    modelID: z.string().nullish(),
     cost: SessionMetadataModelCostSchema.nullish(),
     limit: SessionMetadataModelLimitSchema.nullish(),
   })
@@ -98,7 +98,7 @@ const SessionMetadataSchema = z
   .passthrough();
 
 export const SessionSchema = z.object({
-  id: z.string(),
+  session_id: z.string(),
   directory: z.string(),
   parentID: z.string().nullish(),
   title: z.string(),
