@@ -47,83 +47,83 @@ def _default_project() -> dict[str, Any]:  # type: ignore[reportExplicitAny]
     return _in_memory_projects[project_id]
 
 
-@router.get("/project")
-async def list_projects() -> list[ProjectSummary]:
-    """return all known projects."""
-    p = _default_project()
-    return [
-        ProjectSummary(
-            id=p["id"],  # type: ignore[reportUnknownMemberType]
-            name=p["name"],  # type: ignore[reportUnknownMemberType]
-            worktree=p["worktree"],  # type: ignore[reportUnknownMemberType]
-        )
-    ]
-
-
-@router.get("/project/current")
-async def get_current_project() -> Project:
-    """return the current active project."""
-    p = _default_project()
-    return Project(
-        id=p["id"],  # type: ignore[reportUnknownMemberType]
-        worktree=p["worktree"],  # type: ignore[reportUnknownMemberType]
-        vcs=p["vcs"],  # type: ignore[reportUnknownMemberType]
-        name=p["name"],  # type: ignore[reportUnknownMemberType]
-        icon=ProjectIcon(**p["icon"]),  # type: ignore[reportUnknownMemberType]
-        commands=p["commands"],  # type: ignore[reportUnknownMemberType]
-        time=ProjectTime(**p["time"]),  # type: ignore[reportUnknownMemberType]
-        sandboxes=p["sandboxes"],  # type: ignore[reportUnknownMemberType]
-    )
-
-
-@router.patch("/project/{project_id}")
-async def update_project(
-    project_id: str,
-    body: dict[str, Any],  # type: ignore[reportExplicitAny]
-) -> Project:
-    """update in-memory project metadata (name, icon, commands)."""
-    if project_id not in _in_memory_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    p = _in_memory_projects[project_id]
-    if "name" in body:
-        p["name"] = body["name"]  # type: ignore[reportAny]
-    if "icon" in body:
-        p["icon"].update(body["icon"])  # type: ignore[reportAny]
-    if "commands" in body:
-        p["commands"].update(body["commands"])  # type: ignore[reportAny]
-    p["time"]["updated"] = int(time.time())
-
-    return Project(
-        id=p["id"],  # type: ignore[reportUnknownMemberType]
-        worktree=p["worktree"],  # type: ignore[reportUnknownMemberType]
-        vcs=p["vcs"],  # type: ignore[reportUnknownMemberType]
-        name=p["name"],  # type: ignore[reportUnknownMemberType]
-        icon=ProjectIcon(**p["icon"]),  # type: ignore[reportUnknownMemberType]
-        commands=p["commands"],  # type: ignore[reportUnknownMemberType]
-        time=ProjectTime(**p["time"]),  # type: ignore[reportUnknownMemberType]
-        sandboxes=p["sandboxes"],  # type: ignore[reportUnknownMemberType]
-    )
-
-
-@router.post("/project/git/init")
-async def init_git_project(project_id: str = "default") -> bool:
-    """
-    run git init in the project directory.
-    returns True if successful or if already a git repo.
-    """
-    import subprocess
-
-    git_dir = os.path.join(PROJECT_DIR, ".git")
-    if os.path.exists(git_dir):
-        return True
-
-    try:
-        _ = subprocess.check_output(
-            ["git", "init"],
-            cwd=PROJECT_DIR,
-            stderr=subprocess.DEVNULL,
-        )
-        return True
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"git init failed: {e}")
+# @router.get("/project")
+# async def list_projects() -> list[ProjectSummary]:
+#     """return all known projects."""
+#     p = _default_project()
+#     return [
+#         ProjectSummary(
+#             id=p["id"],
+#             name=p["name"],
+#             worktree=p["worktree"],
+#         )
+#     ]
+#
+#
+# @router.get("/project/current")
+# async def get_current_project() -> Project:
+#     """return the current active project."""
+#     p = _default_project()
+#     return Project(
+#         id=p["id"],
+#         worktree=p["worktree"],
+#         vcs=p["vcs"],
+#         name=p["name"],
+#         icon=ProjectIcon(**p["icon"]),
+#         commands=p["commands"],
+#         time=ProjectTime(**p["time"]),
+#         sandboxes=p["sandboxes"],
+#     )
+#
+#
+# @router.patch("/project/{project_id}")
+# async def update_project(
+#     project_id: str,
+#     body: dict[str, Any],
+# ) -> Project:
+#     """update in-memory project metadata (name, icon, commands)."""
+#     if project_id not in _in_memory_projects:
+#         raise HTTPException(status_code=404, detail="Project not found")
+#
+#     p = _in_memory_projects[project_id]
+#     if "name" in body:
+#         p["name"] = body["name"]
+#     if "icon" in body:
+#         p["icon"].update(body["icon"])
+#     if "commands" in body:
+#         p["commands"].update(body["commands"])
+#     p["time"]["updated"] = int(time.time())
+#
+#     return Project(
+#         id=p["id"],
+#         worktree=p["worktree"],
+#         vcs=p["vcs"],
+#         name=p["name"],
+#         icon=ProjectIcon(**p["icon"]),
+#         commands=p["commands"],
+#         time=ProjectTime(**p["time"]),
+#         sandboxes=p["sandboxes"],
+#     )
+#
+#
+# @router.post("/project/git/init")
+# async def init_git_project(project_id: str = "default") -> bool:
+#     """
+#     run git init in the project directory.
+#     returns True if successful or if already a git repo.
+#     """
+#     import subprocess
+#
+#     git_dir = os.path.join(PROJECT_DIR, ".git")
+#     if os.path.exists(git_dir):
+#         return True
+#
+#     try:
+#         _ = subprocess.check_output(
+#             ["git", "init"],
+#             cwd=PROJECT_DIR,
+#             stderr=subprocess.DEVNULL,
+#         )
+#         return True
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"git init failed: {e}")

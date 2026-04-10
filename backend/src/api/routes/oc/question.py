@@ -28,21 +28,21 @@ router = APIRouter(prefix="/oc/question", tags=["Question"])
 event_emitter = get_event_emitter()
 
 
-@router.get("")
-async def list_questions(
-    user_id: Annotated[str, Depends(get_current_user_id)],
-) -> list[QuestionRequest]:
-    """
-    return all pending question requests across all sessions for the current user.
-    the tui filters by sessionID on the client side.
-    """
-    all_requests: list[QuestionRequest] = []
-    for session_id, requests in cast(
-        dict[str, list[QuestionRequest]], question_requests
-    ).items():
-        for req in requests:
-            all_requests.append(req)
-    return all_requests
+# @router.get("")
+# async def list_questions(
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+# ) -> list[QuestionRequest]:
+#     """
+#     return all pending question requests across all sessions for the current user.
+#     the tui filters by sessionID on the client side.
+#     """
+#     all_requests: list[QuestionRequest] = []
+#     for session_id, requests in cast(
+#         dict[str, list[QuestionRequest]], question_requests
+#     ).items():
+#         for req in requests:
+#             all_requests.append(req)
+#     return all_requests
 
 
 @router.post("/{request_id}/reply")

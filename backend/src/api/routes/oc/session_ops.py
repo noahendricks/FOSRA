@@ -213,48 +213,48 @@ async def fork_session(
     return session_info
 
 
-@router.get("/{session_id}/children")
-async def get_session_children(
-    session_id: str,
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-):
-    """return all sessions whose parentID is this session_id."""
-    from backend.src.storage.models import SessionORM
-    from sqlalchemy import select
+# @router.get("/{session_id}/children")
+# async def get_session_children(
+#     session_id: str,
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session: Annotated[AsyncSession, Depends(get_db_session)],
+# ):
+#     """return all sessions whose parentID is this session_id."""
+#     from backend.src.storage.models import SessionORM
+#     from sqlalchemy import select
+#
+#     result = await session.execute(
+#         select(SessionORM).where(
+#             SessionORM.user_id == user_id,
+#             SessionORM.archived == False,
+#         )
+#     )
+#     children = []
+#     for session_orm in result.scalars().all():
+#         meta = session_orm.meta or {}
+#         if meta.get("parent_id") == session_id:
+#             children.append(
+#                 _session_to_session_with_parent(
+#                     session_id=session_orm.session_id,
+#                     user_id=user_id,
+#                     title=session_orm.title,
+#                     created_at=session_orm.created_at,
+#                     meta=meta,
+#                 )
+#             )
+#     return children
 
-    result = await session.execute(
-        select(SessionORM).where(
-            SessionORM.user_id == user_id,
-            SessionORM.archived == False,  # noqa: E712
-        )
-    )
-    children = []
-    for session_orm in result.scalars().all():
-        meta = session_orm.meta or {}
-        if meta.get("parent_id") == session_id:
-            children.append(
-                _session_to_session_with_parent(
-                    session_id=session_orm.session_id,
-                    user_id=user_id,
-                    title=session_orm.title,
-                    created_at=session_orm.created_at,
-                    meta=meta,
-                )
-            )
-    return children
 
-
-@router.post("/{session_id}/init")
-async def init_session(session_id: str) -> bool:
-    """create AGENTS.md in the project directory."""
-    agents_md = os.path.join(PROJECT_DIR, "AGENTS.md")
-    if not os.path.exists(agents_md):
-        with open(agents_md, "w") as f:
-            _ = f.write(
-                "# AGENTS.md\n\nThis file marks the project root for the FOSRA agent.\n"
-            )
-    return True
+# @router.post("/{session_id}/init")
+# async def init_session(session_id: str) -> bool:
+#     """create AGENTS.md in the project directory."""
+#     agents_md = os.path.join(PROJECT_DIR, "AGENTS.md")
+#     if not os.path.exists(agents_md):
+#         with open(agents_md, "w") as f:
+#             _ = f.write(
+#                 "# AGENTS.md\n\nThis file marks the project root for the FOSRA agent.\n"
+#             )
+#     return True
 
 
 @router.post("/{session_id}/share")

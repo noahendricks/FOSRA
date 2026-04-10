@@ -155,86 +155,86 @@ def _message_orm_to_tui(msg: MessageORM, session_id: str) -> dict[str, Any]:
     return {"info": info, "parts": parts}
 
 
-@router.get("/{session_id}/message/{message_id}")
-async def get_message(
-    session_id: str,
-    message_id: str,
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-):
-    """return a single message with its parts."""
-    _ = await _get_convo_for_user(session, user_id, session_id)
-    msg = await _get_message_orm(session, message_id, user_id, session_id)
-    return _message_orm_to_tui(msg, session_id)
-
-
-@router.delete("/{session_id}/message/{message_id}")
-async def delete_message(
-    session_id: str,
-    message_id: str,
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-):
-    """delete a message and publish message.removed event."""
-    _ = await _get_convo_for_user(session, user_id, session_id)
-    msg = await _get_message_orm(session, message_id, user_id, session_id)
-
-    _ = await session.execute(
-        delete(MessageORM).where(MessageORM.message_id == message_id)
-    )
-    await session.commit()
-
-    await event_emitter.emit_message_removed(session_id, message_id)
-    return True
-
-
-@router.patch("/{session_id}/message/{message_id}/part/{part_id}")
-async def update_part(
-    session_id: str,
-    message_id: str,
-    part_id: str,
-    body: dict[str, Any],
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-):
-    """
-    update part content (text field).
-    publishes message.part.updated with the updated TextPart.
-    """
-    _ = await _get_convo_for_user(session, user_id, session_id)
-    msg = await _get_message_orm(session, message_id, user_id, session_id)
-
-    if "text" in body:
-        msg.text = body["text"]
-        await session.commit()
-
-    created = int(msg.created_at.timestamp()) if msg.created_at else int(time.time())
-    updated_part = TextPart(
-        id=part_id,
-        sessionID=session_id,
-        messageID=message_id,
-        type="text",
-        text=body.get("text", msg.text or ""),
-        time=TextPartTime(start=created, end=int(time.time())),
-    )
-
-    await event_emitter.emit_message_part_updated(updated_part.model_dump())
-    return {"ok": True}
-
-
-@router.delete("/{session_id}/message/{message_id}/part/{part_id}")
-async def delete_part(
-    session_id: str,
-    message_id: str,
-    part_id: str,
-    user_id: Annotated[str, Depends(get_current_user_id)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-):
-    """
-    stub — parts are embedded in messages so we can't delete a single part
-    without restructuring. publish part.removed event for the tui to handle.
-    """
-    _ = await _get_convo_for_user(session, user_id, session_id)
-
-    await event_emitter.emit_message_part_removed(session_id, message_id, part_id)
-    return True
+# @router.get("/{session_id}/message/{message_id}")
+# async def get_message(
+#     session_id: str,
+#     message_id: str,
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session: Annotated[AsyncSession, Depends(get_db_session)],
+# ):
+#     """return a single message with its parts."""
+#     _ = await _get_convo_for_user(session, user_id, session_id)
+#     msg = await _get_message_orm(session, message_id, user_id, session_id)
+#     return _message_orm_to_tui(msg, session_id)
+#
+#
+# @router.delete("/{session_id}/message/{message_id}")
+# async def delete_message(
+#     session_id: str,
+#     message_id: str,
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session: Annotated[AsyncSession, Depends(get_db_session)],
+# ):
+#     """delete a message and publish message.removed event."""
+#     _ = await _get_convo_for_user(session, user_id, session_id)
+#     msg = await _get_message_orm(session, message_id, user_id, session_id)
+#
+#     _ = await session.execute(
+#         delete(MessageORM).where(MessageORM.message_id == message_id)
+#     )
+#     await session.commit()
+#
+#     await event_emitter.emit_message_removed(session_id, message_id)
+#     return True
+#
+#
+# @router.patch("/{session_id}/message/{message_id}/part/{part_id}")
+# async def update_part(
+#     session_id: str,
+#     message_id: str,
+#     part_id: str,
+#     body: dict[str, Any],
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session: Annotated[AsyncSession, Depends(get_db_session)],
+# ):
+#     """
+#     update part content (text field).
+#     publishes message.part.updated with the updated TextPart.
+#     """
+#     _ = await _get_convo_for_user(session, user_id, session_id)
+#     msg = await _get_message_orm(session, message_id, user_id, session_id)
+#
+#     if "text" in body:
+#         msg.text = body["text"]
+#         await session.commit()
+#
+#     created = int(msg.created_at.timestamp()) if msg.created_at else int(time.time())
+#     updated_part = TextPart(
+#         id=part_id,
+#         sessionID=session_id,
+#         messageID=message_id,
+#         type="text",
+#         text=body.get("text", msg.text or ""),
+#         time=TextPartTime(start=created, end=int(time.time())),
+#     )
+#
+#     await event_emitter.emit_message_part_updated(updated_part.model_dump())
+#     return {"ok": True}
+#
+#
+# @router.delete("/{session_id}/message/{message_id}/part/{part_id}")
+# async def delete_part(
+#     session_id: str,
+#     message_id: str,
+#     part_id: str,
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+#     session: Annotated[AsyncSession, Depends(get_db_session)],
+# ):
+#     """
+#     stub — parts are embedded in messages so we can't delete a single part
+#     without restructuring. publish part.removed event for the tui to handle.
+#     """
+#     _ = await _get_convo_for_user(session, user_id, session_id)
+#
+#     await event_emitter.emit_message_part_removed(session_id, message_id, part_id)
+#     return True

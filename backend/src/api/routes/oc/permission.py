@@ -28,21 +28,21 @@ router = APIRouter(prefix="/oc/permission", tags=["Permission"])
 event_emitter = get_event_emitter()
 
 
-@router.get("")
-async def list_permissions(
-    user_id: Annotated[str, Depends(get_current_user_id)],
-) -> list[PermissionRequest]:
-    """
-    return all pending permission requests across all sessions for the current user.
-    the tui filters by sessionID on the client side.
-    """
-    all_requests: list[PermissionRequest] = []
-    for session_id, requests in cast(
-        dict[str, list[PermissionRequest]], permission_requests
-    ).items():
-        for req in requests:
-            all_requests.append(req)
-    return all_requests
+# @router.get("")
+# async def list_permissions(
+#     user_id: Annotated[str, Depends(get_current_user_id)],
+# ) -> list[PermissionRequest]:
+#     """
+#     return all pending permission requests across all sessions for the current user.
+#     the tui filters by sessionID on the client side.
+#     """
+#     all_requests: list[PermissionRequest] = []
+#     for session_id, requests in cast(
+#         dict[str, list[PermissionRequest]], permission_requests
+#     ).items():
+#         for req in requests:
+#             all_requests.append(req)
+#     return all_requests
 
 
 @router.post("/{request_id}/reply")

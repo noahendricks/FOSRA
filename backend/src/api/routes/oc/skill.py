@@ -40,28 +40,28 @@ def _parse_skill_file(path: Path) -> dict[str, Any]:
     }
 
 
-@router.get("")
-async def list_skills():
-    """
-    Return all available skills with name, description, and triggers.
-    Scans ~/fosra/skills/ and backend for .skill.md files.
-    """
-    skills: list[dict[str, Any]] = []
-    seen_names: set[str] = set()
-
-    for base_dir in [
-        fosra_paths.skills_dir,
-        Path(__file__).parent.parent.parent.parent,
-    ]:
-        if not base_dir.exists():
-            continue
-        for path in base_dir.rglob("*.skill.md"):
-            try:
-                skill = _parse_skill_file(path)
-                if skill["name"] not in seen_names:
-                    seen_names.add(skill["name"])
-                    skills.append(skill)
-            except Exception:
-                pass
-
-    return skills
+# @router.get("")
+# async def list_skills():
+#     """
+#     Return all available skills with name, description, and triggers.
+#     Scans ~/fosra/skills/ and backend for .skill.md files.
+#     """
+#     skills: list[dict[str, Any]] = []
+#     seen_names: set[str] = set()
+#
+#     for base_dir in [
+#         fosra_paths.skills_dir,
+#         Path(__file__).parent.parent.parent.parent,
+#     ]:
+#         if not base_dir.exists():
+#             continue
+#         for path in base_dir.rglob("*.skill.md"):
+#             try:
+#                 skill = _parse_skill_file(path)
+#                 if skill["name"] not in seen_names:
+#                     seen_names.add(skill["name"])
+#                     skills.append(skill)
+#             except Exception:
+#                 pass
+#
+#     return skills
