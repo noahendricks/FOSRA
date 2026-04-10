@@ -12,6 +12,7 @@ import os
 import subprocess
 from collections.abc import AsyncIterable
 from datetime import datetime, timezone
+from time import thread_time
 from typing import Annotated, Any, cast
 
 from fastapi import (
@@ -155,10 +156,11 @@ async def list_sessions(
 
             result.metadata = SessionMetadataModel(**persisted["metadata"])
 
+    logger.bind(_structured={"resluts": results}).debug("[LIST SESSIONS RESULTS]")
     return results
 
 
-@router.get("/session/status")
+@router.get("/session/status")  # unused
 async def get_all_session_statuses():
     """return all tracked session statuses."""
     return session_status
@@ -175,6 +177,9 @@ async def get_session(
         user_id=user_id,
         session_id=session_id,
     )
+
+    logger.bind(_structured={"session at get": session_obj}).debug("[SESSION AT GET")
+
     result = session_full_to_session(session_obj)
 
     persisted = await get_persisted_session_state(session_id)
@@ -198,7 +203,7 @@ async def create_session(
     )
     now = int(datetime.now(timezone.utc).timestamp())
     session_info = Session(
-        id=result.session_id,
+        session_id=result.session_id,
         directory=PROJECT_DIR,
         title=result.title or "New Session",
         version="",
@@ -244,7 +249,7 @@ async def delete_session(
     if deleted:
         await cleanup_session(session_id)
         session_info = Session(
-            id=session_id,
+            session_id=session_id,
             directory=PROJECT_DIR,
             title="",
             version="",
@@ -274,6 +279,8 @@ async def list_messages(
         user_id=user_id,
         session_id=session_id,
     )
+
+    logger.bind(_structured={"session obj": session_obj}).debug("[SESSION OBJ]")
 
     messages = list(session_obj.messages)
 
@@ -560,7 +567,9 @@ async def get_config():
 
 @router.get("/config/providers")
 async def get_config_providers():
-    return get_config_providers_response()
+    providers = get_config_providers_response()
+    # logger.bind(_structured={"PROVIDERS": providers}).debug("PROVIDERS config")
+    return providers
 
 
 # PROVIDERS
@@ -658,16 +667,16 @@ async def lsp_status():
     return []
 
 
-@router.post("/lsp/updated")
-async def emit_lsp_updated(
-    body: dict[str, Any],  # type: ignore[reportExplicitAny]
-) -> dict[str, bool]:
-    """
-    emit lsp.updated to all SSE subscribers.
-    body: arbitrary LSP state dict — the TUI consumes this to refresh diagnostics.
-    """
-    await event_emitter.emit_lsp_updated(body)  # type: ignore[reportUnknownMemberType]
-    return {"ok": True}
+# @router.post("/lsp/updated")
+# async def emit_lsp_updated(
+#     body: dict[str, Any],
+# ) -> dict[str, bool]:
+#     """
+#     emit lsp.updated to all SSE subscribers.
+#     body: arbitrary LSP state dict — the TUI consumes this to refresh diagnostics.
+#     """
+#     await event_emitter.emit_lsp_updated(body)
+#     return {"ok": True}
 
 
 @router.get("/mcp/status")
