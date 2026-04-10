@@ -111,10 +111,19 @@ export function createAppState() {
     };
   }
 
-  function createRecords<K extends keyof Collections>(key: K): ReactiveRecord<any> {
+  function createRecords<K extends keyof Collections>(
+    key: K,
+  ): ReactiveRecord<any> {
     const read = () => collections[key];
-    const write = (id: string, value: any) => setCollections(key as any, id as any, value);
-    const remove = (id: string) => setCollections(key as any, produce((d: any) => { delete d[id]; }));
+    const write = (id: string, value: any) =>
+      setCollections(key as any, id as any, value);
+    const remove = (id: string) =>
+      setCollections(
+        key as any,
+        produce((d: any) => {
+          delete d[id];
+        }),
+      );
     return makeRecord<any>(read, write, remove, key);
   }
 
@@ -230,9 +239,10 @@ export function createAppState() {
   };
   const setProviders = (data: Provider[]) => {
     setSystemState("providers", data);
-    log.store.debug("STATE_SET_SYSTEM", {
-      field: "providers",
+
+    log.store.info("STATE_SET_PROVIDERS", {
       count: data.length,
+      providerIds: data.map((p) => p.id),
     });
   };
   const setAgents = (data: Agent[]) => {
