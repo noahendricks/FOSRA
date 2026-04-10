@@ -19,6 +19,7 @@ from backend.src.api.lifecycle import global_infra
 from backend.src.api.schemas.tui_control_schemas import TextPart, UIMessage
 from backend.src.services.session.agent_service import create_fosra_agent
 from backend.src.services.session.conversation_service import SessionService
+from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.services.session.runner.event_formatter import EventFormatter
 from backend.src.services.session.runner.prompt_extractor import (
     extract_provider_model,
@@ -32,7 +33,6 @@ from backend.src.services.session.runner.title_generator import (
     maybe_generate_title,
 )
 from backend.src.services.session.runner.utils import _unwrap_json_text
-from backend.src.services.session.event_emitter import get_event_emitter
 from backend.src.storage.utils.converters import ulid_factory
 
 if TYPE_CHECKING:
@@ -188,7 +188,9 @@ async def run_agent_with_events(
 
             sources_as_dicts = []
             if result_store.items:
-                from backend.src.api.routes.workspace import _chunks_to_source_groups
+                from backend.src.api.routes._routes_utils import (
+                    _chunks_to_source_groups,
+                )
                 from backend.src.services.retrieval.vector_service import RetrievedChunk
 
                 chunks = [
