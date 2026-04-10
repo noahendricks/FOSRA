@@ -355,7 +355,23 @@ export type ValidatedPart = z.infer<typeof PartSchema>;
 export function parseMessages(raw: unknown[]): ValidatedMessageWithParts[] {
   const result: ValidatedMessageWithParts[] = [];
   for (const item of raw) {
-    const parsed = MessageWithPartsSchema.safeParse(item);
+    // Try MessageWithParts first (nested structure)
+    let parsed = MessageWithPartsSchema.safeParse(item);
+    
+    // If that fails, try plain Message (flat structure being sent)
+    if (!parsed.success) {
+      const messageParsed = MessageSchema.safeParse(item);
+      if (messageParsed.success) {
+        parsed = {
+          success: true,
+          data: {
+            info: messageParsed.data,
+            parts: [],
+          },
+        };
+      }
+    }
+    
     if (parsed.success) {
       result.push(parsed.data);
     } else {

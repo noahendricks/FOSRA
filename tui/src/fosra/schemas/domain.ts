@@ -131,7 +131,7 @@ const ModelApiSchema = z.object({
 
 export const ModelSchema = z.object({
   id: z.string(),
-  providerID: z.string(),
+  providerID: z.string().nullish(), // TODO: needs to be fixed, currently sending null
   api: ModelApiSchema,
   name: z.string(),
   family: z.string().nullish(),
@@ -141,7 +141,7 @@ export const ModelSchema = z.object({
   status: z.enum(["alpha", "beta", "deprecated", "active"]),
   options: z.record(z.string(), z.unknown()),
   headers: z.record(z.string(), z.string()),
-  release_date: z.string(),
+  release_date: z.string().nullish(),
   variants: z.record(z.string(), z.record(z.string(), z.unknown())).nullish(),
 });
 
@@ -156,8 +156,8 @@ export const ProviderSchema = z.object({
 });
 
 const AgentModelSchema = z.object({
-  modelID: z.string(),
-  providerID: z.string(),
+  modelID: z.string().nullish(),
+  providerID: z.string().nullish(),
 });
 
 export const AgentSchema = z.object({
