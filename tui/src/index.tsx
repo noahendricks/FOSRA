@@ -1,6 +1,6 @@
 // FOSRA TUI ENTRY POINT
 import { tui } from "./app"
-import { TuiConfig } from "@/config/tui"
+import { TuiConfig } from "@/config"
 import type { Args } from "./context/args"
 import { log } from "./fosra/util/log"
 
