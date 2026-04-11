@@ -204,32 +204,6 @@ fosra/
   
   ---
 
-```
-+--------------------------------------+
-|            Terminal UI                |
-|       OpenTUI + SolidJS (Bun)        |
-+------------------+-------------------+
-                   | HTTP / SSE
-+------------------v-------------------+
-|          FastAPI Backend              |
-|       Python 3.13+ / uvloop          |
-|                                      |
-|  +--------------+ +----------------+ |
-|  |  Ingestion   | |    Session     | |
-|  |  Pipeline    | |    Manager     | |
-|  +------+-------+ +-------+-------+ |
-|         |                  |         |
-|  +------v-------+ +-------v-------+ |
-|  |  Processing  | |   Retrieval   | |
-|  |  Services    | |   Pipeline    | |
-|  +------+-------+ +-------+-------+ |
-|         |                  |         |
-+---------v------------------v---------+
-|       Storage + External Services    |
-+--------------------------------------+
-  PostgreSQL   Qdrant     FalkorDB
-  LiteLLM      Taskiq     Search APIs
-```
 
 </div>
 
