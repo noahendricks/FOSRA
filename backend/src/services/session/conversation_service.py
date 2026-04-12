@@ -15,9 +15,9 @@ from backend.src.api.schemas.message_schemas import (
     AssistantMessageTime,
     AssistantMessageTokens,
     AssistantMessageTokensCache,
+    MessageWithParts,
     Part,
     TextPart,
-    UIMessageFull,
     UserMessage,
     UserMessageModel,
     UserMessageTime,
@@ -67,12 +67,13 @@ def _session_time_to_dts(time_obj) -> tuple[datetime, datetime]:
     return _ts_to_dt(created), _ts_to_dt(updated)
 
 
-def _build_tui_message(msg: Message, session_id: str) -> UIMessageFull:
+def _build_tui_message(msg: Message, session_id: str) -> MessageWithParts:
     role_val = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
     ts = int(msg.timestamp.timestamp()) if msg.timestamp else 0
     msg_id = msg.message_id or ""
 
     parts: list[Part] = []
+
     if role_val == "user":
         message_part = UserMessage(
             id=msg_id,
@@ -91,11 +92,9 @@ def _build_tui_message(msg: Message, session_id: str) -> UIMessageFull:
               tui and backend don't currently have support to send or store other types
               storage and transformation of both is necessary
         """
-        if msg.text:
-            parts.append(TextPart(text=msg.text, type="text"))
 
-        # TODO: change UIMessageFull naming
-        message = UIMessageFull(info=message_part, parts=parts)
+        # TODO: change MessageWithParts naming
+        message = MessageWithParts(info=message_part, parts=parts)
         return message
     else:
         message_part = AssistantMessage(
@@ -119,9 +118,7 @@ def _build_tui_message(msg: Message, session_id: str) -> UIMessageFull:
             finish="stop",
         )
 
-        if msg.text:
-            parts.append(TextPart(text=msg.text, type="text"))
-        message = UIMessageFull(info=message_part, parts=parts)
+        message = MessageWithParts(info=message_part, parts=parts)
 
         return message
 

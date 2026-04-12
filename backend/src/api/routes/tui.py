@@ -12,8 +12,7 @@ import os
 import subprocess
 from collections.abc import AsyncIterable
 from datetime import datetime, timezone
-from time import thread_time
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -73,6 +72,7 @@ event_emitter = get_event_emitter()
 
 from backend.src.api.routes.oc.file import router as file_router
 from backend.src.api.routes.oc.message_ops import router as message_ops_router
+from backend.src.api.routes.oc.message_v2 import router as message_v2_router
 from backend.src.api.routes.oc.permission import router as permission_router
 from backend.src.api.routes.oc.project import router as project_router
 from backend.src.api.routes.oc.question import router as question_router
@@ -82,6 +82,7 @@ from backend.src.api.routes.oc.skill import router as skill_router
 
 router.include_router(session_ops_router)
 router.include_router(message_ops_router)
+router.include_router(message_v2_router)
 router.include_router(permission_router)
 router.include_router(question_router)
 router.include_router(file_router)

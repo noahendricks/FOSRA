@@ -304,7 +304,7 @@ def session_to_session(
     item: SessionListItemResponse,
 ) -> Session:
     return Session(
-        id=item.session_id,
+        session_id=item.session_id,
         directory=item.directory or PROJECT_DIR,
         title=item.title or "",
         version=item.version or "1",
@@ -322,7 +322,7 @@ def session_list_item_to_session(item: SessionListItemResponse) -> Session:
 
 def session_full_to_session(session: SessionFullResponse) -> Session:
     return Session(
-        id=session.session_id,
+        session_id=session.session_id,
         directory=session.directory or PROJECT_DIR,
         title=session.title or "",
         version=session.version or "1",
