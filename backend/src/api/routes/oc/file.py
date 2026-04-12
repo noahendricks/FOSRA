@@ -7,17 +7,13 @@ grep falls back to ripgrep then python regex.
 
 from __future__ import annotations
 
-import mimetypes
 import os
-import subprocess
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.src.api.schemas.tui_schemas import (
     PROJECT_DIR,
-    FileContent,
-    FileDiff,
     FileNode,
 )
 

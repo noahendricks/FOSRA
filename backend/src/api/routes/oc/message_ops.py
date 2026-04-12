@@ -8,13 +8,12 @@ route in tui.py (limit / before).
 from __future__ import annotations
 
 import time
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from fastapi import APIRouter, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.api.dependencies import get_current_user_id, get_db_session
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_MODEL_ID,
     DEFAULT_PROVIDER_ID,

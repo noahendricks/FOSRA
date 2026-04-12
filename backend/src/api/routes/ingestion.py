@@ -55,9 +55,6 @@ class IngestStatusResponse:
 async def ingest_codebase(
     directory_path: Annotated[str, Body()],
     repo_name: Annotated[str | None, Body()] = None,
-    language_filter: Annotated[list[str] | None, Body()] = None,
-    force: Annotated[bool, Body()] = False,
-    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ) -> dict[str, Any]:  # type: ignore[reportExplicitAny,reportUnknownVariableType]
     """Ingest a codebase directory into FalkorDB.
 
@@ -116,8 +113,6 @@ async def ingest_codebase(
 async def ingest_single_file(
     file_path: Annotated[str, Body()],
     repo_name: Annotated[str, Body()] = "",
-    force: Annotated[bool, Body()] = False,
-    session: AsyncSession = Depends(get_db_session),  # type: ignore[reportExplicitAny]
 ) -> dict[str, Any]:  # type: ignore[reportExplicitAny,reportUnknownVariableType]
     """Ingest a single code file into FalkorDB.
 

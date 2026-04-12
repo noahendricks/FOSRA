@@ -46,6 +46,7 @@ type Result<T> = {
   error?: { code: string; message: string };
   response?: Response;
 };
+
 type StreamResult<T> = {
   stream: AsyncIterable<T>;
   error?: { code: string; message: string };
@@ -110,6 +111,7 @@ export const createFosraClient = (options: {
 
     if (!res.ok) {
       const msg = await res.text().catch(() => res.statusText);
+
       log.api.debug("API_RESPONSE", {
         method: init?.method ?? "GET",
         path,
@@ -117,6 +119,7 @@ export const createFosraClient = (options: {
         durationMs: Date.now() - start,
         bodyPreview: msg.slice(0, 200),
       });
+
       if (init?.throwOnError) throw new Error(msg);
       return {
         error: { code: String(res.status), message: msg },
