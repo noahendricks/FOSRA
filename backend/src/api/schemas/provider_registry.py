@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-
-from loguru import logger as _loguru
 import os
 from pathlib import Path
 from typing import Any
 
 import httpx
+from loguru import logger as _loguru
 
 from backend.src.api.schemas.tui_schemas import (
     Model,

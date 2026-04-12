@@ -61,14 +61,14 @@ class DoclingLoader:
 
     @staticmethod
     def parse_file_sync(file_path: str | Path, mime_type: str | None = None) -> Doc:
-        """Parse a single file with docling structure-aware extraction.
+        """parse a single file with docling structure-aware extraction.
 
         Args:
             file_path: Path to the file
             mime_type: Optional mime type override
 
         Returns:
-            Doc with sections populated from docling hierarchical chunking
+            doc with sections populated from docling hierarchical chunking
         """
         path = Path(file_path) if isinstance(file_path, str) else file_path
 

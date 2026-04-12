@@ -130,6 +130,7 @@ dependencies = [
   "tree-sitter-rust>=0.23.2",
   "icecream>=2.1.10",
   "langchain-openai>=1.1.12",
+  "vulture>=2.16",
 ]
 
 [project.scripts]
