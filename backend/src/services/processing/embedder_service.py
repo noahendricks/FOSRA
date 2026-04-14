@@ -9,7 +9,7 @@ from loguru import logger
 from qdrant_client.models import SparseVector
 
 from backend.src.api.schemas.base import BaseModelFlex
-from backend.src.domain.schemas.doc import Chunk
+from backend.src.domain.schemas.doc import Subsection
 
 if TYPE_CHECKING:
     from backend.src.settings import EmbedderConfig
@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 
 class EmbedderProvider(Protocol):
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]: ...
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]: ...
     async def embed_query(
         self, query: str, config: EmbedderConfig
     ) -> EmbeddedQueries | None: ...
@@ -40,8 +40,8 @@ class FastEmbedProvider:
     _sparse_cache: dict[str, SparseTextEmbedding] = {}
 
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]:
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]:
         if not chunks:
             return chunks
 
@@ -54,7 +54,7 @@ class FastEmbedProvider:
         return chunks
 
     def _embed_dense(
-        self, chunks: list[Chunk], texts: list[str], config: EmbedderConfig
+        self, chunks: list[Subsection], texts: list[str], config: EmbedderConfig
     ) -> None:
         model_name = config.dense_model
         if model_name not in self._dense_cache:
@@ -70,7 +70,7 @@ class FastEmbedProvider:
             chunk.metadata.dense_embedding = embedding.tolist()
 
     def _embed_sparse(
-        self, chunks: list[Chunk], texts: list[str], config: EmbedderConfig
+        self, chunks: list[Subsection], texts: list[str], config: EmbedderConfig
     ) -> None:
         model_name = config.sparse_model
         assert model_name, "sparse_model must not be None when _embed_sparse is called"
@@ -151,8 +151,8 @@ class FlagProvider:
         return self._cache[model_name]
 
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]:
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]:
         if not chunks:
             return chunks
 
@@ -235,8 +235,8 @@ class HuggingFaceProvider:
         return self._cache[model_name]
 
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]:
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]:
         if not chunks:
             return chunks
 
@@ -295,8 +295,8 @@ class HuggingFaceProvider:
 #         return self._cache[model_name]
 #
 #     async def embed_chunks(
-#         self, chunks: list[Chunk], config: EmbedderConfig
-#     ) -> list[Chunk]:
+#         self, chunks: list[Subsection], config: EmbedderConfig
+#     ) -> list[Subsection]:
 #         if not chunks:
 #             return chunks
 #
@@ -349,8 +349,8 @@ class NomicCodeProvider:
         return self._cache[model_name]
 
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]:
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]:
         if not chunks:
             return chunks
 
@@ -403,8 +403,8 @@ class Qwen3EmbeddingProvider:
     _cache: dict[str, SentenceTransformer] = {}
 
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]:
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]:
         if not chunks:
             return chunks
 
@@ -472,8 +472,8 @@ class JinaCodeProvider:
     _cache: dict[str, SentenceTransformer] = {}
 
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]:
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]:
         if not chunks:
             return chunks
 
@@ -635,13 +635,13 @@ class EmbedderService:
         self._cache = cache or EmbeddingCache()
 
     async def embed_chunks(
-        self, chunks: list[Chunk], config: EmbedderConfig
-    ) -> list[Chunk]:
+        self, chunks: list[Subsection], config: EmbedderConfig
+    ) -> list[Subsection]:
         if not chunks:
             logger.warning("No chunks provided for embedding")
             return chunks
 
-        chunks_to_embed: list[Chunk] = []
+        chunks_to_embed: list[Subsection] = []
         for chunk in chunks:
             cached = self._cache.get(
                 chunk.text,
@@ -709,7 +709,7 @@ class EmbedderService:
                     config.sparse_model if config.sparse_enabled else None,
                 )
             return result
-        except Exception as e:
+        except Exception:
             logger.opt(exception=True).error("Query embedding failed")
             return None
 

@@ -8,13 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from taskiq import AsyncTaskiqTask
 
-from backend.src.domain.enums import FileSourceType, SourceType
+from backend.src.domain.enums import FileSourceType
 from backend.src.settings import (
     ChunkerConfig,
     EmbedderConfig,
     VectorStoreConfig,
 )
-from backend.src.domain.schemas.doc import Chunk, Doc
+from backend.src.domain.schemas.doc import Doc, Subsection
 from backend.src.services.processing.chunker_service import ChunkerService
 from backend.src.services.processing.embedder_service import EmbedderService
 from backend.src.services.retrieval.vector_service import (
@@ -78,7 +78,7 @@ async def ingest_docs(
     chunks_per_doc = await ChunkerService.chunk_documents(docs, chunker_config)
 
     # step 3: flatten
-    all_chunks: list[Chunk] = []
+    all_chunks: list[Subsection] = []
     for doc_chunks in chunks_per_doc:
         all_chunks.extend(doc_chunks)
 

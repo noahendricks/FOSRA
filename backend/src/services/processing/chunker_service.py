@@ -1,221 +1,245 @@
 from __future__ import annotations
 
 import asyncio
+import statistics
 import time
 from asyncio.tasks import Task
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from loguru import logger
 
 from backend.src.domain.schemas.doc import (
-    Chunk,
-    ChunkMetadata,
     Doc,
-    DocMetadata,
+    HierarchicalChunk,
+    Section,
+    SectionMetadata,
+    Subsection,
 )
-from backend.src.services.processing.hi_chunk import HiChunk, HiChunkStructurer
 
 if TYPE_CHECKING:
     from backend.src.settings import ChunkerConfig
 
 from uuid import uuid4
 
-from chonkie import Visualizer
 
-viz = Visualizer()
+def count_tokens(text: str) -> int:
+    # approximate: ~4 chars per token
+    return len(text) // 4
 
-from backend.src.settings import ChunkerConfig
 
-# !hack : to be implemented:  user config retrieval (env , database or in-memory)
+def _is_badly_sectioned(sections: list[Section], threshold: float = 0.42) -> bool:
+    """true if >threshold fraction of sections deviate strongly from the median token count.
 
-# !todo: Fix class state references
+    flat sections with no children (depth 1 across the board) where token counts vary
+    wildly suggest the parser failed to extract meaningful structure.
+    """
+    if len(sections) < 4:
+        return False
+    counts = [count_tokens(s.section_text or "") for s in sections]
+    if not any(counts):
+        return True
+    median = statistics.median(counts)
+    if median == 0:
+        return True
+    outliers = sum(
+        1 for c in counts if c > 3 * median or (median > 50 and c < median / 3)
+    )
+    return outliers / len(counts) > threshold
+
+
+def _emit_section(
+    sec: Section,
+    doc_id: str,
+    doc_title: str,
+    max_tokens: int,
+    result: list[Subsection],
+) -> None:
+    """emit sec and all its descendants into result as flat subsections."""
+    text = sec.section_text or ""
+    token_count = count_tokens(text)
+    heading_level = len(sec.heading_path) if sec.heading_path else 1
+
+    # emit section as-is if it has text — the section boundary IS the semantic unit.
+    # the chunker is purely a fallback for badly-sectioned docs (no headings / flat structure).
+    if text.strip():
+        result.append(
+            Subsection(
+                text=text,
+                metadata=SectionMetadata(
+                    section_id=sec.section_id,
+                    parent_id=sec.parent_id,
+                    doc_id=doc_id,
+                    doc_title=doc_title,
+                    page_number=sec.start_page,
+                    token_count=token_count,
+                    section_heading=sec.heading,
+                    heading_level=heading_level,
+                    heading_path=sec.heading_path,
+                ),
+            )
+        )
+
+    # recurse into structural children regardless of whether parent had text
+    for child in sec.children:
+        _emit_section(child, doc_id, doc_title, max_tokens, result)
+
+
+def _hi_chunks_to_sections(
+    hi_chunks: list[HierarchicalChunk], doc_id: str
+) -> list[Section]:
+    """convert HierarchicalChunk tree to Section tree for badly-sectioned fallback."""
+    roots: list[Section] = []
+    section_idx = 0
+
+    def convert(node: object, parent_id: str | None) -> Section:
+        nonlocal section_idx
+        sec = Section(
+            section_text=getattr(node, "text", None),
+            heading=None,
+            heading_path=None,
+            start_page=None,
+            end_page=None,
+            section_index=section_idx,
+            section_id=f"{doc_id}:h{section_idx}",
+            parent_id=parent_id,
+        )
+        section_idx += 1
+        for child in getattr(node, "children", []):
+            child_sec = convert(child, sec.section_id)
+            sec.children.append(child_sec)
+        return sec
+
+    for node in hi_chunks:
+        roots.append(convert(node, None))
+    return roots
 
 
 class ChunkerService:
     @staticmethod
     async def chunk_documents(
-        docs: list[Doc], config: ChunkerConfig
-    ) -> list[list[Chunk]]:
-        """Chunk documents based on file type and user preferences."""
-
+        docs: list[Doc], config: "ChunkerConfig"
+    ) -> list[list[Subsection]]:
+        """chunk documents based on file type and user preferences."""
         start_time = time.time()
-
         logger.info("Starting chunking of {} documents", len(docs))
 
-        tasks: list[Task[list[Chunk]]] = []
+        hi_structurer_ref: list[
+            object
+        ] = []  # lazy-init only if badly-sectioned doc found
+
+        tasks: list[Task[list[Subsection]]] = []
 
         async with asyncio.TaskGroup() as group:
             for doc in docs:
-                # !hack: NOT MAINTAINING TEXT LOCATION IN END CHUNKS - NEED OPTION THAT DOES
                 doc_type = "PDF" if doc.is_pdf else "code" if doc.is_code else "text"
-
                 logger.debug("Processing {} document: {}", doc_type, doc.id)
-                try:
-                    if doc.is_code:
-                        ccode_task = group.create_task(
-                            ChunkerService._chunk_code(
-                                doc,
-                                config,
+
+                if doc.is_code:
+                    tasks.append(
+                        group.create_task(ChunkerService._chunk_code(doc, config))
+                    )
+                elif doc.is_text:
+                    tasks.append(
+                        group.create_task(
+                            ChunkerService._chunk_structured(
+                                doc, config, hi_structurer_ref
                             )
                         )
-
-                        tasks.append(ccode_task)
-
-                    elif doc.is_text:
-                        c_task = group.create_task(
-                            ChunkerService._chunk_text(doc, config)
+                    )
+                elif doc.is_pdf:
+                    tasks.append(
+                        group.create_task(
+                            ChunkerService._chunk_structured(
+                                doc, config, hi_structurer_ref
+                            )
                         )
+                    )
 
-                        tasks.append(c_task)
-
-                    elif doc.is_pdf:
-                        # if doc is pdf, chunk using sections if available (from docling)
-                        # otherwise fall back to page-level chunking
-
-                        cpdf_task = group.create_task(
-                            ChunkerService._chunk_pdf(doc, config)
-                        )
-
-                        tasks.append(cpdf_task)
-                except:
-                    raise
-
-        chunks: list[list[Chunk]] = []
-
-        for t in tasks:
-            chunks.append(t.result())
-
-        logger.info("Completed chunking {} documents", len(docs))
-
+        chunks: list[list[Subsection]] = [t.result() for t in tasks]
+        elapsed = time.time() - start_time
+        logger.info("Completed chunking {} documents in {:.2f}s", len(docs), elapsed)
         return chunks
 
     @staticmethod
-    async def _chunk_code(doc: Doc, config: ChunkerConfig):
-        """Handle code file chunking."""
-        # use code chunker as default, respect user preference
-        from code_chunker import ChunkerConfig as CodeChunkerConfig
-        from code_chunker import CodeChunker
-
-        chunker = CodeChunker(
-            config=CodeChunkerConfig(
-                include_imports=True,
-                include_comments=True,
-            )
-        )
-
+    async def _chunk_code(doc: Doc, config: "ChunkerConfig") -> list[Subsection]:
+        """handle code file chunking via tree-sitter."""
+        from backend.src.services.processing.code_chunker import extract_code_chunks
         from backend.src.services.processing.utils.loader import code_mimes
 
-        parse_result = chunker.parse(
-            doc.page_content, language=code_mimes[doc.metadata.mime_type]
+        language = code_mimes[doc.metadata.mime_type]
+        return extract_code_chunks(  # type: ignore[return-value]
+            code=doc.page_content,
+            language=language,
+            source_file=doc.metadata.source,
         )
 
-        parse_result.file_path = doc.metadata.source
-
-        return [
-            Chunk(
-                text=cc.code,
-                metadata=ChunkMetadata(
-                    chunk_id=cc.name or str(uuid4()),
-                    start_char=0,
-                    end_char=0,
-                    token_count=0,
-                ),
-            )
-            for cc in parse_result.chunks
-        ]
-
     @staticmethod
-    async def _chunk_text(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
-        """Handle text file chunking.
+    async def _chunk_structured(
+        doc: Doc,
+        config: "ChunkerConfig",
+        hi_structurer_ref: list[object],
+    ) -> list[Subsection]:
+        """emit subsections from the section tree; fall back to HiChunk for badly-sectioned docs."""
+        sections = doc.metadata.sections
 
-        Uses pre-extracted sections from kreuzberg if available, otherwise
-        falls back to flat HiChunk on the full page_content.
-        """
-        if doc.metadata.sections:
-            return await ChunkerService._chunk_by_sections(doc, config)
-
-        structurer = HiChunkStructurer(config=config)
-        chunks = HiChunk.index(document=doc, structurer=structurer)
-        return chunks
-
-    @staticmethod
-    async def _chunk_by_sections(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
-        """Chunk using pre-grouped sections (from docling or kreuzberg).
-
-        Each section's text is passed to HiChunk independently, and every
-        resulting chunk inherits the section's positional metadata.
-        Uses section.section_text when available (docling), otherwise falls
-        back to SectionGrouper.section_text() concatenation (kreuzberg).
-        """
-        from backend.src.services.processing.kreuzberg_extractor import (
-            SectionGrouper,
-        )
-
-        all_chunks: list[Chunk] = []
-        structurer = HiChunkStructurer(config=config)
-
-        for section in doc.metadata.sections:
-            # check if kruezberg is necessary here ; might not be getting hit
-            section_text = (
-                section.section_text
-                if section.section_text
-                else SectionGrouper.section_text(section)
+        if not sections or _is_badly_sectioned(sections):
+            logger.info(
+                "badly-sectioned or empty sections for {}, falling back to HiChunk",
+                getattr(getattr(doc, "metadata", None), "doc_title", "unknown"),
             )
-            if not section_text.strip():
-                continue
-
-            section_doc = Doc(
-                id=doc.id,
-                page_content=section_text,
-                metadata=DocMetadata(
-                    source=doc.metadata.source,
-                    mime_type=doc.metadata.mime_type,
-                    doc_id=doc.metadata.doc_id,
-                    doc_title=doc.metadata.doc_title,
-                    path=doc.metadata.path,
-                    language=doc.metadata.language,
-                    repo=doc.metadata.repo,
-                    source_type=doc.metadata.source_type,
-                    checksum=doc.metadata.checksum,
-                    section_heading=section.heading,
-                ),
+            return await ChunkerService._chunk_hichunk_fallback(
+                doc, config, hi_structurer_ref
             )
 
-            section_chunks = HiChunk.index(document=section_doc, structurer=structurer)
-
-            for c in section_chunks:
-                c.metadata.page_number = section.start_page
-                c.metadata.doc_title = doc.metadata.doc_title
-                c.metadata.section_heading = section.heading
-                c.metadata.element_ids = section.element_ids
-
-            all_chunks.extend(section_chunks)
-
-        return all_chunks
+        return ChunkerService._sections_to_subsections(doc, sections, config)
 
     @staticmethod
-    async def _chunk_pdf(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
-        """handle PDF file chunking.
-        uses docling-extracted sections if available (with heading hierarchy and page numbers).
-        falls back to page-level chunking when sections are not available.
-        """
-        if doc.metadata.sections:
-            return await ChunkerService._chunk_by_sections(doc, config)
-
-        return await ChunkerService._chunk_pdf_pages(doc, config)
+    def _sections_to_subsections(
+        doc: object,
+        root_sections: list[Section],
+        config: "ChunkerConfig",
+    ) -> list[Subsection]:
+        """walk the section tree and emit a flat list of subsections for upsert."""
+        doc_id = getattr(getattr(doc, "metadata", None), "doc_id", None) or str(uuid4())
+        doc_title = getattr(getattr(doc, "metadata", None), "doc_title", None) or ""
+        result: list[Subsection] = []
+        for root in root_sections:
+            _emit_section(root, doc_id, doc_title, config.max_chunk_size, result)
+        return result
 
     @staticmethod
-    async def _chunk_pdf_pages(doc: Doc, config: ChunkerConfig) -> list[Chunk]:
-        """fallback page-level chunking for PDFs without sections.
+    async def _chunk_hichunk_fallback(
+        doc: Doc,
+        config: "ChunkerConfig",
+        hi_structurer_ref: list[object],
+    ) -> list[Subsection]:
+        """run HiChunk neural chunking and convert result to subsections."""
+        from backend.src.services.processing.hi_chunk import HiChunkStructurer
 
-        splits by page markers and applies HiChunk to pages > 300 tokens.
-        """
+        if not hi_structurer_ref:
+            hi_structurer_ref.append(HiChunkStructurer(config=config))
+        structurer = cast("HiChunkStructurer", hi_structurer_ref[0])
+
+        hi_chunks = await asyncio.to_thread(structurer.structure, doc)
+        doc_id = doc.metadata.doc_id or str(uuid4())
+        root_sections = _hi_chunks_to_sections(hi_chunks, doc_id)
+
+        # reuse section-tree emission
+        return ChunkerService._sections_to_subsections(doc, root_sections, config)
+
+    # ── legacy fallback (PDF pages, no sections) ────────────────────────────────
+
+    @staticmethod
+    async def _chunk_pdf_pages(doc: Doc, config: "ChunkerConfig") -> list[Subsection]:
+        """fallback page-level chunking for PDFs with no section structure."""
         from chonkie import TokenChunker
 
         page_marker = "\n__PDF_PAGE_BREAK__\n"
         pages = doc.page_content.split(page_marker)
+        doc_id = doc.metadata.doc_id or str(uuid4())
+        doc_title = doc.metadata.doc_title or ""
 
-        all_chunks: list[Chunk] = []
+        all_subsections: list[Subsection] = []
         token_chunker = TokenChunker(chunk_size=300)
 
         for page_num, page_text in enumerate(pages, start=1):
@@ -225,13 +249,16 @@ class ChunkerService:
 
             page_tokens = len(page_text.split())
             if page_tokens > 300:
-                page_chunks = token_chunker.chunk(page_text)
-                for chunk in page_chunks:
-                    all_chunks.append(
-                        Chunk(
+                for chunk in token_chunker.chunk(page_text):
+                    page_id = f"{doc_id}:page{page_num}:{chunk.start_index}"
+                    all_subsections.append(
+                        Subsection(
                             text=chunk.text,
-                            metadata=ChunkMetadata(
-                                chunk_id=str(uuid4()),
+                            metadata=SectionMetadata(
+                                section_id=page_id,
+                                parent_id=None,
+                                doc_id=doc_id,
+                                doc_title=doc_title,
                                 page_number=page_num,
                                 token_count=chunk.token_count,
                                 start_char=chunk.start_index,
@@ -240,15 +267,19 @@ class ChunkerService:
                         )
                     )
             else:
-                all_chunks.append(
-                    Chunk(
+                page_id = f"{doc_id}:page{page_num}"
+                all_subsections.append(
+                    Subsection(
                         text=page_text,
-                        metadata=ChunkMetadata(
-                            chunk_id=str(uuid4()),
+                        metadata=SectionMetadata(
+                            section_id=page_id,
+                            parent_id=None,
+                            doc_id=doc_id,
+                            doc_title=doc_title,
                             page_number=page_num,
                             token_count=page_tokens,
                         ),
                     )
                 )
 
-        return all_chunks
+        return all_subsections

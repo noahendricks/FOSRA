@@ -97,8 +97,29 @@ class DoclingLoader:
         )
 
     @staticmethod
-    def _extract_sections(file_path: Path) -> list[Section]:
-        """Extract sections from docling HierarchicalChunker output.
+    def _extract_sections(
+        file_path: Path,
+        merge_min: int = _DEFAULT_MERGE_MIN,
+        split_max: int = _DEFAULT_SPLIT_MAX,
+    ) -> list[Section]:
+        """extract sections by heading path. uses direct md parsing for .md files
+        (docling chunker loses heading metadata for markdown), and HierarchicalChunker
+        for all other formats. plain text files (.txt) use chapter-inference parsing."""
+        mime = mimetypes.guess_type(str(file_path))[0] or ""
+        dd
+        suffix = file_path.suffix.lower()
+
+        # .md and other text formats → markdown parser
+        if mime in text_mimes or suffix == ".md":
+            return _extract_md_sections_by_heading(file_path, merge_min, split_max)
+
+        # .txt → text-aware parser with chapter inference
+        if suffix == ".txt":
+            return _extract_text_sections(file_path, merge_min, split_max)
+
+        cache_dir = fosra_paths.data_dir / "docling"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        settings.cache_dir = cache_dir
 
         Groups consecutive chunks with the same deepest heading into a section.
         Each section gets the full heading path, page range, and combined text.

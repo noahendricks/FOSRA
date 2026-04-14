@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
+import msgspec
 from qdrant_client.models import SparseVector
 
-import msgspec
 from backend.src.services.processing.utils.loader import code_mimes, text_mimes
 from backend.src.storage.utils.converters import DomainStruct
 
@@ -19,6 +20,65 @@ class MDNFile(DomainStruct):
     bytes: str | None = None
     url: str | None = None
     webkit_relative_path: str | None = None
+
+
+class RawBlob(DomainStruct, kw_only=True, frozen=True):
+    """Raw data abstraction for document loading and file processing."""
+
+    data: bytes | str | None = None
+    """Raw data associated with the `Blob`."""
+
+    mimetype: str | None = None
+    """MIME type, not to be confused with a file extension."""
+
+    encoding: str = "utf-8"
+    """Encoding to use if decoding the bytes into a string."""
+
+    path: str | None = None
+    """Location where the original content was found."""
+
+    @classmethod
+    def from_data(
+        cls,
+        data: bytes | str,
+        mimetype: str | None = None,
+        path: str | None = None,
+        **kwargs: Any,
+    ) -> "RawBlob":
+        return cls(data=data, mimetype=mimetype, path=path, **kwargs)
+
+    @classmethod
+    def from_path(cls, path: str, **kwargs: Any) -> "RawBlob":
+        p = Path(path)
+        with open(p, "rb") as f:
+            raw = f.read()
+        try:
+            text = raw.decode("utf-8")
+            return cls(data=text, mimetype="text/plain", path=path, **kwargs)
+        except UnicodeDecodeError:
+            return cls(data=raw, mimetype=None, path=path, **kwargs)
+
+    def as_string(self) -> str:
+        """Read the blob as a string."""
+        if isinstance(self.data, str):
+            return self.data
+        if isinstance(self.data, bytes):
+            return self.data.decode(self.encoding)
+        raise ValueError("No data available")
+
+    def as_bytes(self) -> bytes:
+        """Read the blob as bytes."""
+        if isinstance(self.data, bytes):
+            return self.data
+        if isinstance(self.data, str):
+            return self.data.encode(self.encoding)
+        raise ValueError("No data available")
+
+    def as_bytes_io(self):
+        """Read the blob as a byte stream."""
+        from io import BytesIO
+
+        return BytesIO(self.as_bytes())
 
 
 # ─── Document metadata for various source types ─────────────────────────────────
@@ -148,7 +208,7 @@ class Doc(DomainStruct, kw_only=True):
 
     @property
     def is_code(self) -> bool:
-        return self.metadata.mime_type in code_mimes.values()
+        return self.metadata.mime_type in code_mimes
 
     @property
     def is_text(self) -> bool:
@@ -176,8 +236,9 @@ class HierarchicalChunk(DomainStruct, kw_only=True):
         return f"HierarchicalChunk(level={self.level}, tokens={self.token_count}, text='{snippet}…')"
 
 
-class ChunkMetadata(DomainStruct, kw_only=True):
-    chunk_id: str | None = None
+class SectionMetadata(DomainStruct, kw_only=True):
+    section_id: str | None = None
+    parent_id: str | None = None  # section_id of parent; None = root
     doc_id: str | None = None
     doc_title: str | None = None
     page_number: int | None = None
@@ -186,55 +247,56 @@ class ChunkMetadata(DomainStruct, kw_only=True):
     end_char: int | None = None
     dense_embedding: list[float] = []
     sparse_embedding: Any | SparseVector = None
-    parent: Any = None  # typed as Any to skip msgspec structural validation
     section_heading: str | None = None
-    element_ids: list[str] = []
+    heading_level: int | None = None  # depth in heading hierarchy (1 = outermost)
+    heading_path: list[str] | None = None  # full path from root heading to this heading
+    # code-specific metadata
+    source_file: str | None = None
+    code_definition_type: (
+        Literal["class", "function", "method", "async_function"] | None
+    ) = None
+    is_async: bool = False
+    is_method: bool = False
+    decorators: list[str] | None = None
+    docstring: str | None = None
+    parameters: list[str] | None = None
+    return_type: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Custom serialization — avoids recursive serialization of parent HierarchicalChunk (circular refs)."""
         d = {}
         for f in self.__struct_fields__:
-            if f == "parent":
-                continue
-            v = getattr(self, f)
-            d[f] = v
-        if self.parent is not None:
-            d["parent_text"] = getattr(self.parent, "text", None)
-            d["parent_token_count"] = getattr(self.parent, "token_count", 0)
-            d["parent_start_char"] = getattr(self.parent, "start_char", None)
-            d["parent_end_char"] = getattr(self.parent, "end_char", None)
-            d["parent_level"] = getattr(self.parent, "level", None)
-        else:
-            d["parent_text"] = None
-            d["parent_token_count"] = 0
-            d["parent_start_char"] = None
-            d["parent_end_char"] = None
-            d["parent_level"] = None
+            d[f] = getattr(self, f)
         return d
 
 
-class Chunk(DomainStruct, kw_only=True):
+# backward-compat alias — remove once all callers are updated
+ChunkMetadata = SectionMetadata
+
+
+class Subsection(DomainStruct, kw_only=True):
+    """a unit of content emitted by ingestion — either a section or a split child."""
+
     text: str
-    metadata: ChunkMetadata
+    metadata: SectionMetadata
 
 
-class ElementPosition(DomainStruct, kw_only=True):
-    """Positional metadata for a single kreuzberg element."""
-
-    page_number: int
-    element_index: int
-    element_id: str
-    additional: dict[str, Any] | None = None
+# backward-compat alias
+Chunk = Subsection
 
 
 class Section(DomainStruct, kw_only=True):
-    """A logical section of elements grouped by heading boundary."""
+    """a logical section from a document, carrying its heading hierarchy and child sections."""
 
-    elements: list[dict[str, Any]]  # kreuzberg element dicts
-    section_text: str | None = None  # docling: combined text of all items in section
-    heading: str | None = None  # section heading text (full path for docling)
-    heading_path: list[str] | None = None  # docling: full heading hierarchy
+    section_text: str | None = None
+    heading: str | None = None
+    heading_path: list[str] | None = (
+        None  # full breadcrumb from root heading to this one
+    )
     start_page: int | None = None
     end_page: int | None = None
-    element_ids: list[str] = []
     section_index: int = 0
+    section_id: str | None = (
+        None  # "{doc_id}:{section_index}", assigned at tree-build time
+    )
+    parent_id: str | None = None  # section_id of parent; None = root section
+    children: list["Section"] = []  # populated during ingestion, not stored in qdrant

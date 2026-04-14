@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from loguru import logger
 from chonkie import (
     CodeChunker,
     LateChunker,
@@ -10,12 +9,14 @@ from chonkie import (
     SentenceTransformerEmbeddings,
     TokenChunker,
 )
+from loguru import logger
+
 from backend.src.domain.enums import ChunkerType
 from backend.src.domain.schemas.doc import (
-    Chunk,
-    ChunkMetadata,
     Doc,
     HierarchicalChunk,
+    SectionMetadata,
+    Subsection,
 )
 from backend.src.settings import ChunkerConfig
 
@@ -30,14 +31,14 @@ class FlatChunkProducer:
     def __init__(self, config: ChunkerConfig):
         self.token_chunker = TokenChunker(**config.token_config.model_dump())
 
-    def produce(self, hi_chunks: list[HierarchicalChunk]) -> list[Chunk]:
-        flat = []
+    def produce(self, hi_chunks: list[HierarchicalChunk]) -> list[Subsection]:
+        flat: list[Subsection] = []
         for h in hi_chunks:
             flat.extend(self._flatten(h))
         return flat
 
-    def _flatten(self, node: HierarchicalChunk) -> list[Chunk]:
-        result = []
+    def _flatten(self, node: HierarchicalChunk) -> list[Subsection]:
+        result: list[Subsection] = []
 
         if not node.is_leaf:
             for child in node.children:
@@ -45,13 +46,12 @@ class FlatChunkProducer:
             return result
 
         if node.token_count >= 5 and node.text.strip() != "":
-            meta = ChunkMetadata(
+            meta = SectionMetadata(
                 token_count=node.token_count,
                 start_char=node.start_char,
                 end_char=node.end_char,
-                parent=node,
             )
-            result.append(Chunk(text=node.text, metadata=meta))
+            result.append(Subsection(text=node.text, metadata=meta))
 
         return result
 
@@ -119,13 +119,13 @@ class HiChunkStructurer:
                 )
 
     # public
-    def structure(self, document: Doc) -> list[HierarchicalChunk]:
+    def structure(self, document: Doc, /) -> list[HierarchicalChunk]:
         """entry point."""
 
         # estimate token count via sentence chunker tokenizer
         return self._structure_window(document)
 
-    def _structure_window(self, doc: Doc) -> list[HierarchicalChunk]:
+    def _structure_window(self, doc: Doc, /) -> list[HierarchicalChunk]:
         """structure a single window that fits in the inference budget."""
 
         # step 1: get coarse (l1) chunks via the primary chunker
@@ -201,7 +201,7 @@ class HiChunk:
     def index(
         document: Doc,
         structurer: HiChunkStructurer,
-    ) -> list[Chunk]:
+    ) -> list[Subsection]:
         """build the hierarchical structure and embed all flat chunks."""
 
         logger.info("[HiChunk] Step 1/3 — Hierarchical structuring …")
@@ -215,14 +215,13 @@ class HiChunk:
         total_l2 = sum(len(h.children) for h in _hi_chunks)
 
         logger.info("[HiChunk]   → {} L2 sub-sections found.", total_l2)
+
         logger.info("[HiChunk] Step 2/3 — Fixed-size sub-chunking (HC200) …")
 
         # Flat Chunks
         _flat_chunks = structurer.flat_producer.produce(_hi_chunks)
 
         logger.info("[HiChunk]   → {} flat chunks produced.", len(_flat_chunks))
-
-        logger.info("[HiChunk] Step 3/3 — Embedding flat chunks …")
 
         return _flat_chunks
 
