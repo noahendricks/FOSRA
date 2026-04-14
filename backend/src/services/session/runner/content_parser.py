@@ -12,13 +12,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import AIMessageChunk
+from loguru import logger as log
 
 from backend.src.services.processing.loader_service import ulid_factory
 
 
 @dataclass
 class ParseState:
-    """Mutable state for parsing a stream of chunks."""
+    """mutable state for parsing a stream of chunks"""
 
     inside_think_block: bool = False
     reasoning_part_id: str | None = None
@@ -29,9 +30,9 @@ class ParseState:
 
 @dataclass
 class ContentDelta:
-    """A delta of content from parsing a chunk."""
+    """a delta of content from parsing a chunk"""
 
-    kind: str  # "text", "reasoning_start", "reasoning_delta"
+    kind: str
     content: str
     reasoning_part_id: str | None = None
     reasoning_start_time: int | None = None
@@ -42,7 +43,7 @@ def parse_additional_kwargs(
 ) -> list[ContentDelta]:
     """parse reasoning content from additional_kwargs.
 
-    Some providers (e.g., Ollama/qwen3) send reasoning via additional_kwargs
+    some providers (ollama/qwen3) send reasoning via additional_kwargs
     instead of content blocks.
     """
     deltas: list[ContentDelta] = []
@@ -64,8 +65,6 @@ def parse_additional_kwargs(
                     reasoning_start_time=now_ts,
                 )
             )
-        # model is actively reasoning — mark so string content
-        # arriving without explicit <think> tags is also routed correctly
         state.inside_think_block = True
         state.full_reasoning_text += reasoning_from_kwargs
         deltas.append(
@@ -83,13 +82,11 @@ def parse_additional_kwargs(
 def parse_content_blocks(
     blocks: list[dict[str, Any]], state: ParseState
 ) -> list[ContentDelta]:
-    """Parse content blocks from a list (e.g., from msg.content).
+    """parse content blocks from a list (e.g., from msg.content).
 
-    Handles block types: "thinking", "reasoning", "text"
+    handles block types: "thinking", "reasoning", "text"
     """
     deltas: list[ContentDelta] = []
-
-    from loguru import logger as log
 
     for block in blocks:
         if not isinstance(block, dict):
@@ -105,7 +102,7 @@ def parse_content_blocks(
 
         try:
             if block_type in ("thinking", "reasoning"):
-                # "thinking" = Anthropic, "reasoning" = other providers
+                # "thinking" = anthropic, "reasoning" = other providers
                 reasoning_text = (
                     block.get("thinking", "") or block.get("reasoning", "") or ""
                 )
@@ -138,7 +135,7 @@ def parse_content_blocks(
                     state.full_text += text_val
                     deltas.append(ContentDelta(kind="text", content=text_val))
         except Exception as e:
-            # Re-raise with context - this matches stream_consumer.py behavior
+            # re-raise with context — matches stream_consumer.py behavior
             raise RuntimeError(
                 f"error_processing_content_block: block_type={block_type}"
             ) from e
@@ -147,13 +144,9 @@ def parse_content_blocks(
 
 
 def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
-    """Parse string content with <think>...</think> tag state machine.
+    """parse string content with <think>... tag state machine.
 
-    Some models (Ollama/qwen3) send reasoning as raw <think>...</think> tags
-    in a plain string. This state machine tracks inside_think_block across
-    chunks and splits content accordingly.
-
-    Also handles /think ... /end_think line-level directives used by some
+    also handles /think ... /end_think line-level directives used by some
     reasoning models.
     """
     deltas: list[ContentDelta] = []
@@ -161,14 +154,14 @@ def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
 
     while remaining:
         if state.inside_think_block:
-            # looking for closing </think> or /end_think tag
-            close_think_idx = remaining.find("</think>")
+            # look for closing  or /end_think tag
+            close_think_idx = remaining.find("")
             close_slash_idx = remaining.find("/end_think")
             if close_think_idx != -1 and (
                 close_slash_idx == -1 or close_think_idx < close_slash_idx
             ):
                 reasoning_chunk = remaining[:close_think_idx]
-                remaining = remaining[close_think_idx + len("</think>") :]
+                remaining = remaining[close_think_idx + len("") :]
                 state.inside_think_block = False
                 if reasoning_chunk:
                     state.full_reasoning_text += reasoning_chunk
@@ -195,7 +188,7 @@ def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
                         )
                     )
             else:
-                # No closing tag — entire remaining is reasoning
+                # no closing tag — entire remaining is reasoning
                 state.full_reasoning_text += remaining
                 deltas.append(
                     ContentDelta(
@@ -207,20 +200,18 @@ def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
                 )
                 remaining = ""
         else:
-            # Looking for opening <think> or /think tag
+            # look for opening <think> or /think tag
             open_think_idx = remaining.find("<think>")
             open_slash_idx = remaining.find("/think")
             if open_think_idx != -1 and (
                 open_slash_idx == -1 or open_think_idx <= open_slash_idx
             ):
-                # Text before <think> is regular text
                 text_before = remaining[:open_think_idx]
                 remaining = remaining[open_think_idx + len("<think>") :]
                 state.inside_think_block = True
                 if text_before:
                     state.full_text += text_before
                     deltas.append(ContentDelta(kind="text", content=text_before))
-                # Ensure reasoning part exists for when we exit the think block
                 if state.reasoning_part_id is None:
                     now_ts = int(time.time())
                     state.reasoning_part_id = ulid_factory()
@@ -234,7 +225,6 @@ def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
                         )
                     )
             elif open_slash_idx != -1:
-                # Text before /think is regular text
                 text_before = remaining[:open_slash_idx]
                 remaining = remaining[open_slash_idx + len("/think") :]
                 state.inside_think_block = True
@@ -254,7 +244,7 @@ def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
                         )
                     )
             else:
-                # No opening tag — regular text
+                # no opening tag — regular text
                 state.full_text += remaining
                 deltas.append(ContentDelta(kind="text", content=remaining))
                 remaining = ""
@@ -265,23 +255,12 @@ def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
 def parse_chunk_content(msg: AIMessageChunk, state: ParseState) -> list[ContentDelta]:
     """top-level content parser — routes to appropriate parser based on content type.
 
-    this is the main entry point. routes based on:
-    1. If content is a list → parse_content_blocks
-    2. If content is a string → parse_string_content
-    3. Always check additional_kwargs → parse_additional_kwargs (side-effect: may update state)
-
-    implementation order:
-    1. Call parse_additional_kwargs first (side-effect: may update state.inside_think_block)
-    2. If msg.content is list → call parse_content_blocks
-    3. If msg.content is string → call parse_string_content
-    4. Return combined list of ContentDelta from all sources
+    routes based on:
+    - If content is a list → parse_content_blocks
+    - If content is a string → parse_string_content
     """
     deltas: list[ContentDelta] = []
 
-    from loguru import logger as log
-
-    # 1. parse additional_kwargs first (may set state.inside_think_block = True)
-    #
     log.bind(
         _structured={
             "msg_additional_kwargs": msg.additional_kwargs,
@@ -289,9 +268,6 @@ def parse_chunk_content(msg: AIMessageChunk, state: ParseState) -> list[ContentD
         }
     ).debug("[PARSE CHUNK CONTENT] parsing_additional_kwargs")
 
-    # deltas.extend(parse_additional_kwargs(msg, state))
-
-    # 2. parse content based on type
     content = msg.content
 
     log.bind(

@@ -152,3 +152,5 @@ if __name__ == "__main__":
         reload_delay=0.25,
         log_config=None,
     )
+
+# uvloop support - run with: uvicorn --loop uvloop app:app

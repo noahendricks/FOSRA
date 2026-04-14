@@ -360,6 +360,24 @@ wheels = [
 ]
 
 [[package]]
+name = "astchunk"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pyrsistent" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-c-sharp" },
+    { name = "tree-sitter-java" },
+    { name = "tree-sitter-python" },
+    { name = "tree-sitter-typescript" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/2a/7a35e2fac7d550265ae2ee40651425083b37555f921d1a1b77c3f525e0df/astchunk-0.1.0.tar.gz", hash = "sha256:f4dff0ef8b3b3bcfeac363384db1e153f74d4c825dc2e35864abfab027713be4", size = 18093, upload-time = "2025-06-19T04:37:25.34Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/84/5433ab0e933b572750cb16fd7edf3d6c7902b069461a22ec670042752a4d/astchunk-0.1.0-py3-none-any.whl", hash = "sha256:33ada9fc3620807fdda5846fa1948af463f281a60e0d43d4f3782b6dbb416d24", size = 15396, upload-time = "2025-06-19T04:37:23.87Z" },
+]
+
+[[package]]
 name = "asttokens"
 version = "3.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1555,6 +1573,15 @@ wheels = [
 ]
 
 [[package]]
+name = "diskcache"
+version = "5.6.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
+]
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2167,6 +2194,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "alembic" },
     { name = "anyio" },
+    { name = "astchunk" },
     { name = "asyncpg" },
     { name = "basedpyright" },
     { name = "black" },
@@ -2203,6 +2231,7 @@ dependencies = [
     { name = "jupyter" },
     { name = "jupyter-client" },
     { name = "jupyterlab" },
+    { name = "kreuzberg" },
     { name = "lab" },
     { name = "langchain", extra = ["huggingface", "ollama"] },
     { name = "langchain-community" },
@@ -2227,9 +2256,11 @@ dependencies = [
     { name = "numpy" },
     { name = "onnxruntime-gpu" },
     { name = "opentelemetry-exporter-otlp" },
+    { name = "optuna" },
     { name = "orjson" },
     { name = "passlib" },
     { name = "pdbpp" },
+    { name = "pdf-oxide" },
     { name = "platformdirs" },
     { name = "playwright" },
     { name = "protobuf" },
@@ -2237,6 +2268,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "ptpython" },
     { name = "pudb" },
+    { name = "pulp" },
     { name = "pwdlib", extra = ["argon2"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -2260,6 +2292,7 @@ dependencies = [
     { name = "rerankers", extra = ["flashrank"] },
     { name = "rich" },
     { name = "ruff" },
+    { name = "semchunk" },
     { name = "sentence-transformers" },
     { name = "spacy" },
     { name = "sqlalchemy" },
@@ -2291,6 +2324,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
+    { name = "diskcache" },
     { name = "isort" },
     { name = "mcpydoc" },
     { name = "py2puml" },
@@ -2311,6 +2345,7 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.21.0" },
     { name = "alembic", specifier = ">=1.18.3" },
     { name = "anyio", specifier = ">=4.11.0" },
+    { name = "astchunk", specifier = ">=0.1.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "basedpyright", specifier = ">=1.36.1" },
     { name = "black", specifier = ">=25.12.0" },
@@ -2347,6 +2382,7 @@ requires-dist = [
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "jupyter-client", specifier = ">=8.8.0" },
     { name = "jupyterlab", specifier = ">=4.5.5" },
+    { name = "kreuzberg", specifier = ">=4.8.2" },
     { name = "lab", specifier = ">=8.9" },
     { name = "langchain", extras = ["exa", "huggingface", "litellm", "ollama", "unstructured"], specifier = ">=1.0.5" },
     { name = "langchain-community", specifier = ">=0.4.1" },
@@ -2371,9 +2407,11 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "onnxruntime-gpu", specifier = ">=1.24.2" },
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.39.1" },
+    { name = "optuna", specifier = ">=4.8.0" },
     { name = "orjson", specifier = ">=3.11.3" },
     { name = "passlib", specifier = ">=1.7.4" },
     { name = "pdbpp", specifier = ">=0.11.7" },
+    { name = "pdf-oxide", specifier = ">=0.3.30" },
     { name = "platformdirs", specifier = ">=4.5.0" },
     { name = "playwright", specifier = ">=1.50.0" },
     { name = "protobuf", specifier = ">=6.32.1" },
@@ -2381,6 +2419,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
     { name = "ptpython", specifier = ">=3.0.32" },
     { name = "pudb", specifier = ">=2025.1.4" },
+    { name = "pulp", specifier = ">=3.3.0" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
@@ -2404,6 +2443,7 @@ requires-dist = [
     { name = "rerankers", extras = ["flashrank"], specifier = ">=0.7.1" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", specifier = ">=0.14.4" },
+    { name = "semchunk", specifier = ">=2.2.2" },
     { name = "sentence-transformers", specifier = ">=5.1.1" },
     { name = "spacy", specifier = ">=3.8.7" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
@@ -2435,6 +2475,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright", specifier = ">=1.37.2" },
+    { name = "diskcache", specifier = ">=5.6.3" },
     { name = "isort", specifier = ">=8.0.0" },
     { name = "mcpydoc", specifier = ">=1.4.0" },
     { name = "py2puml", specifier = ">=0.10.0" },
@@ -3754,6 +3795,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b6/a5/607e533ed6c83ae1a696969b8e1c137dfebd5759a2e9682e26ff1b97740b/kombu-5.6.2.tar.gz", hash = "sha256:8060497058066c6f5aed7c26d7cd0d3b574990b09de842a8c5aaed0b92cc5a55", size = 472594, upload-time = "2025-12-29T20:30:07.779Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/0f/834427d8c03ff1d7e867d3db3d176470c64871753252b21b4f4897d1fa45/kombu-5.6.2-py3-none-any.whl", hash = "sha256:efcfc559da324d41d61ca311b0c64965ea35b4c55cc04ee36e55386145dace93", size = 214219, upload-time = "2025-12-29T20:30:05.74Z" },
+]
+
+[[package]]
+name = "kreuzberg"
+version = "4.8.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/20/5dd24291d7a527fd05ea6288d53c2c11d5b38fed099ba1f7ab4949acabe4/kreuzberg-4.8.2.tar.gz", hash = "sha256:acf2067a8b0b64b99658048f0b830b4e9c4f085de6f674abe12079b2e89a6401", size = 2374937, upload-time = "2026-04-10T08:07:15.523Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/68/0d/05da654aee8c1388f2c97a39c3b63fca0b7141571fed2a529d855d854c35/kreuzberg-4.8.2-cp310-abi3-macosx_14_0_arm64.whl", hash = "sha256:70fcb2d003a36a78c09d128a9e1ac2f31bcf38c9c01ca2d08445afce8f1d85aa", size = 58423542, upload-time = "2026-04-10T08:07:00.768Z" },
+    { url = "https://files.pythonhosted.org/packages/90/13/eb755e5eb06acb002aa99f618001d870cd614a9fec24ef10ff881b7e9075/kreuzberg-4.8.2-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:338f53afa1787de9b52aa6de4e7a4b2680333a8d89495d5585505c20af87b65b", size = 57380314, upload-time = "2026-04-10T08:07:04.409Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/2a/2279d15e46a504814a5b3ea5cf6389d8ecbcbd6691df753ce0f89f23a18c/kreuzberg-4.8.2-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:9f0ec11f96259d579fac1941bc4ad5114cfcd007d07d4e60b29664de1fd1bd1d", size = 60628097, upload-time = "2026-04-10T08:07:08.217Z" },
+    { url = "https://files.pythonhosted.org/packages/33/56/258d1d227620075d6f1a21cd7a5f0b80488d816598c3c9edcdf1d067a6eb/kreuzberg-4.8.2-cp310-abi3-win_amd64.whl", hash = "sha256:232b3bdbd30ca850e129f55ef8735be7696f91cc372ad29c77ef0539a13974de", size = 66916658, upload-time = "2026-04-10T08:07:12.619Z" },
 ]
 
 [[package]]
@@ -5840,6 +5893,24 @@ wheels = [
 ]
 
 [[package]]
+name = "optuna"
+version = "4.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "alembic" },
+    { name = "colorlog" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pyyaml" },
+    { name = "sqlalchemy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bf/9b/62f120fb2ecbc4338bee70c5a3671c8e561714f3aa1a046b897ff142050e/optuna-4.8.0.tar.gz", hash = "sha256:6f7043e9f8ecb5e607af86a7eb00fb5ec2be26c3b08c201209a73d36aff37a38", size = 482603, upload-time = "2026-03-16T04:59:58.659Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ac/24/7c731839566d30dc70556d9824ef17692d896c15e3df627bce8c16f753e1/optuna-4.8.0-py3-none-any.whl", hash = "sha256:c57a7682679c36bfc9bca0da430698179e513874074b71bebedb0334964ab930", size = 419456, upload-time = "2026-03-16T04:59:56.977Z" },
+]
+
+[[package]]
 name = "orjson"
 version = "3.11.5"
 source = { registry = "https://pypi.org/simple" }
@@ -6012,6 +6083,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5b/23/0bd339679059fb289e0752671b5eac63a472742d1de0035e13a27429e500/pdbpp-0.12.0.post1.tar.gz", hash = "sha256:cace9951d7414fe651141d240ab20e4509c8f97d20f7b142386d1bd1bb182d18", size = 75765, upload-time = "2026-01-19T10:56:55.026Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/28/f2/20fa391af27da4ef421832fb7d554748786efcc3b0da69a51e2ca66043d0/pdbpp-0.12.0.post1-py3-none-any.whl", hash = "sha256:8c62acd6adaa02f620d7d9cff689208a28019b6c05e6b894318f313e61fb1dc7", size = 30661, upload-time = "2026-01-19T10:56:53.638Z" },
+]
+
+[[package]]
+name = "pdf-oxide"
+version = "0.3.30"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/21/da3a00579bd044255f68d912cee5a050553cc7605d797b0400c996ceaa96/pdf_oxide-0.3.30.tar.gz", hash = "sha256:7f795ee6a1f1821040f4afbab4ce5be8c86160fb5814b55fcc9bfff76eb6c936", size = 1890606, upload-time = "2026-04-12T07:49:21.73Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/36/3b208773c5f45d2c1e278c13a26cd3283e7fcc5c50aa2f3c0398eb7b1840/pdf_oxide-0.3.30-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:1fe78664c4e14a30975a2e1057763a4285a570f8df3e9d1c7dc7103ef8532c59", size = 4557876, upload-time = "2026-04-12T07:49:06.133Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/4a/8afe7dd9f8e0808a52a1a8cfa541d66f49e13567e597a05b67f2ba7b9c2b/pdf_oxide-0.3.30-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:635c832016cb88b3289e9dd301b1096f26a16b5832f9b6c83b53a282bb121a62", size = 4299801, upload-time = "2026-04-12T07:49:08.271Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/9e/b29b060a7fb38ad2a50a4b153ec139c32f4edb0b2c7f6660b071451dd2ae/pdf_oxide-0.3.30-cp38-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:a837190a71d01ae42152c24a889f84287c4a3cb6c53390c0d36f15d786ff4ce1", size = 4493175, upload-time = "2026-04-12T07:49:10.132Z" },
+    { url = "https://files.pythonhosted.org/packages/55/c7/1ecdc7c0bf4e8aa0fc0410adcc28bd32f939fe0b55a087ad765c106831ab/pdf_oxide-0.3.30-cp38-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:8412d9ec3fd4c503f0ee52d43109b1530b200ef6f7467af08ef404d013049a40", size = 4756907, upload-time = "2026-04-12T07:49:12.196Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/06/b2719cc8a9ef21ba3f798726d240182deacd62d8d7dcf24afe7e87250889/pdf_oxide-0.3.30-cp38-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:da1cef6291aa1027273e9ff6471a42efa2b4e1d32feb9f1ff0e9fd12c6ddbd47", size = 4679266, upload-time = "2026-04-12T07:49:13.786Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/a7/52d1c0f61c93c8d70a6fa02809b3fa2f833c09c56053d723285d2dba77f7/pdf_oxide-0.3.30-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:1ce152bc3df9ae6f6e9485d3230dbaadc6e1dc190a977c98923abe48473d22c9", size = 4985562, upload-time = "2026-04-12T07:49:15.429Z" },
+    { url = "https://files.pythonhosted.org/packages/49/c9/7156df01d727db402692d5485d93bd4c3f74603f887fc6a4387772d660ab/pdf_oxide-0.3.30-cp38-abi3-win_amd64.whl", hash = "sha256:c54b49e028e6f69e7da776fb64ce5177b42664110f4f62b27a6e02e71bcbb228", size = 4699592, upload-time = "2026-04-12T07:49:18.508Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/ad/cfd983ed7639ca1db6c810aacbe2446fa570f6ef872e1110875d48f874ab/pdf_oxide-0.3.30-cp38-abi3-win_arm64.whl", hash = "sha256:867631bb5685b9f44597b7e3ed1838b73eb282e388cda6ef1a13f71ba0bf7af3", size = 4392921, upload-time = "2026-04-12T07:49:20.23Z" },
 ]
 
 [[package]]
@@ -6617,6 +6704,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f5/69/0c52c6058da586e173e48ef8f9c45bc805d9df78d5ad4d69467ff68694b5/pudb-2025.1.5.tar.gz", hash = "sha256:e6dedb81fc3c8cdcd66cf62e86337cb913570ebb2c994c9ab52012d059e086ad", size = 225714, upload-time = "2025-12-06T20:18:13.993Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/af/42f4877e71728dd59ed7080205f29eba16406f5783c29cdc850200138c80/pudb-2025.1.5-py3-none-any.whl", hash = "sha256:e40c69f102d534cc7b86020c0217e3d424ee81b14a229d068ac122089c301f59", size = 92638, upload-time = "2025-12-06T20:18:12.664Z" },
+]
+
+[[package]]
+name = "pulp"
+version = "3.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/1c/d880b739b841a8aa81143091c9bdda5e72e226a660aa13178cb312d4b27f/pulp-3.3.0.tar.gz", hash = "sha256:7eb99b9ce7beeb8bbb7ea9d1c919f02f003ab7867e0d1e322f2f2c26dd31c8ba", size = 16301847, upload-time = "2025-09-18T08:14:57.552Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/6c/64cafaceea3f99927e84b38a362ec6a8f24f33061c90bda77dfe1cd4c3c6/pulp-3.3.0-py3-none-any.whl", hash = "sha256:dd6ad2d63f196d1254eddf9dcff5cd224912c1f046120cb7c143c5b0eda63fae", size = 16387700, upload-time = "2025-09-18T08:14:53.368Z" },
 ]
 
 [[package]]
@@ -7326,6 +7422,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/74/b2/5db700e52554b8f025faa9c3c624c59f1f6c8841ba81ab97641b54322f16/pyright-1.1.408.tar.gz", hash = "sha256:f28f2321f96852fa50b5829ea492f6adb0e6954568d1caa3f3af3a5f555eb684", size = 4400578, upload-time = "2026-01-08T08:07:38.795Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/82/a2c93e32800940d9573fb28c346772a14778b84ba7524e691b324620ab89/pyright-1.1.408-py3-none-any.whl", hash = "sha256:090b32865f4fdb1e0e6cd82bf5618480d48eecd2eb2e70f960982a3d9a4c17c1", size = 6399144, upload-time = "2026-01-08T08:07:37.082Z" },
+]
+
+[[package]]
+name = "pyrsistent"
+version = "0.20.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ce/3a/5031723c09068e9c8c2f0bc25c3a9245f2b1d1aea8396c787a408f2b95ca/pyrsistent-0.20.0.tar.gz", hash = "sha256:4c48f78f62ab596c679086084d0dd13254ae4f3d6c72a83ffdf5ebdef8f265a4", size = 103642, upload-time = "2023-10-25T21:06:56.342Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/23/88/0acd180010aaed4987c85700b7cc17f9505f3edb4e5873e4dc67f613e338/pyrsistent-0.20.0-py3-none-any.whl", hash = "sha256:c55acc4733aad6560a7f5f818466631f07efc001fd023f34a6c203f8b6df0f0b", size = 58106, upload-time = "2023-10-25T21:06:54.387Z" },
 ]
 
 [[package]]
@@ -9164,6 +9269,21 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/01/e2/ee5e09f63504fc286539535d374d2eaa0e7d489b80f8f744bb3962aff22a/tree_sitter_go-0.25.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:5608e089d2a29fa8d2b327abeb2ad1cdb8e223c440a6b0ceab0d3fa80bdeebae", size = 66088, upload-time = "2025-08-29T06:20:22.336Z" },
     { url = "https://files.pythonhosted.org/packages/6e/b6/d9142583374720e79aca9ccb394b3795149a54c012e1dfd80738df2d984e/tree_sitter_go-0.25.0-cp310-abi3-win_amd64.whl", hash = "sha256:30d4ada57a223dfc2c32d942f44d284d40f3d1215ddcf108f96807fd36d53022", size = 48152, upload-time = "2025-08-29T06:20:23.089Z" },
     { url = "https://files.pythonhosted.org/packages/9e/00/9a2638e7339236f5b01622952a4d71c1474dd3783d1982a89555fc1f03b1/tree_sitter_go-0.25.0-cp310-abi3-win_arm64.whl", hash = "sha256:d5d62362059bf79997340773d47cc7e7e002883b527a05cca829c46e40b70ded", size = 46752, upload-time = "2025-08-29T06:20:24.235Z" },
+]
+
+[[package]]
+name = "tree-sitter-java"
+version = "0.23.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/dc/eb9c8f96304e5d8ae1663126d89967a622a80937ad2909903569ccb7ec8f/tree_sitter_java-0.23.5.tar.gz", hash = "sha256:f5cd57b8f1270a7f0438878750d02ccc79421d45cca65ff284f1527e9ef02e38", size = 138121, upload-time = "2024-12-21T18:24:26.936Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/21/b3399780b440e1567a11d384d0ebb1aea9b642d0d98becf30fa55c0e3a3b/tree_sitter_java-0.23.5-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:355ce0308672d6f7013ec913dee4a0613666f4cda9044a7824240d17f38209df", size = 58926, upload-time = "2024-12-21T18:24:12.53Z" },
+    { url = "https://files.pythonhosted.org/packages/57/ef/6406b444e2a93bc72a04e802f4107e9ecf04b8de4a5528830726d210599c/tree_sitter_java-0.23.5-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:24acd59c4720dedad80d548fe4237e43ef2b7a4e94c8549b0ca6e4c4d7bf6e69", size = 62288, upload-time = "2024-12-21T18:24:14.634Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/6c/74b1c150d4f69c291ab0b78d5dd1b59712559bbe7e7daf6d8466d483463f/tree_sitter_java-0.23.5-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9401e7271f0b333df39fc8a8336a0caf1b891d9a2b89ddee99fae66b794fc5b7", size = 85533, upload-time = "2024-12-21T18:24:16.695Z" },
+    { url = "https://files.pythonhosted.org/packages/29/09/e0d08f5c212062fd046db35c1015a2621c2631bc8b4aae5740d7adb276ad/tree_sitter_java-0.23.5-cp39-abi3-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:370b204b9500b847f6d0c5ad584045831cee69e9a3e4d878535d39e4a7e4c4f1", size = 84033, upload-time = "2024-12-21T18:24:18.758Z" },
+    { url = "https://files.pythonhosted.org/packages/43/56/7d06b23ddd09bde816a131aa504ee11a1bbe87c6b62ab9b2ed23849a3382/tree_sitter_java-0.23.5-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:aae84449e330363b55b14a2af0585e4e0dae75eb64ea509b7e5b0e1de536846a", size = 82564, upload-time = "2024-12-21T18:24:20.493Z" },
+    { url = "https://files.pythonhosted.org/packages/da/d6/0528c7e1e88a18221dbd8ccee3825bf274b1fa300f745fd74eb343878043/tree_sitter_java-0.23.5-cp39-abi3-win_amd64.whl", hash = "sha256:1ee45e790f8d31d416bc84a09dac2e2c6bc343e89b8a2e1d550513498eedfde7", size = 60650, upload-time = "2024-12-21T18:24:22.902Z" },
+    { url = "https://files.pythonhosted.org/packages/72/57/5bab54d23179350356515526fff3cc0f3ac23bfbc1a1d518a15978d4880e/tree_sitter_java-0.23.5-cp39-abi3-win_arm64.whl", hash = "sha256:402efe136104c5603b429dc26c7e75ae14faaca54cfd319ecc41c8f2534750f4", size = 59059, upload-time = "2024-12-21T18:24:24.934Z" },
 ]
 
 [[package]]
