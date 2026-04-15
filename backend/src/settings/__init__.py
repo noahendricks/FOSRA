@@ -77,7 +77,7 @@ class EmbeddingSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="EMBEDDING_")
 
     model_type: EmbedderType = Field(default=EmbedderType.FASTEMBED)
-    model_name: str = Field(default="BAAI/bge-m3")
+    model_name: str = Field(default="BAAI/bge-large-en-v1.5")
     batch_size: int = Field(default=32, ge=1, le=256)
     normalize: bool = Field(default=True)
 

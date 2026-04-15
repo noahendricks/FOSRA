@@ -74,6 +74,8 @@ class LoaderService:
                     from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
+                    )
+                    from backend.src.services.processing.utils.docling_regex import (
                         _clean_md,
                         _infer_chapters,
                     )
@@ -178,7 +180,7 @@ class LoaderService:
 
     # public method
     @staticmethod
-    def parse_user_paths(user_paths: list[str]):
+    def parse_user_paths(user_paths: list[str]) -> list[Doc]:
         files_as_docs = []
         loose_files = []
         for path in user_paths:
@@ -186,7 +188,7 @@ class LoaderService:
             if p.is_dir():
                 logger.info("Processing directory: {}", p.as_posix())
 
-                dir_files_list = LoaderService()._parse_directory(dir_path=p)
+                dir_files_list: list[Doc] = LoaderService()._parse_directory(dir_path=p)
 
                 files_as_docs.append(dir_files_list)
             if p.is_file():

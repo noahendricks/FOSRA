@@ -8,11 +8,7 @@ import tree_sitter_javascript as tsjs
 import tree_sitter_python as tspython
 import tree_sitter_rust as tsrust
 import tree_sitter_typescript as tsts
-from code_chunker import (
-    ChunkerConfig,
-    CodeChunker,
-    ParseResult,
-)
+from code_chunker import ChunkerConfig, CodeChunker, ParseResult
 from tree_sitter import Language, Parser, Query, QueryCursor
 
 from backend.src.domain.enums import GraphNodeType
@@ -26,6 +22,7 @@ from backend.src.domain.schemas.graph import (
     ResolvedImport,
     Signature,
 )
+from backend.src.services.processing.loader_service import LoaderService
 
 LANGUAGE_MODULES = {
     "python": tspython,
@@ -279,9 +276,9 @@ class CallGraphService:
         chunk_map = {c.name: c for c in parse_result.chunks if c.name}
 
         # Extract classes FIRST to build class membership map before function extraction
-        class_info: dict[
-            int, tuple[str, int, int]
-        ] = {}  # line_start -> (name, line_start, line_end)
+        class_info: dict[int, tuple[str, int, int]] = (
+            {}
+        )  # line_start -> (name, line_start, line_end)
         class_query = Query(lang, CLASS_QUERY_PATTERNS.get(language, ""))
         class_cursor = QueryCursor(class_query)
 

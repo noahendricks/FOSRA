@@ -16,12 +16,16 @@ if TYPE_CHECKING:
 
 
 class EmbedderProvider(Protocol):
+
     async def embed_chunks(
         self, chunks: list[Subsection], config: EmbedderConfig
-    ) -> list[Subsection]: ...
+    ) -> list[Subsection]:
+        ...
+
     async def embed_query(
         self, query: str, config: EmbedderConfig
-    ) -> EmbeddedQueries | None: ...
+    ) -> EmbeddedQueries | None:
+        ...
 
 
 class EmbeddedQueries(BaseModelFlex):
@@ -394,11 +398,6 @@ class NomicCodeProvider:
         return result
 
 
-# =============================================================================
-# Qwen3 Embedding Provider (Qwen/Qwen3-Embedding-0.6B: 0.6B, 1024d, Qwen3 base)
-# Uses task-specific prompts: "query" for queries (with instruct), no prompt for docs.
-# Supports MRL (Matryoshka Representation Learning) for custom dimensions 32-1024.
-# =============================================================================
 class Qwen3EmbeddingProvider:
     _cache: dict[str, SentenceTransformer] = {}
 
@@ -463,11 +462,6 @@ class Qwen3EmbeddingProvider:
         return self._cache[model_name]
 
 
-# =============================================================================
-# JinaCode Provider (jinaai/jina-code-embeddings-0.5b: 494M, 896d, Qwen2.5-Coder base)
-# Uses task-specific prompts via prompt_name: nl2code_query / nl2code_document
-# Supports asymmetric embedding (different prompts for query vs passage).
-# =============================================================================
 class JinaCodeProvider:
     _cache: dict[str, SentenceTransformer] = {}
 
@@ -531,9 +525,6 @@ class JinaCodeProvider:
         return self._cache[model_name]
 
 
-# =============================================================================
-# Provider Registry
-# =============================================================================
 _PROVIDERS: dict[str, type[EmbedderProvider]] = {
     "fastembed": FastEmbedProvider,
     "flag": FlagProvider,
@@ -712,65 +703,3 @@ class EmbedderService:
         except Exception:
             logger.opt(exception=True).error("Query embedding failed")
             return None
-
-
-# =============================================================================
-# Code-specific embedder config factory
-# =============================================================================
-
-
-def bge_m3_embedder_config() -> "EmbedderConfig":
-    """Return an EmbedderConfig configured for BGE-M3 via FlagProvider (1024d).
-
-    BGE-M3 outperforms Jina Code 0.5B on semantic code search, producing
-    30-100% higher cosine similarity for related function names while
-    maintaining competitive exact name match performance.
-    """
-    from backend.src.domain.enums import EmbedderType
-    from backend.src.settings import EmbedderConfig, get_settings
-
-    settings = get_settings()
-    return EmbedderConfig(
-        embedder_type=EmbedderType.FLAG,
-        dense_model="BAAI/bge-m3",
-        dense_dimensions=1024,
-        batch_size=settings.embedding.batch_size,
-        normalize=True,
-    )
-
-
-def jina_code_embedder_config() -> "EmbedderConfig":
-    """Return an EmbedderConfig configured for Jina Code Embeddings (494M, 896d)."""
-    from backend.src.domain.enums import EmbedderType
-    from backend.src.settings import EmbedderConfig, get_settings
-
-    settings = get_settings()
-    return EmbedderConfig(
-        embedder_type=EmbedderType.JINA_CODE,
-        dense_model="jinaai/jina-code-embeddings-0.5b",
-        dense_dimensions=896,
-        batch_size=settings.embedding.batch_size,
-        normalize=True,
-    )
-
-
-def qwen3_embedder_config() -> "EmbedderConfig":
-    """Return an EmbedderConfig configured for Qwen3 Embedding (0.6B, 1024d).
-
-    Qwen3-Embedding-0.6B outperforms JinaCode-0.5B on MTEB benchmarks
-    (64.33 vs 63.22 mean task score) with similar parameter count.
-    Uses 'query' prompt for queries (with instruct template) and no prompt for documents.
-    Supports Matryoshka Representation Learning for custom output dimensions.
-    """
-    from backend.src.domain.enums import EmbedderType
-    from backend.src.settings import EmbedderConfig, get_settings
-
-    settings = get_settings()
-    return EmbedderConfig(
-        embedder_type=EmbedderType.QWEN3_EMBEDDING,
-        dense_model="Qwen/Qwen3-Embedding-0.6B",
-        dense_dimensions=1024,
-        batch_size=8,
-        normalize=True,
-        cuda_enabled=True,
-    )

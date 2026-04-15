@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from backend.src.domain.enums import GraphNodeType
-from backend.src.domain.schemas.graph import GraphQueryResult
+from backend.src.domain.schemas.graph import CallEdge, GraphQueryResult
 
 if TYPE_CHECKING:
     from falkordb import Graph

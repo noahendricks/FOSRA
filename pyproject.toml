@@ -131,12 +131,13 @@ dependencies = [
   "icecream>=2.1.10",
   "langchain-openai>=1.1.12",
   "vulture>=2.16",
-  "kreuzberg>=4.8.2",
   "pulp>=3.3.0",
   "optuna>=4.8.0",
   "semchunk>=2.2.2",
   "astchunk>=0.1.0",
   "pdf-oxide>=0.3.30",
+  "docling-hierarchical-pdf>=0.1.6",
+  "pyright>=1.1.408",
 ]
 
 [project.scripts]

@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 from backend.src.domain.enums import RerankerType
 from backend.src.domain.schemas.graph import CodeNode
 
-
 # =============================================================================
 # FlashRank reranker
 # =============================================================================

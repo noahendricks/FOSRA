@@ -31,12 +31,8 @@ from backend.src.api.schemas.session_api_schemas import (
     SessionTime,
     SessionUpdateRequest,
 )
-from backend.src.api.schemas.tui_control_schemas import (
-    TextPart as LegacyTextPart,
-)
-from backend.src.api.schemas.tui_control_schemas import (
-    UIMessage,
-)
+from backend.src.api.schemas.tui_control_schemas import TextPart as LegacyTextPart
+from backend.src.api.schemas.tui_control_schemas import UIMessage
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_MODEL_ID,
     DEFAULT_PROVIDER_ID,
@@ -124,6 +120,7 @@ def _build_tui_message(msg: Message, session_id: str) -> MessageWithParts:
 
 
 class SessionService:
+
     @staticmethod
     async def create_session(
         session: AsyncSession,

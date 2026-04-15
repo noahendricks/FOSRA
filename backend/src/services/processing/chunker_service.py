@@ -130,6 +130,8 @@ class ChunkerService:
         tasks: list[Task[list[Subsection]]] = []
 
         async with asyncio.TaskGroup() as group:
+            print(type(docs))
+            print(type(docs[0]))
             for doc in docs:
                 doc_type = "PDF" if doc.is_pdf else "code" if doc.is_code else "text"
                 logger.debug("Processing {} document: {}", doc_type, doc.id)
