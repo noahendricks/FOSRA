@@ -35,16 +35,10 @@ class COMPOUND(StrEnum):
     TRY = "try_statement"
     WITH = "with_statement"
     MATCH = "match_statement"
-    CASE = "case_clause"
-    ELIF = "elif_clause"
-    ELSE = "else_clause"
-    EXCEPT = "except_clause"
-    FINALLY = "finally_clause"
 
 
 # Simple statements
 class SIMPLE(StrEnum):
-    EXPRESSION = "expression_statement"
     RETURN = "return_statement"
     RAISE = "raise_statement"
     ASSERT = "assert_statement"
@@ -58,6 +52,10 @@ class SIMPLE(StrEnum):
     BREAK = "break_statement"
     CONTINUE = "continue_statement"
     PASS = "pass_statement"
+
+
+class COMMENT(StrEnum):
+    COMMENT = "comment"
 
 
 # Expressions (callable/literal)
@@ -80,7 +78,10 @@ class EXPR(StrEnum):
     AWAIT = "await"
     UNARY = "unary_operator"
     CONCAT_STRING = "concatenated_string"
-    PARENTHESIZED = "parenthesized_expression"
+    ARG_LIST = "argument_list"
+    KW_ARG = "keyword_argument"
+    DOTTED_NAME = "dotted_name"
+    IDENTIFIER = "identifier"
 
 
 # Literals
@@ -96,12 +97,7 @@ class LITERAL(StrEnum):
 # Structural - building blocks for imports, patterns, etc.
 class STRUCT(StrEnum):
     IDENTIFIER = "identifier"
-    PARAMETERS = "parameters"
-    BLOCK = "block"
-    WITH_ITEM = "with_item"
     TYPE_PARAM = "type_parameter"
-    ARG_LIST = "argument_list"
-    PAIR = "pair"
     DOTTED_NAME = "dotted_name"
     KW_IDENTIFIER = "keyword_identifier"
     SLICE = "slice"
@@ -109,8 +105,6 @@ class STRUCT(StrEnum):
     PATTERN_LIST = "pattern_list"
     GENERIC_TYPE = "generic_type"
     UNION_TYPE = "union_type"
-    FOR_IN = "for_in_clause"
-    IF_CLAUSE = "if_clause"
 
 
 # Pattern types - for match statements (Python 3.10+)
@@ -126,7 +120,7 @@ class PATTERN(StrEnum):
 # =============================================================================
 
 IMPORT_TYPES: set[str] = {IMPORT.DEFAULT, IMPORT.FROM, IMPORT.FUTURE}
-CLASS_TYPES: set[str] = {DEF.CLASS, DEF.CLASS_DECORATED}
+CLASS_TYPES: set[str] = {DEF.CLASS}
 FUNCTION_TYPES: set[str] = {DEF.FUNCTION}
 DEFINITION_TYPES: set[str] = CLASS_TYPES | FUNCTION_TYPES
 
@@ -139,7 +133,6 @@ COMPOUND_TYPES: set[str] = {
     COMPOUND.MATCH,
 }
 SIMPLE_TYPES: set[str] = {
-    SIMPLE.EXPRESSION,
     SIMPLE.RETURN,
     SIMPLE.RAISE,
     SIMPLE.ASSERT,
@@ -154,7 +147,8 @@ SIMPLE_TYPES: set[str] = {
     SIMPLE.CONTINUE,
     SIMPLE.PASS,
 }
-STATEMENT_TYPES: set[str] = IMPORT_TYPES | SIMPLE_TYPES
+COMMENT_TYPES: set[str] = {COMMENT.COMMENT}
+STATEMENT_TYPES: set[str] = IMPORT_TYPES | SIMPLE_TYPES | COMMENT_TYPES
 
 EXPRESSION_TYPES: set[str] = {
     EXPR.CALL,
@@ -175,7 +169,9 @@ EXPRESSION_TYPES: set[str] = {
     EXPR.AWAIT,
     EXPR.UNARY,
     EXPR.CONCAT_STRING,
-    EXPR.PARENTHESIZED,
+    EXPR.ARG_LIST,
+    EXPR.KW_ARG,
+    EXPR.DOTTED_NAME,
 }
 LITERAL_TYPES: set[str] = {
     LITERAL.STRING,
@@ -187,12 +183,7 @@ LITERAL_TYPES: set[str] = {
 }
 STRUCTURAL_TYPES: set[str] = {
     STRUCT.IDENTIFIER,
-    STRUCT.PARAMETERS,
-    STRUCT.BLOCK,
-    STRUCT.WITH_ITEM,
     STRUCT.TYPE_PARAM,
-    STRUCT.ARG_LIST,
-    STRUCT.PAIR,
     STRUCT.DOTTED_NAME,
     STRUCT.KW_IDENTIFIER,
     STRUCT.SLICE,
@@ -200,8 +191,6 @@ STRUCTURAL_TYPES: set[str] = {
     STRUCT.PATTERN_LIST,
     STRUCT.GENERIC_TYPE,
     STRUCT.UNION_TYPE,
-    STRUCT.FOR_IN,
-    STRUCT.IF_CLAUSE,
 }
 PATTERN_TYPES: set[str] = {
     PATTERN.CLASS,
@@ -209,6 +198,11 @@ PATTERN_TYPES: set[str] = {
     PATTERN.LIST,
     PATTERN.TUPLE,
 }
+
+
+def is_comment(node_type: str) -> bool:
+    return node_type in COMMENT_TYPES
+
 
 ALL_TYPES: set[str] = (
     {MODULE.MODULE}
@@ -221,6 +215,7 @@ ALL_TYPES: set[str] = (
     | LITERAL_TYPES
     | STRUCTURAL_TYPES
     | PATTERN_TYPES
+    | COMMENT_TYPES
 )
 
 
@@ -242,6 +237,7 @@ class T:
     STRUCTURAL = STRUCTURAL_TYPES
     PATTERN = PATTERN_TYPES
     MODULE = {MODULE.MODULE}
+    COMMENT = COMMENT_TYPES
 
 
 def get_type(node_type: str) -> str | None:
@@ -320,6 +316,7 @@ __all__ = [
     "LITERAL",
     "STRUCT",
     "PATTERN",
+    "COMMENT",
     # Namespace
     "T",
     # Sets
@@ -334,6 +331,7 @@ __all__ = [
     "LITERAL_TYPES",
     "STRUCTURAL_TYPES",
     "PATTERN_TYPES",
+    "COMMENT_TYPES",
     "ALL_TYPES",
     # Helpers
     "get_type",
@@ -344,6 +342,7 @@ __all__ = [
     "is_compound",
     "is_simple",
     "is_statement",
+    "is_comment",
     "is_expression",
     "is_literal",
     "is_structural",
@@ -384,6 +383,17 @@ class Range(DomainStruct):
         )
 
 
+class Comment(DomainStruct):
+    text: str
+    row: int
+    is_inline: bool
+
+
+class Docstring(DomainStruct):
+    content: str
+    path: str
+
+
 class Node(DomainStruct):
     identifier: str
     text: str | None
@@ -391,7 +401,8 @@ class Node(DomainStruct):
     range: Range
     type: str = ""
     parent_id: str | None = None
-    children: list[Node] | None = None
+    children: list[Any] = []
+    comments: list[Comment] = []
 
 
 # treesitter_types.py | import_statement{annotations}
@@ -408,7 +419,7 @@ class ImportNode(Node):
 
 
 class SimpleNode(Node):
-    type: str = SIMPLE.EXPRESSION
+    type: str = ""
     statement_type: str = ""
 
 
@@ -447,7 +458,7 @@ class ExpressionStatement(SimpleNode):
 
 
 class Block(DomainStruct):
-    statements: list[Any] = []
+    statements: list[Node | Any] = []  # SimpleNode, CompoundNode, or other typed nodes
 
 
 class Parameters(DomainStruct):
@@ -481,7 +492,7 @@ class FunctionNode(SimpleNode):
     decorators: list[str] = []
     receiver: str | None = None
     containing_class: str | None = None
-    docstring: str | None = None
+    docstring: Docstring | None = None
 
 
 class DecoratedDefinition(SimpleNode):
@@ -493,7 +504,8 @@ class ClassDefinition(Node):
     name: str = ""
     superclasses: list[str] | None = None
     body: Block | None = None
-    docstring: str | None = None
+    docstring: Docstring | None = None
+    decorators: list[str] = []
     methods: list[str] = []
 
 
@@ -585,15 +597,20 @@ class ExceptHandler(DomainStruct):
     body: Block | None = None
 
 
+class WithItem(DomainStruct):
+    value: str = ""
+    alias: str | None = None
+
+
 class WithStatement(Node):
-    items: list[str] = []
+    items: list[WithItem] = []
     body: Block | None = None
     is_async: bool = False
 
 
 class MatchStatement(Node):
     subject: Any = None
-    cases: list[Any] = []
+    cases: list[CaseClause] = []
 
 
 class CaseClause(DomainStruct):
@@ -659,6 +676,8 @@ class ReturnStatement(SimpleNode):
 class IfStatement(Node):
     condition: Any = None
     body: Block | None = None
+    elif_body: Block | None = None
+    else_body: Block | None = None
 
 
 class CompoundNode(Node):

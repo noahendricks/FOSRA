@@ -33,7 +33,6 @@ _DEFAULT_SPLIT_MAX = 3500
 
 
 class DoclingParseError(Exception):
-
     def __init__(
         self,
         file_path: str | Path,
@@ -97,9 +96,9 @@ def _build_section_tree(flat: list[Section], doc_id: str) -> list[Section]:
     else:
         # STRATEGY B — pdf / ambiguous
         prefix_map: dict[str, Section] = {}  # "2.3" → section
-        depth_stack2: dict[int, Section] = (
-            {}
-        )  # depth → most recent numerically-anchored section
+        depth_stack2: dict[
+            int, Section
+        ] = {}  # depth → most recent numerically-anchored section
         for sec in flat:
             heading = sec.heading or ""
             m = _NUMERIC_SECTION_RE.match(heading)
