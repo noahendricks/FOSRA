@@ -48,6 +48,7 @@ class LoaderService:
 
                     try:
                         d = DoclingLoader.parse_file_sync(file, mime_type=mime_type)
+
                         docs.append(d)
                         logger.debug(
                             "created (docling) {}: {}: {}",

@@ -8,6 +8,18 @@ import tree_sitter as ts
 from backend.src.storage.utils.converters import DomainStruct
 
 
+# Graph node types for flattened storage
+class GraphNodeType(StrEnum):
+    FILE = "File"
+    MODULE = "Module"
+    CLASS = "Class"
+    FUNCTION = "Function"
+    METHOD = "Method"
+    CONSTANT = "Constant"  # module-level assignments
+    IMPORT = "Import"  # import statements as nodes
+    TYPE_ALIAS = "TypeAlias"  # type: Foo = ...
+
+
 # Module
 class MODULE(StrEnum):
     MODULE = "module"
@@ -25,6 +37,15 @@ class DEF(StrEnum):
     CLASS = "class_definition"
     CLASS_DECORATED = "decorated_definition"
     FUNCTION = "function_definition"
+
+
+# Module-level definitions
+class MODULE_DEF(StrEnum):
+    CONSTANT = "assignment"  # module-level assignments
+    TYPE_ALIAS = "type_alias_statement"
+
+
+MODULE_DEF_TYPES: set[str] = {MODULE_DEF.CONSTANT, MODULE_DEF.TYPE_ALIAS}
 
 
 # Compound statements
@@ -228,6 +249,7 @@ class T:
     """Namespace for tree-sitter type constants. Usage: T.IMPORT, T.CLASS, etc."""
 
     IMPORT = IMPORT_TYPES
+    DEF = [CLASS_TYPES, FUNCTION_TYPES]
     CLASS = CLASS_TYPES
     FUNCTION = FUNCTION_TYPES
     COMPOUND = COMPOUND_TYPES
@@ -306,10 +328,13 @@ def is_dotted_name(node_type: str) -> bool:
 
 
 __all__ = [
+    # Graph node types
+    "GraphNodeType",
     # Hierarchical enums
     "MODULE",
     "IMPORT",
     "DEF",
+    "MODULE_DEF",
     "COMPOUND",
     "SIMPLE",
     "EXPR",
@@ -324,6 +349,7 @@ __all__ = [
     "CLASS_TYPES",
     "FUNCTION_TYPES",
     "DEFINITION_TYPES",
+    "MODULE_DEF_TYPES",
     "COMPOUND_TYPES",
     "SIMPLE_TYPES",
     "STATEMENT_TYPES",
@@ -462,7 +488,7 @@ class Block(DomainStruct):
 
 
 class Parameters(DomainStruct):
-    params: list[Any] = []
+    params: dict[str, str] = {}
 
 
 class Parameter(DomainStruct):
