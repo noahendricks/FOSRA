@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, TypedDict
 
+from backend.src.services.processing.callgraph_service import CallGraphService
 from falkordb import FalkorDB
 from loguru import logger
 from sqlalchemy import select
@@ -11,9 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.src.domain.enums import FileSourceType
 from backend.src.domain.schemas.graph import ResolvedImport
-from backend.src.settings import EmbedderConfig
-from backend.src.services.processing.callgraph_service import CallGraphService
 from backend.src.services.retrieval.graph_service import GraphService
+from backend.src.settings import EmbedderConfig
 from backend.src.storage.models import DocORM
 
 from .broker import broker
@@ -48,17 +48,10 @@ async def ingest_codebase(
     session_factory: async_sessionmaker[AsyncSession],
     recursive: bool = True,
 ) -> IngestionStats:
-    """
-    ingest a codebase directory into falkordb.
-
-    - registers files in postgres docs table
-    - extracts code graph (nodes, call edges, inheritance edges)
-    - upserts to falkordb with embeddings
-    """
     callgraph_service = CallGraphService()
     graph_service = GraphService(falkordb_client, graph_name=repo_name or "codebase")
 
-    graph_service.create_indexes(embedder_config)
+    graph_service.create_indexes()
 
     stats: IngestionStats = {
         "files_processed": 0,

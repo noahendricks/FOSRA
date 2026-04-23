@@ -1,5 +1,3 @@
-"""Shared constants for the runner module."""
-
 _TOOL_NAME_MAP: dict[str, str] = {
     "BashTool": "bash",
     "Bash": "bash",

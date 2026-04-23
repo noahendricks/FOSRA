@@ -1,14 +1,3 @@
-"""Subagent service for the agentic retrieval loop.
-
-Each subagent iteration:
-1. Receives: original query + current checklist + accumulated context
-2. Assesses: which checklist items are answered by current context
-3. Plans: targeted retrieval queries for uncovered items
-4. Dies: no conversation history carried forward
-
-Uses LLM tool calling / structured output for reliable JSON emission.
-"""
-
 from __future__ import annotations
 
 import json
@@ -50,22 +39,6 @@ class Subagent:
         llm_config: LLMConfig,
         max_iterations: int = 5,
     ) -> SubagentResult:
-        """Run a single subagent iteration.
-
-        Args:
-            original_query: The user's original question
-            checklist: Current checklist state
-            context: Accumulated retrieval context
-            iteration: Current loop iteration (1-based)
-            llm_config: LLM configuration
-            max_iterations: Maximum allowed iterations
-
-        Returns:
-            SubagentResult with updated checklist and retrieval queries
-        """
-
-        llm: BaseChatModel = build_llm(llm_config)
-
         # current checklist state
         checklist_json = json.dumps(
             [

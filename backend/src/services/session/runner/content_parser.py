@@ -1,10 +1,3 @@
-"""
-content_parser — parses AIMessageChunk content into ContentDelta list.
-
-This module extracts content parsing logic from stream_consumer.py as a pure,
-stateless/side-effect-free set of functions that return ContentDelta lists.
-"""
-
 from __future__ import annotations
 
 import time
@@ -253,12 +246,6 @@ def parse_string_content(content: str, state: ParseState) -> list[ContentDelta]:
 
 
 def parse_chunk_content(msg: AIMessageChunk, state: ParseState) -> list[ContentDelta]:
-    """top-level content parser — routes to appropriate parser based on content type.
-
-    routes based on:
-    - If content is a list → parse_content_blocks
-    - If content is a string → parse_string_content
-    """
     deltas: list[ContentDelta] = []
 
     log.bind(

@@ -1,21 +1,3 @@
-"""FOSRA agent creation using DeepAgents.
-
-Creates a DeepAgent wrapping the user's configured LLM with the
-``search_knowledge_base`` retrieval tool.  Built-in deepagents
-middleware (FilesystemMiddleware, TodoListMiddleware, Summarization)
-is always applied automatically.
-
-Usage::
-
-    agent, result_store = create_fosra_agent(user_prefs)
-    async for msg, meta in agent.astream(
-        {"messages": lc_messages},
-        stream_mode="messages",
-    ):
-        ...
-    # After streaming, result_store.chunks has the retrieved chunks.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -49,33 +31,6 @@ def create_fosra_agent(
     checkpointer: Any | None = None,
     llm_config: LLMConfig | None = None,
 ) -> tuple[CompiledStateGraph[Any, Any, Any, Any], RetrievalResultStore]:
-    """Create a FOSRA agent with retrieval capabilities.
-
-    Parameters
-    ----------
-    user_prefs:
-        The current user's preferences (LLM configs, embedder, vector
-        store, reranker settings).
-    system_prompt:
-        Custom system prompt.  If ``None``, uses
-        ``FOSRA_AGENT_SYSTEM_PROMPT`` from prompts module.
-    backend:
-        Optional filesystem backend for coding mode. When provided,
-        the agent gets read/write/edit/grep/glob tools.
-    llm_config:
-        Explicit LLM configuration. When provided, takes priority over
-        user_prefs chain. Used when the TUI sends providerID/modelID.
-
-    Returns
-    -------
-    tuple[CompiledStateGraph, RetrievalResultStore]
-        The compiled agent and a mutable store that the retrieval tool
-        populates with chunks.  The caller can read
-        ``result_store.chunks`` after the agent finishes to build
-        source-group SSE events.
-    """
-
-    # -- Resolve prompt ------------------------------------------------
     if system_prompt is None:
         from backend.src.services.session.utils.prompts import (
             FOSRA_AGENT_SYSTEM_PROMPT,
@@ -83,8 +38,6 @@ def create_fosra_agent(
 
         system_prompt = FOSRA_AGENT_SYSTEM_PROMPT
 
-    # -- Resolve LLM ---------------------------------------------------
-    # explicit config from TUI prompt request takes priority
     if llm_config is None:
         for cfg in (
             user_prefs.llm_default,
@@ -122,15 +75,6 @@ def create_fosra_agent(
         user_prefs.embedder or EmbedderConfig(),
     )
 
-    # -- Create agent --------------------------------------------------
-    #
-    # We pass the ChatLiteLLM instance directly as the model.
-    # deepagents accepts any BaseChatModel and will bind tools to it.
-    #
-    # Built-in middleware (TodoList, Filesystem, Summarization, etc.)
-    # is applied automatically — we get read_file, ls, glob, grep
-    # for free.  The only custom tool we add is retrieval.
-    #
     logger.info(
         "Creating FOSRA agent with model={}/{} backend={}",
         llm_config.provider,
@@ -156,8 +100,6 @@ def create_fosra_agent(
         model=f"{llm_config.provider}:{llm_config.model}",
     )
 
-    # use create_deep_agent's dedicated params instead of manual middleware
-    # to avoid duplicates (it auto-creates Summarization, Skills, SubAgent, etc.)
     kwargs: dict[str, Any] = {
         "model": llm,
         "tools": [retrieval_tool],

@@ -5,12 +5,6 @@ from backend.src.settings import LLMConfig
 
 
 def extract_user_text(prompt_request: Any) -> str:
-    """Extract concatenated user text from prompt_request.parts.
-
-    Handles both dict parts ({"type": "text", "text": "..."}) and
-    object parts (part.type == "text" and part.text).
-    Returns empty string if no text found.
-    """
     user_text = ""
     for part in prompt_request.parts:
         if isinstance(part, dict):
@@ -26,11 +20,6 @@ def extract_user_text(prompt_request: Any) -> str:
 
 
 def extract_provider_model(prompt_request: Any) -> tuple[str | None, str | None]:
-    """Extract provider_id and model_id from prompt_request.
-
-    Checks prompt_request.providerID/modelID first, then falls back to
-    prompt_request.model.providerID/modelID.
-    """
     provider_id = getattr(prompt_request, "providerID", None)
     model_id = getattr(prompt_request, "modelID", None)
     if not provider_id or not model_id:
@@ -46,11 +35,6 @@ def resolve_llm_config(
     model_id: str,
     slog: Any,
 ) -> "LLMConfig | None":
-    """Build LLMConfig from TUI-selected provider/model via provider registry.
-
-    Looks up provider in _build_providers(), extracts api_key from env,
-    returns LLMConfig or None if not found.
-    """
     import os
 
     for provider in _build_providers():

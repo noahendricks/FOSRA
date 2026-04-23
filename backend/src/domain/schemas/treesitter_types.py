@@ -17,7 +17,7 @@ class GraphNodeType(StrEnum):
     METHOD = "Method"
     CONSTANT = "Constant"  # module-level assignments
     IMPORT = "Import"  # import statements as nodes
-    TYPE_ALIAS = "TypeAlias"  # type: Foo = ...
+    TYPE_ALIAS = "TypeAlias"  # type: ignore
 
 
 # Module

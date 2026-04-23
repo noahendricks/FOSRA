@@ -140,16 +140,12 @@ async def run_agent_with_events(
                 subgraphs=True,
             )
 
-            # breakpoint()
-
             result = await consume_stream(
                 formatter,
                 astream_iterator,
                 assistant_msg_id,
                 text_part_id,
             )
-
-            # breakpoint()
 
             full_text = result.full_text
             reasoning_part_id = result.reasoning_part_id

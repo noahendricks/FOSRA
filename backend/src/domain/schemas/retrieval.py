@@ -1,15 +1,3 @@
-"""Domain schemas for the evolved retrieval pipeline.
-
-Implements the query expansion + agentic retrieval loop pattern from FULL.md:
-    expand_query → initial_retrieve → agentic_loop → rerank → END
-
-Key types:
-    - ChecklistItem: A single coverage question with answered status
-    - QueryExpansion: rewritten query + checklist
-    - RetrievalQuery: Targeted retrieval command from subagent
-    - SubagentResult: Subagent output (checklist update + retrieval queries)
-"""
-
 from __future__ import annotations
 
 from enum import StrEnum

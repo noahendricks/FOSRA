@@ -1,15 +1,3 @@
-"""Model Registry for persistent model loading.
-
-Models are loaded once at startup and cached for the lifetime of the process.
-This eliminates cold-start latency on first request and provides a single
-source of truth for model instances.
-
-Usage:
-    registry = ModelRegistry.get_instance()
-    embedder = registry.get_embedder(embedder_config)
-    llm = registry.get_llm(llm_config)
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -35,12 +23,6 @@ class AllEmbedders:
 
 
 class ModelRegistry:
-    """Singleton registry for persistent model instances.
-
-    Thread-safe model caching with lazy initialization.
-    Models are keyed by configuration hash to support multiple configs.
-    """
-
     _instance: "ModelRegistry | None" = None
     _lock: Lock = Lock()
 
@@ -76,14 +58,6 @@ class ModelRegistry:
         return f"{config.provider}:{config.model}:{config.api_base or 'default'}"
 
     async def get_embedder(self, config: EmbedderConfig) -> AllEmbedders:
-        """Get or create embedder instance.
-
-        Args:
-            config: Embedder configuration
-
-        Returns:
-            AllEmbedders container with dense/sparse/late models
-        """
         cache_key = self._embedder_cache_key(config)
 
         if cache_key in self._embedders:
@@ -149,14 +123,6 @@ class ModelRegistry:
         return embedders
 
     async def get_llm(self, config: LLMConfig) -> "BaseChatModel":
-        """Get or create LLM instance.
-
-        Args:
-            config: LLM configuration
-
-        Returns:
-            ChatLiteLLM instance
-        """
         from backend.src.services.session.utils.llm_utils import build_llm
 
         cache_key = self._llm_cache_key(config)
@@ -175,14 +141,6 @@ class ModelRegistry:
             return llm
 
     async def get_reranker(self, model_name: str) -> Any:
-        """Get or create reranker instance.
-
-        Args:
-            model_name: Reranker model name
-
-        Returns:
-            FlashRank Ranker instance
-        """
         from flashrank import Ranker
 
         if model_name in self._rerankers:

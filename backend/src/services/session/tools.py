@@ -1,15 +1,3 @@
-"""Tools for the FOSRA DeepAgent.
-
-Provides a factory to create ``search_knowledge_base`` tool that wraps
-the LangGraph retrieval pipeline. The factory captures user-specific
-configs via closures so each tool instance is request-scoped.
-
-Supports both vector (document) and graph (code structure) retrieval.
-
-Built-in deepagents middleware already provides ``read_file``, ``ls``,
-``glob``, and ``grep`` — so we don't create those here.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -33,11 +21,6 @@ if TYPE_CHECKING:
 
 @dataclass
 class RetrievalResultStore:
-    """Mutable container populated by retrieval tools so the caller
-    (workspace route) can access the retrieved items for building
-    source-group SSE events.
-    """
-
     items: list[AccumulatedItem] = field(default_factory=list)
 
 
@@ -56,23 +39,6 @@ def create_retrieval_tool(
     feedback_b: float = 1.35,
     feedback_c: float = 0.59,
 ):
-    """Create a ``search_knowledge_base`` tool bound to the given configs.
-
-    Parameters
-    ----------
-    falkordb_client:
-        Optional FalkorDB client for graph-based code retrieval.
-    result_store:
-        If provided, the tool writes its retrieved items into this
-        store after each invocation so the caller can forward them to
-        the frontend.
-    rrf_parent_weight:
-        Weight for parent results in weighted RRF fusion (default 3.0).
-    rrf_chunk_weight:
-        Weight for chunk results in weighted RRF fusion (default 1.0).
-    feedback_a, feedback_b, feedback_c:
-        Naive relevance feedback formula parameters (default 0.24, 1.35, 0.59).
-    """
     from backend.src.services.session.retrieval_pipeline import (
         build_retrieval_pipeline,
     )
@@ -97,24 +63,6 @@ def create_retrieval_tool(
         query: str,
         target: Literal["vector", "graph", "both"] = "both",
     ) -> str:
-        """Search the user's personal knowledge base for information.
-
-        Use this tool for ANY question that requires looking up documents,
-        notes, code, or previously ingested content. Supports both vector
-        (documents) and graph (code structure) retrieval.
-
-        Args:
-            query: Natural language question. Be specific and include key
-                   terms, function names, or file names when known.
-            target: Where to search:
-                - "vector": Search documents and notes (Qdrant)
-                - "graph": Search code structure and relationships (FalkorDB)
-                - "both": Search both sources (default)
-
-        Returns:
-            Formatted context from the knowledge base with citation IDs.
-            Use citation IDs in ``[citation:N]`` format when referencing.
-        """
         logger.info("Retrieval tool invoked: query='{}', target={}", query, target)
 
         result = await pipeline.ainvoke({"user_query": query})
@@ -141,19 +89,6 @@ def create_graph_tool(
     embedder_config: "EmbedderConfig",
     result_store: RetrievalResultStore | None = None,
 ):
-    """Create a ``search_code_graph`` tool for structural code queries.
-
-    This tool is for querying code structure relationships:
-    - Who calls a function?
-    - What does a function call?
-    - Inheritance chains
-    - File imports
-
-    Args:
-        falkordb_client: FalkorDB client for graph queries
-        embedder_config: Embedder config for semantic graph search
-        result_store: Optional store for retrieved items
-    """
     from backend.src.services.retrieval.graph_retriever import GraphRetriever
     from backend.src.services.retrieval.graph_service import GraphService
 
@@ -168,23 +103,6 @@ def create_graph_tool(
         name: str,
         depth: int = 3,
     ) -> str:
-        """Query the code structure graph for relationships.
-
-        Use this tool to understand code structure and dependencies:
-        - Find who calls a function ("callers")
-        - Find what a function calls ("callees")
-        - Trace full call chains ("call_chain")
-        - Find class inheritance ("inheritance")
-        - Get all symbols in a file ("file_symbols")
-
-        Args:
-            query_type: Type of structural query to run
-            name: Function or class name to query
-            depth: Maximum traversal depth (default 3)
-
-        Returns:
-            Formatted results showing code relationships.
-        """
         logger.info(
             "Graph tool invoked: type={}, name={}, depth={}",
             query_type,

@@ -2,21 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from backend.src.domain.enums import GraphNodeType
+from backend.src.domain.schemas.treesitter_types import GraphNodeType
 from backend.src.storage.utils.converters import DomainStruct
 
 if TYPE_CHECKING:
     from backend.src.domain.schemas.retrieval import AccumulatedItem
-
-
-class Parameter(DomainStruct):
-    """a single function parameter."""
-
-    name: str
-    type_annotation: str | None = None
-    default_value: str | None = None
-    is_variadic: bool = False
-    is_keyword: bool = False
 
 
 class Signature(DomainStruct):
