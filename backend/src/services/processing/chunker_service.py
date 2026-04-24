@@ -165,15 +165,13 @@ class ChunkerService:
     @staticmethod
     async def _chunk_code(doc: Doc, config: "ChunkerConfig") -> list[Subsection]:
         """handle code file chunking via tree-sitter."""
-        from backend.src.services.processing.code_chunker import extract_code_chunks
-        from backend.src.services.processing.utils.loader import code_mimes
+        from backend.src.services.processing.utils.parse_utils import code_mimes
+        from backend.src.services.processing.code_ingest import parse_file
 
         language = code_mimes[doc.metadata.mime_type]
-        return extract_code_chunks(  # type: ignore[return-value]
-            code=doc.page_content,
-            language=language,
-            source_file=doc.metadata.source,
-        )
+        # TODO: parse_file currently upserts to graph DB; extract chunking separately
+        # so this can return Subsections for consistent pipeline
+        raise NotImplementedError("code chunking not yet wired into the chunker pipeline")
 
     @staticmethod
     async def _chunk_structured(
@@ -216,7 +214,7 @@ class ChunkerService:
         hi_structurer_ref: list[object],
     ) -> list[Subsection]:
         """run HiChunk neural chunking and convert result to subsections."""
-        from backend.src.services.processing.hi_chunk import HiChunkStructurer
+        from backend.src.services.processing.utils.hichunk import HiChunkStructurer
 
         if not hi_structurer_ref:
             hi_structurer_ref.append(HiChunkStructurer(config=config))

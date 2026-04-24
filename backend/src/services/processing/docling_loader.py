@@ -21,7 +21,7 @@ from backend.src.services.processing.utils.docling_regex import (
     extract_md_sections_by_heading,
     extract_text_sections,
 )
-from backend.src.services.processing.utils.loader import text_mimes
+from backend.src.services.processing.utils.parse_utils import text_mimes
 from backend.src.settings.fosra_paths import fosra_paths
 from backend.src.storage.utils.converters import DomainStruct, ulid_factory
 
@@ -52,9 +52,6 @@ class DoclingIngestionResult(DomainStruct, kw_only=True):
     page_content_length: int
     error: str | None = None
     failed_pages: list[int] = []
-
-
-# ─── section hierarchy builder ─────────────────────────────────────────────
 
 
 def _build_section_tree(flat: list[Section], doc_id: str) -> list[Section]:

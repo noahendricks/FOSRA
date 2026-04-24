@@ -1,13 +1,8 @@
-from typing import Any
 import json
+from typing import Any
 
 
 def _unwrap_json_text(text: str) -> str:
-    """strip json wrapping from llm output that should be plain text.
-
-    some models wrap output in json like {"text": "..."} or {"code": "..."}.
-    if the response is a json object with a single string value, return that value.
-    """
     stripped = text.strip()
     if not (stripped.startswith("{") and stripped.endswith("}")):
         return text

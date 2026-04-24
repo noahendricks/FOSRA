@@ -1,18 +1,10 @@
-"""
-Typed event emitter wrapping the global event_bus.
-
-Provides:
-- subscribe(session_id) / unsubscribe(sub_id) — proxy to event_bus
-- emit(type, properties) — raw emit for ad-hoc events
-- Typed emit methods for each known event type (e.g. emit_message_updated(info), emit_session_status(...))
-"""
-
 from __future__ import annotations
 
 import asyncio
 from typing import Any, cast
 
 from loguru import logger
+
 from backend.src.api.events import BusEvent, BusEventProperties, EventBus, event_bus
 from backend.src.api.schemas.tui_event_schemas import TUIEvent
 

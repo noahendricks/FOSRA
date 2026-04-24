@@ -16,16 +16,13 @@ if TYPE_CHECKING:
 
 
 class EmbedderProvider(Protocol):
-
     async def embed_chunks(
         self, chunks: list[Subsection], config: EmbedderConfig
-    ) -> list[Subsection]:
-        ...
+    ) -> list[Subsection]: ...
 
     async def embed_query(
         self, query: str, config: EmbedderConfig
-    ) -> EmbeddedQueries | None:
-        ...
+    ) -> EmbeddedQueries | None: ...
 
 
 class EmbeddedQueries(BaseModelFlex):
@@ -130,9 +127,6 @@ class FastEmbedProvider:
         return result
 
 
-# =============================================================================
-# FlagEmbedding Provider (BGE-M3: dense + sparse in one forward pass)
-# =============================================================================
 from FlagEmbedding import BGEM3FlagModel
 
 
@@ -219,9 +213,6 @@ class FlagProvider:
         return embedded
 
 
-# =============================================================================
-# HuggingFace Provider (sentence-transformers)
-# =============================================================================
 from sentence_transformers import SentenceTransformer
 
 
@@ -280,62 +271,6 @@ class HuggingFaceProvider:
         return result
 
 
-# =============================================================================
-# Ollama Provider
-# =============================================================================
-# from langchain_ollama import OllamaEmbeddings
-#
-#
-# class OllamaProvider:
-#     _cache: dict[str, OllamaEmbeddings] = {}
-#
-#     def _get_model(self, config: EmbedderConfig) -> OllamaEmbeddings:
-#         model_name = config.dense_model
-#         if model_name not in self._cache:
-#             self._cache[model_name] = OllamaEmbeddings(
-#                 model=model_name,
-#                 base_url=config.api_base or "http://localhost:11434",
-#             )
-#         return self._cache[model_name]
-#
-#     async def embed_chunks(
-#         self, chunks: list[Subsection], config: EmbedderConfig
-#     ) -> list[Subsection]:
-#         if not chunks:
-#             return chunks
-#
-#         model = self._get_model(config)
-#
-#         def _embed():
-#             return [model.embed_query(chunk.text) for chunk in chunks]
-#
-#         embeddings = await asyncio.to_thread(_embed)
-#
-#         for chunk, embedding in zip(chunks, embeddings):
-#             chunk.metadata.dense_embedding = embedding
-#
-#         return chunks
-#
-#     async def embed_query(
-#         self, query: str, config: EmbedderConfig
-#     ) -> EmbeddedQueries | None:
-#         model = self._get_model(config)
-#
-#         def _embed():
-#             return model.embed_query(query)
-#
-#         dense = await asyncio.to_thread(_embed)
-#
-#         result = EmbeddedQueries()
-#         result.dense = dense
-#         return result
-
-
-# =============================================================================
-# NomicCode Provider (nomic-ai/nomic-embed-code: 768d, Qwen2.5-Coder base)
-# Requires prompt prefixes: "Represent this query..." for queries,
-# " passage: " for code passages.
-# =============================================================================
 class NomicCodeProvider:
     _cache: dict[str, SentenceTransformer] = {}
 
@@ -566,12 +501,6 @@ def _resolve_provider(config: EmbedderConfig) -> EmbedderProvider:
 
 
 class EmbeddingCache:
-    """LRU cache for embedding results keyed by content hash.
-
-    cache key = SHA256(model_name + text) so same content with different
-    models produces different embeddings.
-    """
-
     def __init__(self, max_size: int = 10000):
         self._cache: OrderedDict[str, EmbeddedQueries] = OrderedDict()
         self._max_size = max_size

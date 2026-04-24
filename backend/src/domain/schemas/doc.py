@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-import msgspec
 from qdrant_client.models import SparseVector
 
-from backend.src.services.processing.utils.loader import code_mimes, text_mimes
+from backend.src.services.processing.utils.parse_utils import code_mimes, text_mimes
 from backend.src.storage.utils.converters import DomainStruct
 
 
@@ -23,19 +22,19 @@ class MDNFile(DomainStruct):
 
 
 class RawBlob(DomainStruct, kw_only=True, frozen=True):
-    """Raw data abstraction for document loading and file processing."""
+    """raw data abstraction for document loading and file processing."""
 
     data: bytes | str | None = None
-    """Raw data associated with the `Blob`."""
+    """raw data associated with the `Blob`."""
 
     mimetype: str | None = None
-    """MIME type, not to be confused with a file extension."""
+    """mime type, not to be confused with a file extension."""
 
     encoding: str = "utf-8"
-    """Encoding to use if decoding the bytes into a string."""
+    """encoding to use if decoding the bytes into a string."""
 
     path: str | None = None
-    """Location where the original content was found."""
+    """location where the original content was found."""
 
     @classmethod
     def from_data(
@@ -81,9 +80,6 @@ class RawBlob(DomainStruct, kw_only=True, frozen=True):
         return BytesIO(self.as_bytes())
 
 
-# ─── Document metadata for various source types ─────────────────────────────────
-
-
 class BaseDocumentMetadata(DomainStruct):
     source: str | None = None
     mime_type: str | None = None
@@ -117,70 +113,6 @@ class PDFMetadata(BaseDocumentMetadata, kw_only=True):
                     object.__setattr__(self, field, parsed)
                 except ValueError:
                     pass
-
-
-class TextMetadata(BaseDocumentMetadata):
-    content_type: Literal["text", "html", "markdown", "txt", "csv"] = "text"
-
-
-class CodeMetadata(BaseDocumentMetadata, kw_only=True):
-    content_type: (
-        Literal[
-            "python",
-            "cpp",
-            "csharp",
-            "cobol",
-            "elixir",
-            "go",
-            "java",
-            "js",
-            "kotlin",
-            "lua",
-            "perl",
-            "python",
-            "ruby",
-            "rust",
-            "scala",
-            "sql",
-            "typescript",
-        ]
-        | None
-    ) = None
-
-
-class FunctionsClassesMetadata(CodeMetadata, kw_only=True):
-    class_name: str | None = None
-    function_name: str | None = None
-    decorators: list[str] = []
-    is_async: bool = False
-    is_class_method: bool = False
-    is_static_method: bool = False
-
-    def __post_init__(self) -> None:
-        if self.content_type is None:
-            object.__setattr__(self, "content_type", "functions_classes")
-
-
-class SimplifiedCodeMetadata(CodeMetadata, kw_only=True):
-    original_length: Annotated[int | None, msgspec.Meta(ge=0)] = None
-    simplified_ratio: Annotated[float | None, msgspec.Meta(ge=0.0, le=1.0)] = None
-
-    def __post_init__(self) -> None:
-        if self.content_type is None:
-            object.__setattr__(self, "content_type", "simplified_code")
-
-
-class ImportsMetadata(CodeMetadata, kw_only=True):
-    is_third_party: bool = False
-    is_stdlib: bool = False
-    import_names: list[str] = []
-
-    def __post_init__(self) -> None:
-        if self.content_type is None:
-            object.__setattr__(self, "content_type", "imports")
-
-
-CodeMetadataUnion = FunctionsClassesMetadata | SimplifiedCodeMetadata | ImportsMetadata
 
 
 class DocMetadata(DomainStruct, kw_only=True):

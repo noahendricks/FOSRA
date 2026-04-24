@@ -6,6 +6,7 @@ from loguru import logger
 from ulid import ULID
 
 from backend.src.domain.schemas.doc import Doc, MDNFile
+from backend.src.services.processing.utils.parse_utils import code_mimes, text_mimes
 
 
 def to_bytes(path: str):
@@ -23,8 +24,6 @@ class LoaderService:
     def _parse_files(files: list[str | Path | MDNFile]) -> list[Doc]:
         from content_types import get_content_type as get_mime
 
-        from backend.src.services.processing.utils.loader import code_mimes
-
         docs = []
 
         for file in files:
@@ -41,7 +40,7 @@ class LoaderService:
 
             match mime_type:
                 case "application/pdf":
-                    from backend.src.services.processing.docling_loader import (
+                    from backend.src.services.processing.loaders.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
                     )
@@ -72,10 +71,11 @@ class LoaderService:
                 case "text/plain":
                     import tempfile
 
-                    from backend.src.services.processing.docling_loader import (
+                    from backend.src.services.processing.loaders.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
                     )
+
                     from backend.src.services.processing.utils.docling_regex import (
                         _clean_md,
                         _infer_chapters,
@@ -118,7 +118,7 @@ class LoaderService:
                         # Fall through to docling
 
                 case "text/markdown":
-                    from backend.src.services.processing.docling_loader import (
+                    from backend.src.services.processing.loaders.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
                     )

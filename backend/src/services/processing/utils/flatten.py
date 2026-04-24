@@ -8,6 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from tree_sitter import Query, QueryCursor
+
 from backend.src.domain.schemas.graph import (
     CallEdge,
     ClassMetadata,
@@ -16,6 +18,8 @@ from backend.src.domain.schemas.graph import (
     FunctionMetadata,
     GraphResult,
     ImportMetadata,
+    InheritanceEdge,
+    MethodEdge,
     Signature,
     TypeAliasMetadata,
 )
@@ -37,6 +41,12 @@ from backend.src.domain.schemas.treesitter_types import (
     Point,
     Range,
     SimpleNode,
+)
+from backend.src.services.processing.utils.parse_utils import (
+    CALL_QUERY_PATTERNS,
+    CLASS_QUERY_PATTERNS,
+    LANGUAGE_MODULES,
+    get_language,
 )
 from backend.src.storage.utils.converters import DomainStruct
 
@@ -382,8 +392,15 @@ class FlattenNodes:
         """
         code_nodes: list[CodeNode] = []
 
+        # collect imports separately before flattening
+        import_nodes: list[ImportNode] = []
+
         for child in root.children:
             if isinstance(child, Node):
+                # Collect imports before flattening
+                if isinstance(child, ImportNode):
+                    import_nodes.append(child)
+
                 # Flatten the node itself
                 flattened = self.flatten_node(child)
                 if flattened:
@@ -399,17 +416,12 @@ class FlattenNodes:
 
         # extract call edges only if tree-sitter root is available
         call_edges: list[CallEdge] = []
-        # lazy import to avoid circular import
-        from backend.src.services.processing.code_ingest import (
-            extract_call_edges,
-            extract_method_edges,
-        )
 
         if ts_root is not None:
             call_edges = extract_call_edges(
                 root=ts_root,
                 file_id=self.file_id,
-                source_code=root.text if root.text else "",
+                source_code=self.source_content or "",
                 language=self.language,
                 nodes=code_nodes,
             )
@@ -424,6 +436,7 @@ class FlattenNodes:
             nodes=code_nodes,
             call_edges=call_edges,
             method_edges=method_edges,
+            imports=import_nodes,
         )
         return graph_result
 
@@ -512,43 +525,48 @@ class FlattenNodes:
     def _make_qualified(self, node: FunctionNode) -> str:
         """build qualified name for functions/methods.
 
-        Format: <file_path_without_py>:<class_name>:method_name (or just <file_path>:<name> for functions)
-        node.identifier has the full path with colons, so extract the relevant parts.
+        Format: <file_path>:<class_name>:<method_name> (with slashes in file path, colons as separators)
         """
-        # node.identifier is like "src/services/processing/utils/flatten:py:module:FlattenNodes:my_method"
-        # We want: "src/services/processing/utils/flatten:FlattenNodes:my_method"
-        # Remove the file extension and any intermediate scopes like ":module"
+        # node.identifier is like "src:services:processing:utils:flatten:py:module:FlattenNodes:my_method"
         parts = node.identifier.split(":")
 
-        # Find the file path (first part that ends with .py or looks like a file path)
-        file_parts = []
+        # Find the file end index - look for .py in segments or segment before 'py'
+        file_end_idx = -1
         for i, part in enumerate(parts):
-            file_parts.append(part)
             if ".py" in part:
-                # Found the file path
+                file_end_idx = i
                 break
+        if file_end_idx < 0:
+            # Check if 'py' is a separate segment (after the file name)
+            for i in range(1, len(parts)):
+                if parts[i] == "py" and "." not in parts[i - 1]:
+                    file_end_idx = i
+                    break
 
-        # Reconstruct with file path (without extension) + class name (if any) + method name
-        # file_parts might be like ["src", "services", "processing", "utils", "flatten.py"]
-        # or ["src", "services", "processing", "utils", "flatten:py"]
+        if file_end_idx >= 0:
+            # Build file path: parts[:file_end_idx+1], convert colons to slashes
+            file_parts = parts[:file_end_idx]
+            last_file_part = parts[file_end_idx]
+            # Remove .py from last part if present
+            if last_file_part.endswith(".py"):
+                last_file_part = last_file_part[:-3]
+            elif last_file_part == "py" and file_parts:
+                # 'py' is a separate segment, use the previous file name part
+                last_file_part = file_parts[-1]
+                file_parts = file_parts[:-1]
+            file_path = (
+                "/".join(file_parts + [last_file_part])
+                if file_parts
+                else last_file_part
+            )
+            # Remaining parts are class/method names (filter out 'module')
+            remaining = [p for p in parts[file_end_idx + 1 :] if p and p != "module"]
+            if remaining:
+                return f"{file_path}:{':'.join(remaining)}"
+            return file_path
 
-        # Normalize the file path - remove .py extension
-        file_path_part = ":".join(file_parts)
-        if file_path_part.endswith(":py"):
-            file_path_part = file_path_part[:-3]
-        elif file_path_part.endswith(".py"):
-            # Shouldn't happen but handle it
-            file_path_part = file_path_part.rsplit(".", 1)[0]
-
-        # Get the remaining parts (class name and method name)
-        remaining_parts = parts[len(file_parts) :]
-        # Filter out 'module' from remaining parts
-        remaining_parts = [p for p in remaining_parts if p and p != "module"]
-
-        if remaining_parts:
-            return f"{file_path_part}:{':'.join(remaining_parts)}"
-        else:
-            return file_path_part
+        # Fallback
+        return node.identifier.replace(":module:", ":").replace(":py:", ":")
 
     def _make_signature(
         self,
@@ -674,3 +692,245 @@ class FlattenNodes:
         if path.suffix in {".py", ".ts", ".tsx", ".js", ".jsx"}:
             return list(path.parts[:-1]) + [stem]
         return list(path.parts)
+
+
+# ── edge extraction helpers
+
+# Moved from code_ingest.py to break the import cycle.
+# FlatenNodes needs extract_call_edges / extract_method_edges but was
+# lazily importing them back from code_ingest.py, creating a cycle.
+
+
+def extract_call_edges(
+    root: Any,
+    source_code: str,
+    file_id: str,
+    language: str,
+    nodes: list[CodeNode],
+    resolved_imports: list[ImportNode] | None = None,
+) -> list[CallEdge]:
+    edges = []
+    lang = get_language(language)
+
+    query = Query(lang, CALL_QUERY_PATTERNS.get(language, ""))
+
+    func_map = {}
+    for node in nodes:
+        if node.node_type in (GraphNodeType.FUNCTION, GraphNodeType.METHOD):
+            func_map[node.line_start] = node
+
+    # build import lookup: imported_name -> (target_file_path, target_file_id)
+    import_lookup: dict[str, tuple[str, str | None]] = {}
+    if resolved_imports:
+        for imp in resolved_imports:
+            for name in imp.import_dotted_names:
+                import_lookup[name] = (
+                    imp.target_file_path or "",
+                    imp.target_file_id,
+                )
+
+    # build local symbol table: local_name -> qualified_name (for same-file calls)
+    local_symbols: dict[str, str] = {}
+    for node in nodes:
+        if node.node_type in (GraphNodeType.FUNCTION, GraphNodeType.METHOD):
+            local_symbols[node.name] = node.qualified_name
+
+    cursor = QueryCursor(query)
+
+    for pattern_idx, captures in cursor.matches(root):
+        if "callee_name" in captures:
+            for node in captures["callee_name"]:
+                call_expr = node.parent
+                if not call_expr:
+                    continue
+
+                callee_name = source_code[node.start_byte : node.end_byte]
+                line_number = node.start_point[0] + 1
+
+                caller_node = None
+
+                for start_line, func in func_map.items():
+                    if start_line <= line_number <= func.line_end:
+                        caller_node = func
+                        break
+
+                if caller_node:
+                    call_expression = source_code[
+                        call_expr.start_byte : call_expr.end_byte
+                    ]
+
+                    # resolve callee: check imports first, then local symbols
+                    callee_qualified: str | None = None
+                    callee_file_id: str | None = None
+                    is_cross_file = False
+
+                    # handle method calls like `parser.parse()` - extract base name
+                    base_name = (
+                        callee_name.split(".")[0] if "." in callee_name else callee_name
+                    )
+
+                    if base_name in import_lookup:
+                        target_path, target_id = import_lookup[base_name]
+                        if target_path:
+                            # build qualified name
+                            if "." in callee_name:
+                                # method call: use path:name for the method
+                                method_name = callee_name.split(".")[-1]
+                                callee_qualified = f"{target_path}:{method_name}"
+                            else:
+                                callee_qualified = f"{target_path}:{callee_name}"
+                        if target_id:
+                            callee_file_id = target_id
+                            is_cross_file = caller_node.file_id != callee_file_id
+                    elif callee_name in local_symbols:
+                        # local call - same file
+                        callee_qualified = local_symbols[callee_name]
+                        is_cross_file = False
+                    elif base_name in ("self", "cls"):
+                        # method call like self.method() - extract method name
+                        method_name = (
+                            callee_name.split(".", 1)[-1]
+                            if "." in callee_name
+                            else callee_name
+                        )
+                        if method_name in local_symbols:
+                            callee_qualified = local_symbols[method_name]
+                            is_cross_file = False
+
+                    edges.append(
+                        CallEdge(
+                            caller_name=caller_node.name,
+                            caller_qualified=caller_node.qualified_name,
+                            caller_file_id=file_id,
+                            callee_name=callee_name,
+                            callee_qualified=callee_qualified,
+                            callee_file_id=callee_file_id,
+                            call_expression=call_expression,
+                            line_number=line_number,
+                            confidence=0.7,
+                            is_cross_file=is_cross_file,
+                        )
+                    )
+
+    return edges
+
+
+def extract_inheritance(
+    root: Any,
+    source_code: str,
+    file_id: str,
+    language: str,
+    nodes: list[CodeNode],
+) -> list[InheritanceEdge]:
+    edges = []
+    lang = get_language(language=language)
+
+    query = Query(lang, CLASS_QUERY_PATTERNS.get(language, ""))
+
+    class_map = {n.name: n for n in nodes if n.node_type == GraphNodeType.CLASS}
+
+    cursor = QueryCursor(query)
+    for pattern_idx, captures in cursor.matches(root):
+        for capture_name in ("base", "extends", "implements"):
+            if capture_name in captures:
+                for node in captures[capture_name]:
+                    class_node = node.parent
+                    while class_node and class_node.type not in (
+                        "class_definition",
+                        "class_declaration",
+                    ):
+                        class_node = class_node.parent
+
+                    if not class_node:
+                        continue
+
+                    name_node = None
+                    for child in class_node.children:
+                        if child.type in ("identifier", "type_identifier"):
+                            name_node = child
+                            break
+
+                    if not name_node:
+                        continue
+
+                    child_name = source_code[name_node.start_byte : name_node.end_byte]
+                    parent_name = source_code[node.start_byte : node.end_byte]
+
+                    child_class = class_map.get(child_name)
+                    if child_class:
+                        edges.append(
+                            InheritanceEdge(
+                                child_name=child_name,
+                                child_qualified=child_class.qualified_name,
+                                child_file_id=file_id,
+                                parent_name=parent_name,
+                                parent_qualified=None,
+                                parent_file_id=None,
+                                inheritance_type="implements"
+                                if capture_name == "implements"
+                                else "extends",
+                                is_cross_file=False,
+                            )
+                        )
+
+    return edges
+
+
+def extract_method_edges(
+    nodes: list[CodeNode],
+    file_id: str,
+) -> list[MethodEdge]:
+    """Create DEFINES_METHOD edges from Class nodes to their Method nodes."""
+    edges = []
+    class_map: dict[str, CodeNode] = {
+        n.qualified_name: n for n in nodes if n.node_type == GraphNodeType.CLASS
+    }
+
+    for node in nodes:
+        if (
+            isinstance(node, CodeNode)
+            and node.node_type == GraphNodeType.METHOD
+            and isinstance(node.metadata, FunctionMetadata)
+            and node.metadata.containing_class is not None
+        ):
+            class_name = node.metadata.containing_class
+            class_node = class_map.get(class_name)
+            if not class_node:
+                # Try matching qualified_name ending with :class_name
+                for qn, cn in class_map.items():
+                    if qn.endswith(f":{class_name}"):
+                        class_node = cn
+                        break
+            if class_node:
+                edges.append(
+                    MethodEdge(
+                        class_name=class_name,
+                        class_qualified=class_node.qualified_name,
+                        class_file_id=file_id,
+                        method_name=node.name,
+                        method_qualified=node.qualified_name,
+                        method_file_id=file_id,
+                    )
+                )
+        elif isinstance(node, CodeNode) and isinstance(node.metadata, FunctionMetadata):
+            # heuristic: if method name is found in class body, link it to the class
+            for potential_class in class_map.values():
+                if (
+                    potential_class.file_id == file_id
+                    and node.name in potential_class.header
+                    if potential_class.header
+                    else ""
+                ):
+                    edges.append(
+                        MethodEdge(
+                            class_name=potential_class.name,
+                            class_qualified=potential_class.qualified_name,
+                            class_file_id=file_id,
+                            method_name=node.name,
+                            method_qualified=node.qualified_name,
+                            method_file_id=file_id,
+                        )
+                    )
+                    break
+
+    return edges

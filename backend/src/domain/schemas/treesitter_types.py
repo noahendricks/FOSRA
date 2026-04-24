@@ -1,3 +1,11 @@
+"""tree-sitter type enums, constants, and intermediate parsing types.
+
+This module is the source of truth for tree-sitter type constants and intermediate
+parsing types. The type constants (enums, sets, helper functions) are re-exported
+from graph_types.py for consolidation, but the intermediate parsing types remain here
+since they're used directly by parsing_funcs.py during the parsing pipeline.
+"""
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -7,381 +15,48 @@ import tree_sitter as ts
 
 from backend.src.storage.utils.converters import DomainStruct
 
-
-# Graph node types for flattened storage
-class GraphNodeType(StrEnum):
-    FILE = "File"
-    MODULE = "Module"
-    CLASS = "Class"
-    FUNCTION = "Function"
-    METHOD = "Method"
-    CONSTANT = "Constant"  # module-level assignments
-    IMPORT = "Import"  # import statements as nodes
-    TYPE_ALIAS = "TypeAlias"  # type: ignore
-
-
-# Module
-class MODULE(StrEnum):
-    MODULE = "module"
-
-
-# Imports
-class IMPORT(StrEnum):
-    DEFAULT = "import_statement"
-    FROM = "import_from_statement"
-    FUTURE = "future_import_statement"
-
-
-# Class/Function
-class DEF(StrEnum):
-    CLASS = "class_definition"
-    CLASS_DECORATED = "decorated_definition"
-    FUNCTION = "function_definition"
-
-
-# Module-level definitions
-class MODULE_DEF(StrEnum):
-    CONSTANT = "assignment"  # module-level assignments
-    TYPE_ALIAS = "type_alias_statement"
-
-
-MODULE_DEF_TYPES: set[str] = {MODULE_DEF.CONSTANT, MODULE_DEF.TYPE_ALIAS}
-
-
-# Compound statements
-class COMPOUND(StrEnum):
-    IF = "if_statement"
-    FOR = "for_statement"
-    WHILE = "while_statement"
-    TRY = "try_statement"
-    WITH = "with_statement"
-    MATCH = "match_statement"
-
-
-# Simple statements
-class SIMPLE(StrEnum):
-    RETURN = "return_statement"
-    RAISE = "raise_statement"
-    ASSERT = "assert_statement"
-    DELETE = "delete_statement"
-    ASSIGNMENT = "assignment"
-    AUGMENTED_ASSIGNMENT = "augmented_assignment"
-    TYPE_ALIAS = "type_alias_statement"
-    YIELD = "yield"
-    GLOBAL = "global_statement"
-    NONLOCAL = "nonlocal_statement"
-    BREAK = "break_statement"
-    CONTINUE = "continue_statement"
-    PASS = "pass_statement"
-
-
-class COMMENT(StrEnum):
-    COMMENT = "comment"
-
-
-# Expressions (callable/literal)
-class EXPR(StrEnum):
-    CALL = "call"
-    ATTRIBUTE = "attribute"
-    SUBSCRIPT = "subscript"
-    BINARY = "binary_operator"
-    COMPARISON = "comparison_operator"
-    BOOLEAN = "boolean_operator"
-    CONDITIONAL = "conditional_expression"
-    LAMBDA = "lambda"
-    NAMED = "named_expression"
-    LIST = "list_literal"
-    TUPLE = "tuple_literal"
-    SET = "set_literal"
-    DICT = "dictionary"
-    DICT_COMP = "dictionary_comprehension"
-    GENERATOR = "generator_expression"
-    AWAIT = "await"
-    UNARY = "unary_operator"
-    CONCAT_STRING = "concatenated_string"
-    ARG_LIST = "argument_list"
-    KW_ARG = "keyword_argument"
-    DOTTED_NAME = "dotted_name"
-    IDENTIFIER = "identifier"
-
-
-# Literals
-class LITERAL(StrEnum):
-    STRING = "string"
-    INTEGER = "integer"
-    FLOAT = "float"
-    TRUE = "true"
-    FALSE = "false"
-    NONE = "none"
-
-
-# Structural - building blocks for imports, patterns, etc.
-class STRUCT(StrEnum):
-    IDENTIFIER = "identifier"
-    TYPE_PARAM = "type_parameter"
-    DOTTED_NAME = "dotted_name"
-    KW_IDENTIFIER = "keyword_identifier"
-    SLICE = "slice"
-    ELLIPSIS = "ellipsis"
-    PATTERN_LIST = "pattern_list"
-    GENERIC_TYPE = "generic_type"
-    UNION_TYPE = "union_type"
-
-
-# Pattern types - for match statements (Python 3.10+)
-class PATTERN(StrEnum):
-    CLASS = "class_pattern"
-    DICT = "dict_pattern"
-    LIST = "list_pattern"
-    TUPLE = "tuple_pattern"
-
-
-# =============================================================================
-# Type sets for membership checks
-# =============================================================================
-
-IMPORT_TYPES: set[str] = {IMPORT.DEFAULT, IMPORT.FROM, IMPORT.FUTURE}
-CLASS_TYPES: set[str] = {DEF.CLASS}
-FUNCTION_TYPES: set[str] = {DEF.FUNCTION}
-DEFINITION_TYPES: set[str] = CLASS_TYPES | FUNCTION_TYPES
-
-COMPOUND_TYPES: set[str] = {
-    COMPOUND.IF,
-    COMPOUND.FOR,
-    COMPOUND.WHILE,
-    COMPOUND.TRY,
-    COMPOUND.WITH,
-    COMPOUND.MATCH,
-}
-SIMPLE_TYPES: set[str] = {
-    SIMPLE.RETURN,
-    SIMPLE.RAISE,
-    SIMPLE.ASSERT,
-    SIMPLE.DELETE,
-    SIMPLE.ASSIGNMENT,
-    SIMPLE.AUGMENTED_ASSIGNMENT,
-    SIMPLE.TYPE_ALIAS,
-    SIMPLE.YIELD,
-    SIMPLE.GLOBAL,
-    SIMPLE.NONLOCAL,
-    SIMPLE.BREAK,
-    SIMPLE.CONTINUE,
-    SIMPLE.PASS,
-}
-COMMENT_TYPES: set[str] = {COMMENT.COMMENT}
-STATEMENT_TYPES: set[str] = IMPORT_TYPES | SIMPLE_TYPES | COMMENT_TYPES
-
-EXPRESSION_TYPES: set[str] = {
-    EXPR.CALL,
-    EXPR.ATTRIBUTE,
-    EXPR.SUBSCRIPT,
-    EXPR.BINARY,
-    EXPR.COMPARISON,
-    EXPR.BOOLEAN,
-    EXPR.CONDITIONAL,
-    EXPR.LAMBDA,
-    EXPR.NAMED,
-    EXPR.LIST,
-    EXPR.TUPLE,
-    EXPR.SET,
-    EXPR.DICT,
-    EXPR.DICT_COMP,
-    EXPR.GENERATOR,
-    EXPR.AWAIT,
-    EXPR.UNARY,
-    EXPR.CONCAT_STRING,
-    EXPR.ARG_LIST,
-    EXPR.KW_ARG,
-    EXPR.DOTTED_NAME,
-}
-LITERAL_TYPES: set[str] = {
-    LITERAL.STRING,
-    LITERAL.INTEGER,
-    LITERAL.FLOAT,
-    LITERAL.TRUE,
-    LITERAL.FALSE,
-    LITERAL.NONE,
-}
-STRUCTURAL_TYPES: set[str] = {
-    STRUCT.IDENTIFIER,
-    STRUCT.TYPE_PARAM,
-    STRUCT.DOTTED_NAME,
-    STRUCT.KW_IDENTIFIER,
-    STRUCT.SLICE,
-    STRUCT.ELLIPSIS,
-    STRUCT.PATTERN_LIST,
-    STRUCT.GENERIC_TYPE,
-    STRUCT.UNION_TYPE,
-}
-PATTERN_TYPES: set[str] = {
-    PATTERN.CLASS,
-    PATTERN.DICT,
-    PATTERN.LIST,
-    PATTERN.TUPLE,
-}
-
-
-def is_comment(node_type: str) -> bool:
-    return node_type in COMMENT_TYPES
-
-
-ALL_TYPES: set[str] = (
-    {MODULE.MODULE}
-    | IMPORT_TYPES
-    | CLASS_TYPES
-    | FUNCTION_TYPES
-    | COMPOUND_TYPES
-    | SIMPLE_TYPES
-    | EXPRESSION_TYPES
-    | LITERAL_TYPES
-    | STRUCTURAL_TYPES
-    | PATTERN_TYPES
-    | COMMENT_TYPES
+# Re-export type constants from graph_types.py for consolidation
+from backend.src.domain.schemas.graph_types import (
+    CLASS_TYPES,
+    COMPOUND,
+    COMPOUND_TYPES,
+    COMMENT,
+    COMMENT_TYPES,
+    DEF,
+    DEFINITION_TYPES,
+    EXPR,
+    EXPRESSION_TYPES,
+    FUNCTION_TYPES,
+    GraphNodeType,
+    IMPORT,
+    IMPORT_TYPES,
+    LITERAL,
+    LITERAL_TYPES,
+    MODULE,
+    MODULE_DEF,
+    MODULE_DEF_TYPES,
+    PATTERN,
+    PATTERN_TYPES,
+    SIMPLE,
+    SIMPLE_TYPES,
+    STATEMENT_TYPES,
+    STRUCT,
+    STRUCTURAL_TYPES,
+    is_class,
+    is_compound,
+    is_decorated,
+    is_definition,
+    is_dotted_name,
+    is_expression,
+    is_function,
+    is_import,
+    is_simple,
+    is_statement,
 )
 
 
 # =============================================================================
-# Top-level namespace for match statements
-# =============================================================================
-
-
-class T:
-    """Namespace for tree-sitter type constants. Usage: T.IMPORT, T.CLASS, etc."""
-
-    IMPORT = IMPORT_TYPES
-    DEF = [CLASS_TYPES, FUNCTION_TYPES]
-    CLASS = CLASS_TYPES
-    FUNCTION = FUNCTION_TYPES
-    COMPOUND = COMPOUND_TYPES
-    SIMPLE = SIMPLE_TYPES
-    EXPRESSION = EXPRESSION_TYPES
-    LITERAL = LITERAL_TYPES
-    STRUCTURAL = STRUCTURAL_TYPES
-    PATTERN = PATTERN_TYPES
-    MODULE = {MODULE.MODULE}
-    COMMENT = COMMENT_TYPES
-
-
-def get_type(node_type: str) -> str | None:
-    """get the type string if it's a valid tree-sitter type."""
-    return node_type if node_type in ALL_TYPES else None
-
-
-def is_import(node_type: str) -> bool:
-    return node_type in IMPORT_TYPES
-
-
-def is_class(node_type: str) -> bool:
-    return node_type in CLASS_TYPES
-
-
-def is_function(node_type: str) -> bool:
-    return node_type in FUNCTION_TYPES
-
-
-def is_definition(node_type: str) -> bool:
-    return node_type in DEFINITION_TYPES
-
-
-def is_compound(node_type: str) -> bool:
-    return node_type in COMPOUND_TYPES
-
-
-def is_simple(node_type: str) -> bool:
-    return node_type in SIMPLE_TYPES
-
-
-def is_statement(node_type: str) -> bool:
-    return node_type in STATEMENT_TYPES
-
-
-def is_expression(node_type: str) -> bool:
-    return node_type in EXPRESSION_TYPES
-
-
-def is_literal(node_type: str) -> bool:
-    return node_type in LITERAL_TYPES
-
-
-def is_structural(node_type: str) -> bool:
-    return node_type in STRUCTURAL_TYPES
-
-
-def is_pattern(node_type: str) -> bool:
-    return node_type in PATTERN_TYPES
-
-
-def is_module(node_type: str) -> bool:
-    return node_type == MODULE.MODULE
-
-
-def is_decorated(node_type: str) -> bool:
-    return node_type == DEF.CLASS_DECORATED
-
-
-def is_await(node_type: str) -> bool:
-    return node_type == EXPR.AWAIT
-
-
-def is_dotted_name(node_type: str) -> bool:
-    return node_type == STRUCT.DOTTED_NAME
-
-
-__all__ = [
-    # Graph node types
-    "GraphNodeType",
-    # Hierarchical enums
-    "MODULE",
-    "IMPORT",
-    "DEF",
-    "MODULE_DEF",
-    "COMPOUND",
-    "SIMPLE",
-    "EXPR",
-    "LITERAL",
-    "STRUCT",
-    "PATTERN",
-    "COMMENT",
-    # Namespace
-    "T",
-    # Sets
-    "IMPORT_TYPES",
-    "CLASS_TYPES",
-    "FUNCTION_TYPES",
-    "DEFINITION_TYPES",
-    "MODULE_DEF_TYPES",
-    "COMPOUND_TYPES",
-    "SIMPLE_TYPES",
-    "STATEMENT_TYPES",
-    "EXPRESSION_TYPES",
-    "LITERAL_TYPES",
-    "STRUCTURAL_TYPES",
-    "PATTERN_TYPES",
-    "COMMENT_TYPES",
-    "ALL_TYPES",
-    # Helpers
-    "get_type",
-    "is_import",
-    "is_class",
-    "is_function",
-    "is_definition",
-    "is_compound",
-    "is_simple",
-    "is_statement",
-    "is_comment",
-    "is_expression",
-    "is_literal",
-    "is_structural",
-    "is_pattern",
-    "is_module",
-    "is_decorated",
-    "is_await",
-    "is_dotted_name",
-]
-
-
-# =============================================================================
-# Domain structs for typed AST nodes
+# Domain structs for intermediate parsing types (used during parsing, not graph output)
 # =============================================================================
 
 
@@ -421,6 +96,8 @@ class Docstring(DomainStruct):
 
 
 class Node(DomainStruct):
+    """intermediate parse tree node — used during parsing, not graph output."""
+
     identifier: str
     text: str | None
     path: str
@@ -429,19 +106,21 @@ class Node(DomainStruct):
     parent_id: str | None = None
     children: list[Any] = []
     comments: list[Comment] = []
-
-
-# treesitter_types.py | import_statement{annotations}
-# treesitter_types.py | import_statement {from: pathlib.Path import: path }
-# treesitter_types.py | future_import_statement {from: __future__ import: annotations }
+    file_id: str = ""
 
 
 class ImportNode(Node):
+    """intermediate import node for parsing."""
+
+    statement: str = ""
     from_dotted_names: list[str] = []
     import_dotted_names: list[str] = []
+    target_file_id: str | None = None
+    target_file_path: str | None = None
+    source_file_id: str = ""
+    line_number: int | None = None
     aliased: str | None = None
     type: str = IMPORT.DEFAULT
-    # TODO: Remove children from import node / only nodes with children have children field
 
 
 class SimpleNode(Node):
@@ -449,23 +128,19 @@ class SimpleNode(Node):
     statement_type: str = ""
 
 
-class ClassNode(Node):
-    pass
-
-
 class TypeAnnotation(DomainStruct):
     type_name: str
-    generic_type: GenericType | None
+    generic_type: GenericType | None = None
 
 
 class GenericType(DomainStruct):
     base_type: str
-    type_parameters: list[str] | None
+    type_parameters: list[str] | None = None
 
 
 class Dictionary(DomainStruct):
     is_empty: bool
-    entries: list[DictEntry] | None
+    entries: list[DictEntry] | None = None
 
 
 class DictEntry(DomainStruct):
@@ -484,19 +159,19 @@ class ExpressionStatement(SimpleNode):
 
 
 class Block(DomainStruct):
-    statements: list[Node | Any] = []  # SimpleNode, CompoundNode, or other typed nodes
+    statements: list[Node | Any] = []
 
 
 class Parameters(DomainStruct):
-    params: dict[str, str] = {}
+    params: list[Parameter] = []
+    accepts_kwargs: bool = False
+    accepts_args: bool = False
 
 
 class Parameter(DomainStruct):
     name: str
     type_annotation: str | None = None
     default_value: str | None = None
-    is_variadic: bool = False
-    is_keyword: bool = False
 
 
 class TypedParameter(DomainStruct):
@@ -519,6 +194,7 @@ class FunctionNode(SimpleNode):
     receiver: str | None = None
     containing_class: str | None = None
     docstring: Docstring | None = None
+    header: str | None = None
 
 
 class DecoratedDefinition(SimpleNode):
@@ -526,13 +202,14 @@ class DecoratedDefinition(SimpleNode):
     definition: FunctionNode | None = None
 
 
-class ClassDefinition(Node):
+class ClassNode(Node):
     name: str = ""
     superclasses: list[str] | None = None
     body: Block | None = None
     docstring: Docstring | None = None
     decorators: list[str] = []
     methods: list[str] = []
+    header: str | None = None
 
 
 class Call(DomainStruct):
@@ -707,8 +384,6 @@ class IfStatement(Node):
 
 
 class CompoundNode(Node):
-    """Compound statement node — text = header line only, body = children."""
-
     header: str = ""
     body_type: str = (
         ""  # "if", "for", "while", "with", "try", "elif", "else", "except", "finally"
@@ -717,3 +392,102 @@ class CompoundNode(Node):
 
 class Identifier(DomainStruct):
     name: str = ""
+
+
+__all__ = [
+    # Graph node types
+    "GraphNodeType",
+    # Hierarchical enums
+    "MODULE",
+    "IMPORT",
+    "DEF",
+    "MODULE_DEF",
+    "COMPOUND",
+    "SIMPLE",
+    "EXPR",
+    "LITERAL",
+    "STRUCT",
+    "PATTERN",
+    "COMMENT",
+    # Sets
+    "IMPORT_TYPES",
+    "CLASS_TYPES",
+    "FUNCTION_TYPES",
+    "DEFINITION_TYPES",
+    "MODULE_DEF_TYPES",
+    "COMPOUND_TYPES",
+    "SIMPLE_TYPES",
+    "STATEMENT_TYPES",
+    "EXPRESSION_TYPES",
+    "LITERAL_TYPES",
+    "STRUCTURAL_TYPES",
+    "PATTERN_TYPES",
+    "COMMENT_TYPES",
+    # Helpers
+    "is_import",
+    "is_class",
+    "is_function",
+    "is_definition",
+    "is_compound",
+    "is_simple",
+    "is_statement",
+    "is_expression",
+    "is_decorated",
+    "is_dotted_name",
+    # Intermediate parsing types
+    "Point",
+    "Range",
+    "Comment",
+    "Docstring",
+    "Node",
+    "ImportNode",
+    "SimpleNode",
+    "TypeAnnotation",
+    "GenericType",
+    "Dictionary",
+    "DictEntry",
+    "AssignmentNode",
+    "ExpressionStatement",
+    "Block",
+    "Parameters",
+    "Parameter",
+    "TypedParameter",
+    "DecoratorNode",
+    "FunctionNode",
+    "DecoratedDefinition",
+    "ClassNode",
+    "Call",
+    "AttributeAccess",
+    "BinaryOperator",
+    "ComparisonOperator",
+    "BooleanOperator",
+    "ConditionalExpression",
+    "Lambda",
+    "NamedExpression",
+    "ListLiteral",
+    "TupleLiteral",
+    "SetLiteral",
+    "ForStatement",
+    "WhileStatement",
+    "TryStatement",
+    "ExceptHandler",
+    "WithItem",
+    "WithStatement",
+    "MatchStatement",
+    "CaseClause",
+    "AugmentedAssignment",
+    "RaiseStatement",
+    "AssertStatement",
+    "DeleteStatement",
+    "GlobalStatement",
+    "NonlocalStatement",
+    "YieldExpression",
+    "BreakStatement",
+    "ContinueStatement",
+    "PassStatement",
+    "TypeAliasStatement",
+    "ReturnStatement",
+    "IfStatement",
+    "CompoundNode",
+    "Identifier",
+]

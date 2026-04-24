@@ -316,47 +316,9 @@ def build_retrieval_pipeline(
         filters: Any | None,
         graph_svc: GraphService,
         embed_config: EmbedderConfig,
-    ) -> list[AccumulatedItem]:
+    ) -> Any:
         """Execute graph retrieval and return AccumulatedItems."""
-        items: list[AccumulatedItem] = []
-
-        embedder = EmbedderService()
-        embedded = await embedder.embed_query(query, embed_config)
-        if not embedded or not embedded.dense:
-            return items
-
-        node_types: list[GraphNodeType] | None = None
-        if filters and filters.node_type:
-            from backend.src.domain.enums import GraphNodeType
-
-            type_map = {
-                "function": GraphNodeType.FUNCTION,
-                "class": GraphNodeType.CLASS,
-                "method": GraphNodeType.METHOD,
-            }
-            mapped = type_map.get(filters.node_type.lower())
-            if mapped:
-                node_types = [mapped]
-
-        file_ids = None
-        if filters and filters.file_ids:
-            file_ids = [fid for fid in filters.file_ids if fid.isdigit()]
-
-        try:
-            result = await graph_svc.semantic_search(
-                query_embedding=embedded.dense,
-                node_types=node_types,
-                file_ids=file_ids,
-                limit=10,
-            )
-
-            for node in result.nodes:
-                items.append(node.to_accumulated_item())
-
-        except Exception as e:
-            logger.warning("Graph retrieval failed: {}", e)
-
-        return items
+        pass
 
     def should_continue_loop(state: RetrievalState) -> str:
         """Decide if agentic loop should continue."""
@@ -372,7 +334,7 @@ def build_retrieval_pipeline(
         return "agentic_loop"
 
     async def relevance_feedback_node(state: RetrievalState) -> dict[str, Any]:
-        """Apply Qdrant relevance feedback using accumulated items as positive examples."""
+        """apply Qdrant relevance feedback using accumulated items as positive examples."""
         context = state.accumulated_context
         if not context.items:
             return {"accumulated_context": context}

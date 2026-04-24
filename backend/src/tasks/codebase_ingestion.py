@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, TypedDict
 
-from backend.src.services.processing.callgraph_service import CallGraphService
+from backend.src.services.processing.code_ingest import extract_graph
 from falkordb import FalkorDB
 from loguru import logger
 from sqlalchemy import select
@@ -48,7 +48,7 @@ async def ingest_codebase(
     session_factory: async_sessionmaker[AsyncSession],
     recursive: bool = True,
 ) -> IngestionStats:
-    callgraph_service = CallGraphService()
+    callgraph_service = None
     graph_service = GraphService(falkordb_client, graph_name=repo_name or "codebase")
 
     graph_service.create_indexes()
@@ -78,7 +78,6 @@ async def ingest_codebase(
                     file_path=file_path,
                     repo_name=repo_name,
                     embedder_config=embedder_config,
-                    callgraph_service=callgraph_service,
                     graph_service=graph_service,
                     session=session,
                     base_dir=directory,
@@ -95,9 +94,6 @@ async def ingest_codebase(
 
         await session.commit()
 
-    resolve_stats = await graph_service.resolve_imports(all_imports)
-    stats["total_import_edges"] = resolve_stats.get("edges_created", 0)
-
     logger.bind(_structured=stats).info("Codebase ingestion complete")
     return stats  # type: ignore[return-value]
 
@@ -113,7 +109,7 @@ async def ingest_single_file(
     """
     ingest a single code file into falkordb.
     """
-    callgraph_service = CallGraphService()
+    callgraph_service = None
     graph_service = GraphService(falkordb_client, graph_name=repo_name or "codebase")
 
     graph_service.create_indexes(embedder_config)
@@ -127,7 +123,6 @@ async def ingest_single_file(
             file_path=path,
             repo_name=repo_name,
             embedder_config=embedder_config,
-            callgraph_service=callgraph_service,
             graph_service=graph_service,
             session=session,
             base_dir=path.parent,
@@ -141,7 +136,6 @@ async def _process_file(
     file_path: Path,
     repo_name: str | None,
     embedder_config: EmbedderConfig,
-    callgraph_service: CallGraphService,
     graph_service: GraphService,
     session: AsyncSession,
     base_dir: Path,
@@ -196,7 +190,7 @@ async def _process_file(
         await session.flush()
         file_id = doc.doc_id
 
-    graph_result = callgraph_service.extract_graph(
+    graph_result = extract_graph(
         source_code=source_code,
         file_path=relative_path,
         file_id=file_id,
