@@ -5,70 +5,88 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import tree_sitter_python
 import ulid
 from falkordb.falkordb import FalkorDB
+from tree_sitter import Language, Parser
+from tree_sitter import Node as NodeTS
 
-from backend.src.domain.schemas.graph import (
-    CodeNode,
-    FunctionMetadata,
-)
-from backend.src.domain.schemas.treesitter_types import (
-    Node,
-    Range,
-)
-from backend.src.services.processing.utils.flatten import (
-    FlattenNodes,
+from backend.src.domain.schemas.graph import GraphResult
+from backend.src.domain.schemas.graph_types import ImportNode
+from backend.src.domain.schemas.treesitter_types import Node, Range
+from backend.src.services.processing.utils.graph_extraction import (
     extract_call_edges,
     extract_inheritance,
     extract_method_edges,
 )
 from backend.src.services.processing.utils.parse_utils import (
-    CALL_QUERY_PATTERNS,
-    CLASS_QUERY_PATTERNS,
-    LANGUAGE_MODULES,
     _module_name_from_source_path,
-    get_language,
 )
-from tree_sitter import Language, Parser
-from tree_sitter import Node as NodeTS
-import tree_sitter_python
 from backend.src.services.processing.utils.parsing_funcs import (
+    _to_code_node,
     parse_node,
 )
 from backend.src.services.retrieval.graph_service import GraphService
 from backend.src.settings.config import EmbedderConfig
-from tree_sitter import Query, QueryCursor
 
 
-async def parse_file(source_file: Path, name: str) -> Any:
-    """test parse_node / parse_compound_statement on a source file."""
+def _collect_code_nodes(root: Node, file_path: str) -> list[Any]:
+    """collect all CodeNodes from the parsed tree."""
+    code_nodes: list[Any] = []
+
+    def walk(node: Any) -> None:
+        if not isinstance(node, Node):
+            return
+        code_node = _to_code_node(node, file_path)
+        if code_node is not None:
+            code_nodes.append(code_node)
+        for child in getattr(node, "children", []):
+            walk(child)
+
+    walk(root)
+    return code_nodes
+
+
+def _collect_imports(root: Node) -> list[ImportNode]:
+    """collect all ImportNodes from the parsed tree."""
+    imports: list[ImportNode] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, ImportNode):
+            imports.append(node)
+        elif isinstance(node, Node):
+            for child in getattr(node, "children", []):
+                walk(child)
+
+    walk(root)
+    return imports
+
+
+def extract_graph(
+    source_code: str,
+    file_path: str,
+    file_id: str,
+    language: str = "python",
+) -> GraphResult:
     python_lang = Language(tree_sitter_python.language())
-
     parser = Parser(python_lang)
 
-    file_id = str(ulid.ULID())
-
-    code = source_file.read_text()
-    tree = parser.parse(bytes(code, "utf-8"))
+    tree = parser.parse(bytes(source_code, "utf-8"))
     root = tree.root_node
 
-    module_name = _module_name_from_source_path(source_file)
+    module_name = _module_name_from_source_path(Path(file_path))
 
-    # compute file path relative to project root for consistent import resolution
-    # project root is the parent of 'backend' (or cwd if already at project root)
     project_root = Path.cwd()
     if project_root.name == "backend":
         project_root = project_root.parent
 
-    absolute_path = source_file.absolute()
     try:
-        # Make path relative to project root
-        file_path = str(absolute_path.relative_to(project_root))
+        absolute_path = Path(file_path).absolute()
+        if Path(file_path).is_absolute():
+            file_path = str(absolute_path.relative_to(project_root))
     except ValueError:
-        # Fallback to absolute path if not under project root
-        file_path = absolute_path.as_posix()
+        pass  # keep original file_path if relative fails
 
-    # root node — module level
     root_node = Node(
         identifier=module_name,
         path=module_name,
@@ -81,11 +99,9 @@ async def parse_file(source_file: Path, name: str) -> Any:
         file_id=file_id,
     )
 
-    def parse_tree(node: NodeTS, parent: Node, name: str) -> Node:
-        """Recursively parse tree-sitter node into our Node structure."""
+    def parse_tree(node: NodeTS, parent: Node) -> Node:
         node_type = node.type
 
-        # skip the root module node itself — its children become our root's children
         if node_type == "module":
             for child in node.named_children:
                 parsed = parse_node(child, parent=parent)
@@ -93,14 +109,10 @@ async def parse_file(source_file: Path, name: str) -> Any:
                     parent.children.append(parsed)
             return parent
 
-        # for all other nodes, parse them
         parsed = parse_node(node, parent=parent)
-
         if parsed is None:
             return parent
 
-        # if parsed is a compound node with body, parse its children into body.statements
-        # and use parsed as the new parent for proper identifier scoping
         if parsed.type in (
             "class_definition",
             "function_definition",
@@ -108,20 +120,64 @@ async def parse_file(source_file: Path, name: str) -> Any:
         ):
             body = getattr(parsed, "body", None)
             if body is not None and body.statements:
-                # parse children into body statements using parsed as parent for scoping
                 if body.statements:
                     parsed.children = list(body.statements)
-
         return parent
 
-    result = parse_tree(root, parent=root_node, name=name)
+    result = parse_tree(root, parent=root_node)
 
-    graph = FlattenNodes(
+    code_nodes = _collect_code_nodes(result, file_path)
+    imports = _collect_imports(result)
+
+    call_edges = extract_call_edges(
+        root=root,
+        file_id=file_id,
+        source_code=source_code,
+        language=language,
+        nodes=code_nodes,
+    )
+    method_edges = extract_method_edges(nodes=code_nodes, file_id=file_id)
+
+    inheritance_edges = extract_inheritance(
+        root=root,
+        source_code=source_code,
+        file_id=file_id,
+        language=language,
+        nodes=code_nodes,
+    )
+
+    return GraphResult(
         file_id=file_id,
         file_path=file_path,
-        source_content=code,
-        ts_root=root,
-    ).flatten_root(result, path=file_path, ts_root=root)
+        language=language,
+        nodes=code_nodes,
+        call_edges=call_edges,
+        inheritance_edges=inheritance_edges,
+        method_edges=method_edges,
+        imports=imports,
+    )
+
+
+async def parse_file(source_file: Path, name: str) -> Any:
+    """parse a source file and upsert its graph to falkordb."""
+    file_id = str(ulid.ULID())
+    code = source_file.read_text()
+
+    project_root = Path.cwd()
+    if project_root.name == "backend":
+        project_root = project_root.parent
+
+    absolute_path = source_file.absolute()
+    try:
+        file_path = str(absolute_path.relative_to(project_root))
+    except ValueError:
+        file_path = absolute_path.as_posix()
+    graph = extract_graph(
+        source_code=code,
+        file_path=file_path,
+        file_id=file_id,
+        language="python",
+    )
 
     falkor = FalkorDB()
     graph_service = GraphService(client=falkor)

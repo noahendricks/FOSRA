@@ -1,8 +1,20 @@
 from tree_sitter import Node as NodeTS
 
+from backend.src.domain.schemas.graph_types import (
+    ClassMetadata,
+    CodeNode,
+    ConstantMetadata,
+    ControlFlowMetadata,
+    FunctionMetadata,
+    GraphNodeType,
+    ImportMetadata,
+    Signature,
+    TypeAliasMetadata,
+)
 from backend.src.domain.schemas.treesitter_types import (
     CLASS_TYPES,
     COMMENT_TYPES,
+    COMPOUND_TYPES,
     DEF,
     EXPR,
     EXPRESSION_TYPES,
@@ -42,6 +54,14 @@ from backend.src.services.processing.utils.parse_utils import (
 )
 
 CLAUSE_TYPES = {"else_clause", "elif_clause", "case_clause"}
+
+
+def _derive_scope(qualified_name: str) -> list[str]:
+    """derive scope chain from qualified name.
+    'src:svc:MyClass:my_method' → ['src', 'svc', 'MyClass']
+    """
+    parts = qualified_name.split(":")
+    return parts[:-1]  # everything except the node's own name
 
 
 def parse_class_definition(
@@ -1294,6 +1314,154 @@ def _parse_expression_node(
         children=[],  # expressions are leaf nodes — no recursion
         file_id=parent.file_id,
     )
+
+
+
+
+def _to_code_node(
+    node: Node | ClassNode | FunctionNode | ImportNode | SimpleNode,
+    file_path: str,
+) -> CodeNode | None:
+    """convert an intermediate node to a graph-ready CodeNode.
+
+
+    returns None for nodes that shouldn't be stored in the graph (comments,
+    literals, expressions, etc.)
+    """
+    # Determine node type and extract appropriate metadata
+    if isinstance(node, ImportNode):
+        # from_x.y.z import foo → module_path = x.y.z
+        module_path = ".".join(node.from_dotted_names) if node.from_dotted_names else ""
+        qualified_name = (
+            f"{file_path}:import:{module_path}"
+            if module_path
+            else f"{file_path}:import"
+        )
+        metadata = ImportMetadata(
+            type=node.type,
+            from_names=node.from_dotted_names,
+            imported_names=node.import_dotted_names,
+            target_file_id=node.target_file_id,
+            target_file_path=node.target_file_path,
+            source_file_id=node.source_file_id,
+            line_number=node.line_number,
+            aliased=node.aliased,
+            is_relative="." in (module_path or ""),
+        )
+        return CodeNode(
+            node_type=GraphNodeType.IMPORT,
+            name=module_path or "unknown",
+            qualified_name=qualified_name,
+            file_id=node.file_id,
+            file_path=file_path,
+            line_start=node.range.start_point.row + 1,
+            line_end=node.range.end_point.row + 1,
+            metadata=metadata,
+        )
+
+    elif isinstance(node, ClassNode):
+        # check if it's actually a class definition
+        if node.name:
+            # class definition
+            scope = _derive_scope(f"{file_path}:{node.name}")
+            qualified_name = f"{file_path}:{node.name}"
+            metadata = ClassMetadata(
+                superclasses=node.superclasses or [],
+                decorators=node.decorators or [],
+                is_abstract=any(
+                    d in {"abstractmethod", "abc.abstractmethod"}
+                    for d in (node.decorators or [])
+                ),
+            )
+            return CodeNode(
+                node_type=GraphNodeType.CLASS,
+                name=node.name,
+                qualified_name=qualified_name,
+                file_id=node.file_id,
+                file_path=file_path,
+                line_start=node.range.start_point.row + 1,
+                line_end=node.range.end_point.row + 1,
+                docstring=node.docstring.content if node.docstring else None,
+                source_code=node.text,
+                metadata=metadata,
+                header=node.header,
+                scope=scope,
+            )
+
+    elif isinstance(node, FunctionNode):
+        # Function or method
+        if not node.name:
+            return None
+
+        scope = _derive_scope(
+            f"{file_path}:{node.containing_class or ''}:{node.name}".rstrip(":")
+        )
+        qualified_name = f"{file_path}:{node.containing_class + ':' if node.containing_class else ''}{node.name}"
+
+        metadata = FunctionMetadata(
+            containing_class=node.containing_class,
+            is_public=not node.name.startswith("_"),
+            is_private=node.name.startswith("_"),
+            is_coroutine=node.is_async,
+            decorators=node.decorators or [],
+        )
+
+        signature = Signature(
+            parameters=node.parameters,
+            return_type=node.return_type,
+            is_async=node.is_async,
+            is_method=node.receiver is not None,
+            receiver=node.receiver,
+            decorators=node.decorators or [],
+        )
+
+        return CodeNode(
+            node_type=GraphNodeType.METHOD if node.receiver else GraphNodeType.FUNCTION,
+            name=node.name,
+            qualified_name=qualified_name,
+            file_id=node.file_id,
+            file_path=file_path,
+            line_start=node.range.start_point.row + 1,
+            line_end=node.range.end_point.row + 1,
+            signature=signature,
+            docstring=node.docstring.content if node.docstring else None,
+            source_code=node.text,
+            metadata=metadata,
+            header=node.header,
+            scope=scope,
+        )
+
+    elif isinstance(node, SimpleNode):
+        # Simple statements: check if it's an assignment (module-level constant)
+        if node.statement_type == SIMPLE.ASSIGNMENT:
+            # Extract name from path/identifier
+            name = node.path.split(":")[-1] if ":" in node.path else node.path
+            if not name or name.startswith("["):
+                name = "unknown"
+
+            scope = _derive_scope(f"{file_path}:{name}")
+            qualified_name = f"{file_path}:{name}"
+            metadata = ConstantMetadata(
+                value_repr=node.text,
+                value_type=None,
+                is_public=not name.startswith("_"),
+                is_private=name.startswith("_"),
+            )
+            return CodeNode(
+                node_type=GraphNodeType.CONSTANT,
+                name=name,
+                qualified_name=qualified_name,
+                file_id=node.file_id,
+                file_path=file_path,
+                line_start=node.range.start_point.row + 1,
+                line_end=node.range.end_point.row + 1,
+                source_code=node.text,
+                metadata=metadata,
+                scope=scope,
+            )
+
+    # Skip all other node types (comments, expressions, control flow, etc.)
+    return None
 
 
 def parse_node(

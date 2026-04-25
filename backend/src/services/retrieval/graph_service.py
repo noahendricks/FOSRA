@@ -24,6 +24,7 @@ from backend.src.domain.schemas.graph import (
     GraphQueryResult,
     GraphResult,
     ImportMetadata,
+    InheritanceEdge,
     MethodEdge,
     Signature,
 )
@@ -82,6 +83,10 @@ class GraphService:
 
         for edge in graph_result.method_edges:
             self.upsert_method_edge(graph, edge)
+            stats["edges_created"] += 1
+
+        for edge in graph_result.inheritance_edges:
+            self.upsert_inheritance_edge(graph, edge)
             stats["edges_created"] += 1
 
         # extract imports (after full upsers)
@@ -927,3 +932,31 @@ class GraphService:
             stats["failed"],
         )
         return stats
+
+
+    def upsert_inheritance_edge(self, graph: "Graph", edge: InheritanceEdge) -> None:
+        """Create an EXTENDS relationship between classes."""
+        query = """
+        MATCH (child)
+        WHERE child:Class AND child.qualified_name = $child_qualified
+        MERGE (parent {qualified_name: $parent_qualified})
+        ON CREATE SET parent.name = $parent_name,
+            parent.file_id = $parent_file_id,
+            parent.inferred = true
+        MERGE (child)-[r:EXTENDS]->(parent)
+        SET r.inheritance_type = $inheritance_type
+        """
+        # only create the edge if we have a child_qualified
+        if not edge.child_qualified:
+            return
+        _ = graph.query(
+            query,
+            params={
+                "child_qualified": edge.child_qualified,
+                "child_name": edge.child_name,
+                "parent_name": edge.parent_name,
+                "parent_qualified": edge.parent_qualified or edge.parent_name,
+                "parent_file_id": edge.parent_file_id or "",
+                "inheritance_type": edge.inheritance_type,
+            },
+        )
