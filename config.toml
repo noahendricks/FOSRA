@@ -17,7 +17,7 @@ summarization = "local"
 code_embedding = "local"
 
 [databases]
-postgres_url = "postgresql+asyncpg://localhost:5432/fosra"
+postgres_url = "postgresql+asyncpg://localhost:5432/postgres"
 qdrant_url = "http://localhost:6333"
 
 [databases.falkordb]

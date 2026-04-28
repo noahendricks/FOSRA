@@ -162,11 +162,11 @@ class AgentSettings(BaseSettings):
     max_retrieval_iterations: int = Field(default=3, ge=1, le=10)
     token_budget: int = Field(default=4096, ge=512, le=16384)
     fallback_model: str = Field(
-        default="Qwen3.5-35B-A3B-Q4_K_M.gguf",
+        default="MiniMax-M2.5",
         description="Fallback model when no user preferences are configured",
     )
     fallback_api_base: str = Field(
-        default="http://localhost:8045/v1",
+        default="https://api.minimax.io/v1",
         description="API base for fallback model",
     )
 

@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@oh-my-pi/pi-natives": "^14.2.1",
     "@tanstack/react-virtual": "^3.13.17",
     "axios": "^1.13.2",
     "openapi-fetch": "^0.15.0",

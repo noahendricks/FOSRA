@@ -5,7 +5,6 @@ from asyncio import CancelledError
 from contextlib import asynccontextmanager
 
 import taskiq_fastapi
-import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -17,6 +16,7 @@ from backend.src.api.routes.ingestion_status import router as ingestion_status_r
 from backend.src.api.routes.oc.state import log_process_start
 from backend.src.api.routes.retrieval import router as retrieval_router
 from backend.src.api.routes.tui import router as tui_router
+from backend.src.services.session.langgraph_server import router as langgraph_router
 from backend.src.logging_config import setup_logging
 from backend.src.settings import settings
 from backend.src.settings.observe import setup_telemetry
@@ -107,6 +107,7 @@ app.include_router(ingestion_router)
 app.include_router(ingestion_status_router)
 app.include_router(retrieval_router)
 app.include_router(tui_router)
+app.include_router(langgraph_router)
 
 
 app.add_middleware(
@@ -135,22 +136,28 @@ app.add_middleware(
 #     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
+# lightweight liveness probe for k8s / load balancers
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "ts": __import__("datetime").datetime.utcnow().isoformat()}
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Entry point for `uv run fosra`."""
     import uvicorn
+    import uvloop
 
+    uvloop.install()
     uvicorn.run(
-        "app:app",
+        "backend.src.app:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
-        reload_dirs=["./"],
+        reload_dirs=["./backend"],
         reload_delay=0.25,
         log_config=None,
     )
 
-# uvloop support - run with: uvicorn --loop uvloop app:app
+
+if __name__ == "__main__":
+    run()
