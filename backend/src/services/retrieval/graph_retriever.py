@@ -130,6 +130,7 @@ class GraphRetriever:
         RETURN node
         LIMIT $limit
         """
+
         result = graph.query(query, params={"name": f"*{name}*", "limit": limit})
 
         nodes = []

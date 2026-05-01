@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import tree_sitter_python
 import ulid
@@ -11,8 +12,15 @@ from falkordb.falkordb import FalkorDB
 from tree_sitter import Language, Parser
 from tree_sitter import Node as NodeTS
 
+from backend.src.domain.schemas.doc import SectionMetadata, Subsection
 from backend.src.domain.schemas.graph import GraphResult
-from backend.src.domain.schemas.graph_types import ImportNode
+from backend.src.domain.schemas.graph_types import (
+    ClassMetadata,
+    CodeNode,
+    FunctionMetadata,
+    GraphNodeType,
+    ImportNode,
+)
 from backend.src.domain.schemas.treesitter_types import Node, Range
 from backend.src.services.processing.utils.graph_extraction import (
     extract_call_edges,
@@ -158,7 +166,128 @@ def extract_graph(
     )
 
 
-async def parse_file(source_file: Path, name: str) -> Any:
+def _code_node_to_subsection(
+    node: CodeNode,
+    doc_id: str,
+    doc_title: str,
+) -> Subsection:
+    """Convert a CodeNode to a Subsection for vector storage."""
+    # Build text content from signature, docstring, and source
+    content_parts = []
+
+    # Add signature
+    if node.signature:
+        sig_str = node._signature_to_string()
+        if sig_str:
+            content_parts.append(sig_str)
+
+    # Add docstring
+    if node.docstring:
+        content_parts.append(f'"""\n{node.docstring}\n"""')
+
+    # Add source code snippet (first 30 lines)
+    if node.source_code:
+        lines = node.source_code.split("\n")
+        content_parts.append("\n".join(lines[:30]))
+
+    text = "\n\n".join(content_parts) if content_parts else node.name
+
+    # Extract code-specific metadata
+    is_async = False
+    is_method = False
+    decorators = None
+    docstring = None
+    parameters = None
+    return_type = None
+    code_def_type = None
+
+    if isinstance(node.metadata, FunctionMetadata):
+        is_async = node.metadata.is_async or False
+        is_method = node.metadata.is_method or False
+        decorators = node.metadata.decorators
+        parameters = (
+            [p.name for p in node.metadata.parameters.params]
+            if node.metadata.parameters
+            else None
+        )
+        return_type = node.metadata.return_type
+        code_def_type = "function" if not is_method else "method"
+    elif isinstance(node.metadata, ClassMetadata):
+        decorators = node.metadata.decorators
+        docstring = node.metadata.docstring
+        code_def_type = "class"
+
+    section_id = f"{doc_id}:{node.node_type.value}:{node.name}:{node.line_start}"
+
+    metadata = SectionMetadata(
+        section_id=section_id,
+        doc_id=doc_id,
+        doc_title=doc_title,
+        token_count=len(text) // 4,
+        source_file=node.file_path,
+        code_definition_type=code_def_type,
+        is_async=is_async,
+        is_method=is_method,
+        decorators=decorators,
+        docstring=docstring or node.docstring,
+        parameters=parameters,
+        return_type=return_type,
+    )
+
+    return Subsection(text=text, metadata=metadata)
+
+
+async def extract_code_chunks(
+    source_code: str,
+    file_path: str,
+    language: str,
+    doc_id: str | None = None,
+    doc_title: str | None = None,
+) -> list[Subsection]:
+    """Extract code chunks from source code for vector storage.
+
+    Parses source code with tree-sitter and converts CodeNodes to
+    Subsections suitable for embedding and vector DB upsert.
+
+    Args:
+        source_code: The source code string to parse.
+        file_path: Path identifier for the file.
+        language: Programming language (python, javascript, typescript, go, rust).
+        doc_id: Optional document ID (defaults to ULID).
+        doc_title: Optional document title (defaults to file_path).
+
+    Returns:
+        List of Subsections, one per significant code node (class, function, method).
+    """
+    if doc_id is None:
+        doc_id = str(uuid4())
+    if doc_title is None:
+        doc_title = file_path
+
+    graph_result = extract_graph(
+        source_code=source_code,
+        file_path=file_path,
+        file_id=doc_id,
+        language=language,
+    )
+
+    chunks: list[Subsection] = []
+    for node in graph_result.nodes:
+        # Only create chunks for significant definition nodes
+        if node.node_type in (
+            GraphNodeType.CLASS,
+            GraphNodeType.FUNCTION,
+            GraphNodeType.METHOD,
+        ):
+            chunk = _code_node_to_subsection(node, doc_id, doc_title)
+            chunks.append(chunk)
+
+    return chunks
+
+
+async def parse_file(
+    source_file: Path,
+) -> Any:
     """parse a source file and upsert its graph to falkordb."""
     file_id = str(ulid.ULID())
     code = source_file.read_text()

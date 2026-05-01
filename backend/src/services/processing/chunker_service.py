@@ -27,6 +27,49 @@ def count_tokens(text: str) -> int:
     return len(text) // 4
 
 
+def _ensure_section(section: Section | dict) -> Section:
+    """Normalize a section to a Section object (handles dict from JSON deserialization)."""
+    if isinstance(section, Section):
+        # Recursively normalize children
+        if section.children:
+            normalized_children = [_ensure_section(c) for c in section.children]
+            if any(isinstance(c, Section) for c in normalized_children):
+                # Only create new Section if children were normalized
+                return Section(
+                    section_text=section.section_text,
+                    heading=section.heading,
+                    heading_path=section.heading_path,
+                    start_page=section.start_page,
+                    end_page=section.end_page,
+                    section_index=section.section_index,
+                    section_id=section.section_id,
+                    parent_id=section.parent_id,
+                    children=normalized_children,
+                )
+        return section
+    if isinstance(section, dict):
+        # Recursively normalize children in dict
+        children = section.get("children") or []
+        normalized_children = [_ensure_section(c) for c in children]
+        return Section(
+            section_text=section.get("section_text"),
+            heading=section.get("heading"),
+            heading_path=section.get("heading_path"),
+            start_page=section.get("start_page"),
+            end_page=section.get("end_page"),
+            section_index=section.get("section_index", 0),
+            section_id=section.get("section_id"),
+            parent_id=section.get("parent_id"),
+            children=normalized_children,
+        )
+    return section  # type: ignore[return-value]
+
+
+def _normalize_sections(sections: list[Section | dict]) -> list[Section]:
+    """Normalize a list of sections, handling dicts from JSON deserialization."""
+    return [_ensure_section(s) for s in sections]
+
+
 def _is_badly_sectioned(sections: list[Section], threshold: float = 0.42) -> bool:
     """true if >threshold fraction of sections deviate strongly from the median token count.
 
@@ -129,33 +172,39 @@ class ChunkerService:
 
         tasks: list[Task[list[Subsection]]] = []
 
-        async with asyncio.TaskGroup() as group:
-            print(type(docs))
-            print(type(docs[0]))
-            for doc in docs:
-                doc_type = "PDF" if doc.is_pdf else "code" if doc.is_code else "text"
-                logger.debug("Processing {} document: {}", doc_type, doc.id)
+        try:
+            async with asyncio.TaskGroup() as group:
+                for doc in docs:
+                    doc_type = (
+                        "PDF" if doc.is_pdf else "code" if doc.is_code else "text"
+                    )
+                    logger.debug("Processing {} document: {}", doc_type, doc.id)
 
-                if doc.is_code:
-                    tasks.append(
-                        group.create_task(ChunkerService._chunk_code(doc, config))
-                    )
-                elif doc.is_text:
-                    tasks.append(
-                        group.create_task(
-                            ChunkerService._chunk_structured(
-                                doc, config, hi_structurer_ref
+                    if doc.is_code:
+                        tasks.append(
+                            group.create_task(ChunkerService._chunk_code(doc, config))
+                        )
+                    elif doc.is_text:
+                        tasks.append(
+                            group.create_task(
+                                ChunkerService._chunk_structured(
+                                    doc, config, hi_structurer_ref
+                                )
                             )
                         )
-                    )
-                elif doc.is_pdf:
-                    tasks.append(
-                        group.create_task(
-                            ChunkerService._chunk_structured(
-                                doc, config, hi_structurer_ref
+                    elif doc.is_pdf:
+                        tasks.append(
+                            group.create_task(
+                                ChunkerService._chunk_structured(
+                                    doc, config, hi_structurer_ref
+                                )
                             )
                         )
-                    )
+        except ExceptionGroup as eg:
+            # Unpack ExceptionGroup to show the actual error
+            for e in eg.exceptions:
+                logger.error("Chunking task failed: {}: {}", type(e).__name__, e)
+            raise eg.exceptions[0] from None
 
         chunks: list[list[Subsection]] = [t.result() for t in tasks]
         elapsed = time.time() - start_time
@@ -165,13 +214,39 @@ class ChunkerService:
     @staticmethod
     async def _chunk_code(doc: Doc, config: "ChunkerConfig") -> list[Subsection]:
         """handle code file chunking via tree-sitter."""
+        from backend.src.services.processing.code_ingest import extract_code_chunks
         from backend.src.services.processing.utils.parse_utils import code_mimes
-        from backend.src.services.processing.code_ingest import parse_file
 
-        language = code_mimes[doc.metadata.mime_type]
-        # TODO: parse_file currently upserts to graph DB; extract chunking separately
-        # so this can return Subsections for consistent pipeline
-        raise NotImplementedError("code chunking not yet wired into the chunker pipeline")
+        metadata = doc.metadata
+        mime = (
+            metadata.get("mime_type")
+            if isinstance(metadata, dict)
+            else getattr(metadata, "mime_type", None)
+        )
+        path = (
+            metadata.get("path")
+            if isinstance(metadata, dict)
+            else getattr(metadata, "path", None)
+        )
+        doc_id = (
+            metadata.get("doc_id")
+            if isinstance(metadata, dict)
+            else getattr(metadata, "doc_id", None)
+        )
+        doc_title = (
+            metadata.get("doc_title")
+            if isinstance(metadata, dict)
+            else getattr(metadata, "doc_title", None)
+        )
+
+        language = code_mimes.get(mime, "python")
+        return await extract_code_chunks(
+            source_code=doc.page_content,
+            file_path=path or doc.id,
+            language=language,
+            doc_id=doc_id or doc.id,
+            doc_title=doc_title or path or doc.id,
+        )
 
     @staticmethod
     async def _chunk_structured(
@@ -180,7 +255,7 @@ class ChunkerService:
         hi_structurer_ref: list[object],
     ) -> list[Subsection]:
         """emit subsections from the section tree; fall back to HiChunk for badly-sectioned docs."""
-        sections = doc.metadata.sections
+        sections = _normalize_sections(doc.metadata.sections)
 
         if not sections or _is_badly_sectioned(sections):
             logger.info(

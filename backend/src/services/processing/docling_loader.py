@@ -8,7 +8,6 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.settings import settings
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.transforms.chunker.hierarchical_chunker import HierarchicalChunker
-from hierarchical.postprocessor import ResultPostprocessor
 from loguru import logger
 
 from backend.src.domain.schemas.doc import Doc, DocMetadata, Section
@@ -25,9 +24,6 @@ from backend.src.services.processing.utils.parse_utils import text_mimes
 from backend.src.settings.fosra_paths import fosra_paths
 from backend.src.storage.utils.converters import DomainStruct, ulid_factory
 
-# heading path extraction params — tuned via BO (100-trial GPSampler)
-# merge_min: merge sections below N chars forward into the next section
-# split_max: split sections above N chars by distributing chunks evenly
 _DEFAULT_MERGE_MIN = 380
 _DEFAULT_SPLIT_MAX = 3500
 
@@ -55,17 +51,6 @@ class DoclingIngestionResult(DomainStruct, kw_only=True):
 
 
 def _build_section_tree(flat: list[Section], doc_id: str) -> list[Section]:
-    """assign section_ids and wire parent/child relationships.
-
-    strategy A (markdown / multi-level heading_paths):
-        depth = len(heading_path); positional stack tracks current parent at each depth.
-
-    strategy B (pdf / single-element heading_paths):
-        numbered headings ('2.3.1 ...') → depth from dot count; parent resolved via prefix map.
-        unnumbered headings → attached as children of the deepest numeric ancestor.
-
-    returns only root sections; all children are accessible via section.children.
-    """
     for i, sec in enumerate(flat):
         sec.section_id = f"{doc_id}:{i}"
 
@@ -93,9 +78,7 @@ def _build_section_tree(flat: list[Section], doc_id: str) -> list[Section]:
     else:
         # STRATEGY B — pdf / ambiguous
         prefix_map: dict[str, Section] = {}  # "2.3" → section
-        depth_stack2: dict[
-            int, Section
-        ] = {}  # depth → most recent numerically-anchored section
+        depth_stack2: dict[int, Section] = {}
         for sec in flat:
             heading = sec.heading or ""
             m = _NUMERIC_SECTION_RE.match(heading)
@@ -167,10 +150,6 @@ class DoclingLoader:
         merge_min: int = _DEFAULT_MERGE_MIN,
         split_max: int = _DEFAULT_SPLIT_MAX,
     ) -> list[Section]:
-        """extract sections by heading path. uses direct md parsing for .md files
-        (docling chunker loses heading metadata for markdown), and HierarchicalChunker
-        for all other formats. plain text files (.txt) use chapter-inference parsing."""
-
         mime = mimetypes.guess_type(str(file_path))[0] or ""
         suffix = file_path.suffix.lower()
 

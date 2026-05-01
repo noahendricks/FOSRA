@@ -15,7 +15,8 @@ from tree_sitter import (
 )
 from tree_sitter import Node as NodeTS
 
-from backend.src.domain.schemas.graph_types import (
+from backend.src.domain.schemas.treesitter_types import (
+    Block,
     Comment,
     Docstring,
     Node,

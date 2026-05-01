@@ -42,6 +42,8 @@ from backend.src.domain.schemas.graph_types import (
     STATEMENT_TYPES,
     STRUCT,
     STRUCTURAL_TYPES,
+    Parameter,
+    Parameters,
     is_class,
     is_compound,
     is_decorated,
@@ -161,17 +163,6 @@ class ExpressionStatement(SimpleNode):
 class Block(DomainStruct):
     statements: list[Node | Any] = []
 
-
-class Parameters(DomainStruct):
-    params: list[Parameter] = []
-    accepts_kwargs: bool = False
-    accepts_args: bool = False
-
-
-class Parameter(DomainStruct):
-    name: str
-    type_annotation: str | None = None
-    default_value: str | None = None
 
 
 class TypedParameter(DomainStruct):

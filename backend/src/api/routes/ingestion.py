@@ -91,7 +91,9 @@ async def ingest_codebase(
 
     try:
         embedder_config = _default_embedder_config()
-        task = await ingest_codebase.delay(
+        from backend.src.tasks.codebase_ingestion import ingest_codebase as _ingest_codebase
+        # Execute directly (InMemoryBroker has no worker, so bypass queue)
+        result = await _ingest_codebase(
             directory_path=str(path.absolute()),
             repo_name=repo,
             embedder_config=embedder_config,
@@ -100,9 +102,9 @@ async def ingest_codebase(
             recursive=True,
         )
 
-        logger.bind(job_id=task.task_id).info("Codebase ingestion task queued")
+        logger.bind(_structured={"result": result}).info("Codebase ingestion complete")
 
-        return {"job_id": task.task_id, "status": "pending"}
+        return {"status": "completed", "result": result}
 
     except Exception as e:
         logger.error("Failed to queue codebase ingestion: {}", e)
@@ -142,7 +144,9 @@ async def ingest_single_file(
 
     try:
         embedder_config = _default_embedder_config()
-        task = await ingest_single_file.delay(
+        from backend.src.tasks.codebase_ingestion import ingest_single_file as _ingest_single_file
+        # Execute directly (InMemoryBroker has no worker, so bypass queue)
+        result = await _ingest_single_file(
             file_path=str(path.absolute()),
             repo_name=repo_name,
             embedder_config=embedder_config,
@@ -150,9 +154,9 @@ async def ingest_single_file(
             session_factory=global_infra.session_factory,
         )
 
-        logger.bind(job_id=task.task_id).info("Single file ingestion task queued")
+        logger.bind(_structured={"result": result}).info("Single file ingestion complete")
 
-        return {"job_id": task.task_id, "status": "pending"}
+        return {"status": "completed", "result": result}
 
     except Exception as e:
         logger.error("Failed to queue single file ingestion: {}", e)
@@ -217,8 +221,12 @@ async def ingest_documents(
     vector_config = _default_vector_config()
 
     try:
-        task = await ingest_docs.delay(
-            docs=docs,
+        # Execute directly (InMemoryBroker has no worker, so bypass queue)
+        from backend.src.tasks.doc_ingestion import ingest_docs as _ingest_docs
+        # Convert Doc objects to dicts for taskiq-compatible serialization
+        docs_dicts = [doc.to_dict() for doc in docs]
+        result = await _ingest_docs(
+            docs=docs_dicts,
             chunker_config=chunker_config,
             embedder_config=embedder_config,
             vector_config=vector_config,
@@ -227,14 +235,11 @@ async def ingest_documents(
 
         logger.bind(
             _structured={
-                "job_id": task.task_id,
-                "docs_indexed": result.get("docs_indexed", 0),
-                "parent_chunks": result.get("parent_chunks", 0),
-                "child_chunks": result.get("child_chunks", 0),
+                "result": result,
             }
         ).info("Document ingestion complete")
 
-        return {"job_id": task.task_id, "status": "pending"}
+        return {"status": "completed", "result": result}
 
     except Exception as e:
         logger.error("Failed to queue document ingestion: {}", e)

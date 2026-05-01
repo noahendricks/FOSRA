@@ -568,15 +568,6 @@ class GraphService:
         file_ids: list[int] | None,
         limit: int = 20,
     ) -> list[CodeNode]:
-        """Expand seed nodes via graph edges.
-
-        adaptive hop depth:
-          N < 5  -> 2 hops
-          5 <= N < 15 -> 1 hop
-          N >= 15 -> no expansion
-        follows CALLS, DEFINES_METHOD, INHERITS edges.
-        """
-
         if len(seed_nodes) >= 15:
             return []
         depth = 2 if len(seed_nodes) < 5 else 1
@@ -932,7 +923,6 @@ class GraphService:
             stats["failed"],
         )
         return stats
-
 
     def upsert_inheritance_edge(self, graph: "Graph", edge: InheritanceEdge) -> None:
         """Create an EXTENDS relationship between classes."""

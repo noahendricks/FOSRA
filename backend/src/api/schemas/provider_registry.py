@@ -153,7 +153,7 @@ def _start_models_refresh_task() -> None:
 
 
 # first provider is the default when no selection is persisted
-PRIORITY_PROVIDERS = ["ollama", "local", "ollama-cloud"]
+PRIORITY_PROVIDERS = ["ollama", "minimax-coding-plan", "local", "ollama-cloud"]
 
 
 def _modalities_to_bools(

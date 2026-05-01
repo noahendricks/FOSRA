@@ -40,7 +40,7 @@ class LoaderService:
 
             match mime_type:
                 case "application/pdf":
-                    from backend.src.services.processing.loaders.docling_loader import (
+                    from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
                     )
@@ -71,11 +71,10 @@ class LoaderService:
                 case "text/plain":
                     import tempfile
 
-                    from backend.src.services.processing.loaders.docling_loader import (
+                    from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
                     )
-
                     from backend.src.services.processing.utils.docling_regex import (
                         _clean_md,
                         _infer_chapters,
@@ -118,7 +117,7 @@ class LoaderService:
                         # Fall through to docling
 
                 case "text/markdown":
-                    from backend.src.services.processing.loaders.docling_loader import (
+                    from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
                     )
