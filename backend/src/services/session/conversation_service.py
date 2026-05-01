@@ -120,7 +120,6 @@ def _build_tui_message(msg: Message, session_id: str) -> MessageWithParts:
 
 
 class SessionService:
-
     @staticmethod
     async def create_session(
         session: AsyncSession,
@@ -358,6 +357,11 @@ class SessionService:
         logger.bind(_structured={"backend message": msg.to_dict()}).debug(
             "[BACKEND MESSAGE]"
         )
+        from icecream import ic as ic
+        from rich.pretty import pprint as pp
+
+        ic(msg)
+        pp(msg)
         _: MessageORM = await SessionRepo.add_message(
             session=session,
             new_message=msg,

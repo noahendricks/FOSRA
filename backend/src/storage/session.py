@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import msgspec
 from loguru import logger
@@ -9,17 +9,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.src.api.schemas.session_api_schemas import (
-    MessageUpdateRequest,
-    NewSessionRequest,
-    SessionDeleteRequest,
-    SessionUpdateRequest,
-)
 from backend.src.api.schemas.session_schemas import SessionTime
 from backend.src.domain.schemas.doc import MDNFile
 from backend.src.domain.schemas.session import Message, NewSession, Session, SessionFull
 from backend.src.storage.models import MessageORM, SessionORM
 from backend.src.storage.utils.converters import orm_to_domain
+
+if TYPE_CHECKING:
+    from backend.src.api.schemas.session_api_schemas import (
+        MessageUpdateRequest,
+        NewSessionRequest,
+        SessionDeleteRequest,
+        SessionUpdateRequest,
+    )
 
 
 class SessionError(Exception):
@@ -37,10 +39,10 @@ def file_part_to_dict(file_part: MDNFile) -> dict[str, Any]:
     return d
 
 
-def dict_to_file_part(d: dict[str, Any]) -> MDNFile:
-    if d.get("bytes"):
-        d["bytes"] = base64.b64decode(d["bytes"])
-    return msgspec.convert(d, MDNFile)
+# def dict_to_file_part(d: dict[str, Any]) -> MDNFile:
+#     if d.get("bytes"):
+#         d["bytes"] = base64.b64decode(d["bytes"])
+#     return msgspec.convert(d, MDNFile)
 
 
 class SessionRepo:
@@ -67,9 +69,10 @@ class SessionRepo:
 
         the_chat = chat.scalar_one_or_none()
 
-        logger.bind(_structured={"chat from session orm": vars(the_chat)}).debug(
-            "[CHAT SESSION ORM]"
-        )
+        if the_chat:
+            logger.bind(_structured={"chat from session orm": vars(the_chat)}).debug(
+                "[CHAT SESSION ORM]"
+            )
         return the_chat
 
     @staticmethod
@@ -132,13 +135,14 @@ class SessionRepo:
                 user_id=user_id,
             )
 
+            if db_session is None:
+                raise SessionError(
+                    session_id=session_id, user_id=user_id, entity="session"
+                )
+
             logger.bind(_structured={"DB SESSION": vars(db_session)}).debug(
                 "[DB SESSION]"
             )
-            if not db_session:
-                raise RuntimeError(
-                    f"No DB returned when attempting query in get_by_id w/ id {session_id}"
-                )
 
             logger.bind(
                 _structured={
@@ -147,11 +151,6 @@ class SessionRepo:
                     )
                 }
             ).debug("[MESSAGES IN SESSION]")
-
-            if db_session is None:
-                raise SessionError(
-                    session_id=session_id, user_id=user_id, entity="session"
-                )
 
             return orm_to_domain(cast(SessionORM, db_session), SessionFull)
 
@@ -272,6 +271,9 @@ class SessionRepo:
         session: AsyncSession,
         new_message: Message,
     ) -> MessageORM:
+        from rich.pretty import pprint as pp
+
+        pp(new_message)
         try:
             if not new_message.user_id:
                 raise ValueError("User ID is required to add a message")
@@ -290,6 +292,9 @@ class SessionRepo:
                     f"Session not found or access denied: session_id={new_message.session_id}, user_id={new_message.user_id}"
                 )
 
+            import msgspec
+
+            print(f"New message data , {msgspec.to_builtins(new_message)}")
             parent = None
             computed_root_id = new_message.root_id
             if new_message.parent_id:
@@ -311,6 +316,7 @@ class SessionRepo:
                 attached_files=None,
                 attached_sources=None,
             )
+            print(f"orm_keys before file handling {orm_kwargs}")
             # preserve caller-supplied id so SSE and DB stay in sync
             if new_message.message_id and new_message.message_id != "placeholder":
                 orm_kwargs["message_id"] = new_message.message_id
@@ -324,7 +330,7 @@ class SessionRepo:
             elif new_message.attached_sources:
                 db_message.attached_sources = new_message.attached_sources
 
-            logger.bind(_structured={"prior to add": vars(db_message)}).debug(
+            logger.bind(_structured={"prior to add": {"role": db_message.role, "text": db_message.text[:50] if db_message.text else None}}).debug(
                 "[PRIOR TO ADD - MESSAGE"
             )
 

@@ -81,7 +81,8 @@ def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
     """Convert a ``RetrievedChunk`` into ``ScoredRetrieval`` for citation."""
     from backend.src.settings import ScoredRetrieval as _SR
 
-    return _SR(
+    logger.bind(_structured={"fn": "_chunk_to_scored", "rank": rank, "score": chunk.score, "text_len": len(chunk.text)}).debug("ENTRY")
+    result = _SR(
         rank=rank,
         score=chunk.score,
         text=chunk.text,
@@ -92,20 +93,14 @@ def _chunk_to_scored(chunk: RetrievedChunk, rank: int) -> ScoredRetrieval:
         start_index=chunk.start_char,
         end_index=chunk.payload.get("end_char", chunk.start_char + len(chunk.text)),
     )
-
-
-# def _format_chunks_as_context(chunks: list[RetrievedChunk]) -> str:
-#     """Format chunks as XML with citation IDs."""
-#     if not chunks:
-#         return ""
-#     scored = [_chunk_to_scored(c, i) for i, c in enumerate(chunks)]
-#     parts = [format_source_for_citation(s) for s in scored]
-#     return "Source material:\n<documents>\n" + "\n".join(parts) + "\n</documents>"
+    logger.bind(_structured={"fn": "_chunk_to_scored", "rank": result.rank, "score": result.score, "doc_id": result.doc_id}).debug("EXIT")
+    return result
 
 
 def _retrieved_chunk_to_item(chunk: RetrievedChunk) -> AccumulatedItem:
     """Convert RetrievedChunk to AccumulatedItem."""
-    return AccumulatedItem(
+    logger.bind(_structured={"fn": "_retrieved_chunk_to_item", "doc_id": chunk.payload.get("doc_id"), "text_len": len(chunk.text), "score": chunk.score}).debug("ENTRY")
+    result = AccumulatedItem(
         file_id=chunk.payload.get("doc_id", chunk.payload.get("source_id", "")),
         path=chunk.payload.get("doc_title", "unknown"),
         line_start=chunk.start_char,
@@ -115,6 +110,8 @@ def _retrieved_chunk_to_item(chunk: RetrievedChunk) -> AccumulatedItem:
         score=chunk.score,
         qdrant_point_id=chunk.payload.get("point_id"),
     )
+    logger.bind(_structured={"fn": "_retrieved_chunk_to_item", "file_id": result.file_id, "path": result.path}).debug("EXIT")
+    return result
 
 
 def build_retrieval_pipeline(
@@ -132,30 +129,13 @@ def build_retrieval_pipeline(
     feedback_b: float = 1.35,
     feedback_c: float = 0.59,
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
-    """Compile a retrieval pipeline with configs baked into closures.
-
-    Args:
-        llm_config: LLM configuration for query expansion and subagent
-        embedder_config: Embedder configuration for vector search
-        vector_config: Vector store configuration
-        reranker_config: Optional reranker configuration
-        falkordb_client: Optional FalkorDB client for graph retrieval
-        token_budget: Maximum tokens in final context
-        max_iterations: Maximum agentic loop iterations
-        chunks_top_k: Top-K for chunk retrieval
-        dense_weight: Weight for dense vector in weighted RRF fusion
-        sparse_weight: Weight for sparse vector in weighted RRF fusion
-
-    Returns:
-        Compiled LangGraph pipeline
-    """
+    logger.bind(_structured={"fn": "build_retrieval_pipeline", "token_budget": token_budget, "max_iterations": max_iterations, "chunks_top_k": chunks_top_k, "dense_weight": dense_weight, "sparse_weight": sparse_weight, "feedback_a": feedback_a, "feedback_b": feedback_b, "feedback_c": feedback_c}).info("ENTRY")
 
     store = VectorService._get_store(vector_config, embedder_config)
-
     if not isinstance(store, QdrantClient):
         raise RuntimeError("Vector store must be QdrantClient for evolved pipeline")
 
-    # Create AsyncQdrantClient from the same connection params
+    # create AsyncQdrantClient from the same connection params
     qdrant_config = vector_config.qdrant_config
     if qdrant_config.data_path:
         qdrant_client = AsyncQdrantClient(path=qdrant_config.data_path)
@@ -170,33 +150,37 @@ def build_retrieval_pipeline(
     graph_service: GraphService | None = None
     if falkordb_client:
         graph_service = GraphService(falkordb_client)
+    logger.bind(_structured={"fn": "build_retrieval_pipeline", "graph_service_init": graph_service is not None}).info("graph_service initialized")
 
     async def expand_query_node(state: RetrievalState) -> dict[str, Any]:
         """Expand user query into rewritten query + checklist."""
+        logger.bind(_structured={"fn": "expand_query_node", "user_query": state.user_query[:100] if state.user_query else None, "chat_history_len": len(state.chat_history) if state.chat_history else 0}).info("ENTRY")
         expansion = await QueryExpander.expand(
             user_query=state.user_query,
             llm_config=llm_config,
             chat_history=state.chat_history,
         )
-        logger.debug(
-            "Pipeline: expanded query → {} items in checklist",
-            len(expansion.checklist),
-        )
-        return {
+        logger.bind(_structured={"fn": "expand_query_node", "checklist_len": len(expansion.checklist), "rewritten_query": expansion.rewritten_query[:100] if expansion.rewritten_query else None}).debug("QueryExpander.expand result")
+        result = {
             "query_expansion": expansion,
             "checklist": expansion.checklist,
             "iteration": 0,
             "accumulated_context": AccumulatedContext(),
             "file_ids": set(),
         }
+        logger.bind(_structured={"fn": "expand_query_node", "keys": list(result.keys()), "checklist_len": len(result["checklist"])}).info("EXIT")
+        return result
 
     async def initial_retrieve_node(state: RetrievalState) -> dict[str, Any]:
         """Initial retrieval on rewritten query (chunks + auto-merge hierarchical upgrade)."""
+        rewritten_query = state.query_expansion.rewritten_query[:100] if state.query_expansion else None
+        logger.bind(_structured={"fn": "initial_retrieve_node", "user_query": state.user_query[:100] if state.user_query else None, "rewritten_query": rewritten_query, "iteration": state.iteration}).info("ENTRY")
         if state.query_expansion:
             query = state.query_expansion.rewritten_query
         else:
             query = state.user_query
 
+        logger.bind(_structured={"fn": "initial_retrieve_node", "query": query[:100] if query else None, "top_k": chunks_top_k, "dense_weight": dense_weight, "sparse_weight": sparse_weight}).debug("calling VectorService.retrieve")
         chunks, file_ids, merged_context = await VectorService.retrieve(
             client=qdrant_client,
             embed_config=embedder_config,
@@ -205,26 +189,24 @@ def build_retrieval_pipeline(
             dense_weight=dense_weight,
             sparse_weight=sparse_weight,
         )
+        logger.bind(_structured={"fn": "initial_retrieve_node", "chunks": len(chunks), "file_ids": len(file_ids), "merged_context_len": len(merged_context)}).debug("VectorService.retrieve returned")
 
         acc_items = [_retrieved_chunk_to_item(c) for c in chunks]
         accumulated_context = AccumulatedContext(items=acc_items)
+        logger.bind(_structured={"fn": "initial_retrieve_node", "accumulated_items": len(accumulated_context.items)}).debug("accumulated_context created")
 
-        logger.debug(
-            "Pipeline: initial retrieve → {} chunks, {} unique files, merged chars: {}",
-            len(chunks),
-            len(file_ids),
-            len(merged_context),
-        )
-
-        return {
+        result = {
             "accumulated_context": accumulated_context,
             "file_ids": file_ids,
             "iteration": 1,
             "merged_context": merged_context,
         }
+        logger.bind(_structured={"fn": "initial_retrieve_node", "accumulated_items": len(accumulated_context.items), "file_ids": len(file_ids), "iteration": 1}).info("EXIT")
+        return result
 
     async def agentic_loop_node(state: RetrievalState) -> dict[str, Any]:
         """Run subagent iteration: assess coverage + plan retrieval."""
+        logger.bind(_structured={"fn": "agentic_loop_node", "user_query": state.user_query[:100] if state.user_query else None, "iteration": state.iteration, "checklist_len": len(state.checklist), "accumulated_items": len(state.accumulated_context.items), "file_ids": list(state.file_ids)}).info("ENTRY")
         result = await Subagent.assess_and_plan(
             original_query=state.user_query,
             checklist=state.checklist,
@@ -233,10 +215,13 @@ def build_retrieval_pipeline(
             llm_config=llm_config,
             max_iterations=max_iterations,
         )
+        logger.bind(_structured={"fn": "agentic_loop_node", "all_answered": result.all_answered, "retrieval_queries_len": len(result.retrieval_queries), "checklist_len": len(result.checklist)}).debug("Subagent.assess_and_plan result")
 
         new_items: list[AccumulatedItem] = []
+        logger.bind(_structured={"fn": "agentic_loop_node", "retrieval_queries_len": len(result.retrieval_queries)}).debug("processing retrieval_queries")
 
-        for rq in result.retrieval_queries:
+        for i, rq in enumerate(result.retrieval_queries):
+            logger.bind(_structured={"fn": "agentic_loop_node", "query_idx": i, "query": rq.query[:100] if rq.query else None, "target": str(rq.target), "filters": rq.filters}).debug("retrieval_query")
             if rq.target in (RetrievalTarget.VECTOR, RetrievalTarget.BOTH):
                 vector_items = await _execute_vector_retrieval(
                     rq.query,
@@ -246,6 +231,7 @@ def build_retrieval_pipeline(
                     dense_weight=dense_weight,
                     sparse_weight=sparse_weight,
                 )
+                logger.bind(_structured={"fn": "agentic_loop_node", "query_idx": i, "vector_items": len(vector_items)}).debug("vector retrieval returned")
                 new_items.extend(vector_items)
 
             if rq.target in (RetrievalTarget.GRAPH, RetrievalTarget.BOTH):
@@ -253,27 +239,26 @@ def build_retrieval_pipeline(
                     graph_items = await _execute_graph_retrieval(
                         rq.query, rq.filters, graph_service, embedder_config
                     )
-                    new_items.extend(graph_items)
+                    logger.bind(_structured={"fn": "agentic_loop_node", "query_idx": i, "graph_items": len(graph_items) if graph_items else 0}).debug("graph retrieval returned")
+                    new_items.extend(graph_items if graph_items else [])
 
+        logger.bind(_structured={"fn": "agentic_loop_node", "new_items": len(new_items)}).debug("new_items collected")
         updated_context = state.accumulated_context.add_items(new_items)
+        logger.bind(_structured={"fn": "agentic_loop_node", "updated_items": len(updated_context.items)}).debug("updated accumulated_context")
 
         new_file_ids = {i.file_id for i in new_items}
         updated_file_ids = state.file_ids | new_file_ids
+        logger.bind(_structured={"fn": "agentic_loop_node", "new_file_ids": len(new_file_ids), "updated_file_ids": len(updated_file_ids)}).debug("file_ids updated")
 
-        logger.debug(
-            "Pipeline: agentic iteration {} → {} new items, {} total files",
-            state.iteration,
-            len(new_items),
-            len(updated_file_ids),
-        )
-
-        return {
+        result_dict = {
             "checklist": result.checklist,
             "accumulated_context": updated_context,
             "file_ids": updated_file_ids,
             "iteration": state.iteration + 1,
             "_all_answered": result.all_answered,
         }
+        logger.bind(_structured={"fn": "agentic_loop_node", "checklist_len": len(result.checklist), "accumulated_items": len(updated_context.items), "file_ids": len(updated_file_ids), "next_iteration": state.iteration + 1, "all_answered": result.all_answered}).info("EXIT")
+        return result_dict
 
     async def _execute_vector_retrieval(
         query: str,
@@ -284,11 +269,14 @@ def build_retrieval_pipeline(
         sparse_weight: float = 1.0,
     ) -> list[AccumulatedItem]:
         """Execute vector retrieval and return AccumulatedItems."""
+        logger.bind(_structured={"fn": "_execute_vector_retrieval", "query": query[:100] if query else None, "filters": filters, "dense_weight": dense_weight, "sparse_weight": sparse_weight}).info("ENTRY")
         filter_dict = None
         if filters and filters.file_ids:
             filter_dict = {"doc_ids": filters.file_ids}
+            logger.bind(_structured={"fn": "_execute_vector_retrieval", "doc_ids": filters.file_ids}).debug("filters applied")
 
         if embed_config.sparse_enabled:
+            logger.bind(_structured={"fn": "_execute_vector_retrieval", "method": "weighted_search"}).debug("using weighted_search")
             chunks = await VectorService.weighted_search(
                 client=client,
                 collection_name=CHUNKS_COLLECTION,
@@ -300,6 +288,7 @@ def build_retrieval_pipeline(
                 limit=10,
             )
         else:
+            logger.bind(_structured={"fn": "_execute_vector_retrieval", "method": "search_collection"}).debug("using search_collection")
             chunks = await VectorService.search_collection(
                 client=client,
                 collection_name=CHUNKS_COLLECTION,
@@ -308,56 +297,73 @@ def build_retrieval_pipeline(
                 filters=filter_dict,
                 limit=10,
             )
+        logger.bind(_structured={"fn": "_execute_vector_retrieval", "chunks": len(chunks)}).debug("VectorService returned")
 
-        return [_retrieved_chunk_to_item(c) for c in chunks]
+        result = [_retrieved_chunk_to_item(c) for c in chunks]
+        logger.bind(_structured={"fn": "_execute_vector_retrieval", "items": len(result)}).info("EXIT")
+        return result
 
     async def _execute_graph_retrieval(
         query: str,
         filters: Any | None,
         graph_svc: GraphService,
         embed_config: EmbedderConfig,
-    ) -> Any:
+    ) -> list[AccumulatedItem]:
         """Execute graph retrieval and return AccumulatedItems."""
-        pass
+        logger.bind(_structured={"fn": "_execute_graph_retrieval", "query": query[:100] if query else None, "filters": filters}).debug("ENTRY")
+        # TODO: implement graph retrieval
+        logger.bind(_structured={"fn": "_execute_graph_retrieval", "items": 0}).debug("EXIT (not implemented)")
+        return []
 
     def should_continue_loop(state: RetrievalState) -> str:
         """Decide if agentic loop should continue."""
         all_answered = getattr(state, "_all_answered", False)
         iteration = getattr(state, "iteration", 0)
+        logger.bind(_structured={"fn": "should_continue_loop", "all_answered": all_answered, "iteration": iteration, "max_iterations": max_iterations}).debug("ENTRY")
 
         if all_answered:
+            logger.bind(_structured={"fn": "should_continue_loop", "branch": "relevance_feedback", "reason": "all_answered"}).debug("EXIT")
             return "relevance_feedback"
 
         if iteration >= max_iterations:
+            logger.bind(_structured={"fn": "should_continue_loop", "branch": "relevance_feedback", "reason": "max_iterations"}).debug("EXIT")
             return "relevance_feedback"
 
+        logger.bind(_structured={"fn": "should_continue_loop", "branch": "agentic_loop"}).debug("EXIT")
         return "agentic_loop"
 
     async def relevance_feedback_node(state: RetrievalState) -> dict[str, Any]:
         """apply Qdrant relevance feedback using accumulated items as positive examples."""
+        logger.bind(_structured={"fn": "relevance_feedback_node", "user_query": state.user_query[:100] if state.user_query else None, "accumulated_items": len(state.accumulated_context.items), "iteration": state.iteration}).info("ENTRY")
         context = state.accumulated_context
         if not context.items:
+            logger.bind(_structured={"fn": "relevance_feedback_node", "reason": "no_items"}).info("EXIT early")
             return {"accumulated_context": context}
 
         feedback_items: list[AccumulatedItem] = [
             item for item in context.items if item.qdrant_point_id and item.score > 0
         ]
+        logger.bind(_structured={"fn": "relevance_feedback_node", "feedback_items": len(feedback_items)}).debug("filtered feedback_items")
+
         if len(feedback_items) < 2:
-            logger.debug(
-                "Pipeline: relevance feedback skipped ({} items)", len(feedback_items)
-            )
+            logger.bind(_structured={"fn": "relevance_feedback_node", "feedback_items": len(feedback_items), "reason": "less_than_2"}).info("EXIT skipping")
             return {"accumulated_context": context}
 
         embedder = EmbedderService()
         try:
+            logger.bind(_structured={"fn": "relevance_feedback_node"}).debug("calling embed_query")
             embedded = await embedder.embed_query(state.user_query, embedder_config)
             if not embedded or not embedded.dense:
+                logger.bind(_structured={"fn": "relevance_feedback_node", "reason": "empty_embed"}).info("EXIT skipping")
                 return {"accumulated_context": context}
+            logger.bind(_structured={"fn": "relevance_feedback_node", "dense_vector_len": len(embedded.dense) if embedded.dense else 0}).debug("embed_query success")
         except Exception as e:
-            logger.warning("Pipeline: embed query failed for relevance feedback: {}", e)
+            logger.bind(_structured={"fn": "relevance_feedback_node", "error": str(e)}).warning("embed_query failed")
             return {"accumulated_context": context}
 
         top_items = sorted(feedback_items, key=lambda x: x.score, reverse=True)[:20]
+        logger.bind(_structured={"fn": "relevance_feedback_node", "top_items": len(top_items)}).debug("sorted top_items")
+
         feedback = [
             FeedbackItem(
                 example=str(item.qdrant_point_id),
@@ -365,6 +371,7 @@ def build_retrieval_pipeline(
             )
             for item in top_items
         ]
+        logger.bind(_structured={"fn": "relevance_feedback_node", "feedback_items": len(feedback)}).debug("created FeedbackItems")
 
         feedback_query = RelevanceFeedbackQuery(
             relevance_feedback=RelevanceFeedbackInput(
@@ -381,17 +388,20 @@ def build_retrieval_pipeline(
         )
 
         try:
+            logger.bind(_structured={"fn": "relevance_feedback_node"}).debug("calling query_points")
             results = await qdrant_client.query_points(
                 collection_name=CHUNKS_COLLECTION,
                 query=feedback_query,
                 with_payload=True,
                 limit=15,
             )
+            logger.bind(_structured={"fn": "relevance_feedback_node", "points": len(results.points) if results.points else 0}).debug("query_points returned")
         except Exception as e:
-            logger.warning("Pipeline: relevance feedback query failed: {}", e)
+            logger.bind(_structured={"fn": "relevance_feedback_node", "error": str(e)}).warning("query_points failed")
             return {"accumulated_context": context}
 
         if not results.points:
+            logger.bind(_structured={"fn": "relevance_feedback_node", "reason": "no_points"}).info("EXIT skipping")
             return {"accumulated_context": context}
 
         updated_items: list[AccumulatedItem] = []
@@ -413,29 +423,31 @@ def build_retrieval_pipeline(
                     qdrant_point_id=str(sp.id),
                 )
                 updated_items.append(item)
+        logger.bind(_structured={"fn": "relevance_feedback_node", "updated_items": len(updated_items)}).debug("created AccumulatedItems")
 
         existing_keys = {(i.file_id, i.line_start) for i in context.items}
         unique_updates = [
             i for i in updated_items if (i.file_id, i.line_start) not in existing_keys
         ]
+        logger.bind(_structured={"fn": "relevance_feedback_node", "unique_updates": len(unique_updates)}).debug("filtered unique_updates")
         new_context = AccumulatedContext(items=context.items + unique_updates)
+        logger.bind(_structured={"fn": "relevance_feedback_node", "total_items": len(new_context.items)}).debug("created new_context")
 
-        logger.debug(
-            "Pipeline: relevance feedback → {} new items (from {} feedback)",
-            len(unique_updates),
-            len(top_items),
-        )
-
-        return {"accumulated_context": new_context}
+        result = {"accumulated_context": new_context}
+        logger.bind(_structured={"fn": "relevance_feedback_node", "total_items": len(new_context.items), "new_items": len(unique_updates)}).info("EXIT")
+        return result
 
     async def rerank_node(state: RetrievalState) -> dict[str, Any]:
         """Rerank accumulated context against original query."""
+        logger.bind(_structured={"fn": "rerank_node", "user_query": state.user_query[:100] if state.user_query else None, "accumulated_items": len(state.accumulated_context.items), "reranker_config": reranker_config is not None}).info("ENTRY")
         context = state.accumulated_context
 
         if not context.items:
-            return {"formatted_context": "", "context": ""}
+            logger.bind(_structured={"fn": "rerank_node", "reason": "no_items"}).info("EXIT empty")
+            return {"formatted_context": "", "context": "", "accumulated_context": context}
 
         if reranker_config:
+            logger.bind(_structured={"fn": "rerank_node", "items_to_rerank": len(context.items)}).debug("reranking")
             chunks = [
                 RetrievedChunk(
                     text=item.content,
@@ -456,6 +468,7 @@ def build_retrieval_pipeline(
                 query=state.user_query,
                 chunks=chunks,
             )
+            logger.bind(_structured={"fn": "rerank_node", "reranked_chunks": len(reranked)}).debug("RerankerService returned")
 
             reranked_items = []
             for chunk in reranked:
@@ -463,23 +476,23 @@ def build_retrieval_pipeline(
                     if item.content == chunk.text:
                         reranked_items.append(item)
                         break
+            logger.bind(_structured={"fn": "rerank_node", "matched_items": len(reranked_items)}).debug("matched reranked items")
 
             context = AccumulatedContext(items=reranked_items)
 
         formatted = context.to_formatted_context()
         plain = context.to_plain_text()
+        logger.bind(_structured={"fn": "rerank_node", "formatted_chars": len(formatted), "plain_chars": len(plain)}).debug("formatted context")
 
-        logger.debug(
-            "Pipeline: reranked {} items into context",
-            len(context.items),
-        )
-
-        return {
+        result = {
             "formatted_context": formatted,
             "context": plain,
             "accumulated_context": context,
         }
+        logger.bind(_structured={"fn": "rerank_node", "formatted_chars": len(formatted), "plain_chars": len(plain), "items": len(context.items)}).info("EXIT")
+        return result
 
+    logger.bind(_structured={"fn": "build_retrieval_pipeline", "nodes": ["expand_query", "initial_retrieve", "agentic_loop", "relevance_feedback", "rerank"]}).info("building StateGraph")
     graph = StateGraph(RetrievalState)  # type: ignore[arg-type]
 
     _ = graph.add_node("expand_query", expand_query_node)
@@ -495,4 +508,6 @@ def build_retrieval_pipeline(
     _ = graph.add_edge("relevance_feedback", "rerank")
     _ = graph.add_edge("rerank", END)
 
-    return graph.compile()
+    compiled = graph.compile()
+    logger.bind(_structured={"fn": "build_retrieval_pipeline"}).info("EXIT compiled graph")
+    return compiled

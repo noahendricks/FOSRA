@@ -20,8 +20,6 @@ class ToolCallRecord:
     start: float
 
 
-# Shared state needed across stream_consumer functions
-# These are passed in rather than global
 session_todos: dict[str, list[dict[str, Any]]] = {}
 
 
@@ -114,6 +112,7 @@ async def handle_tool_result(
     from backend.src.services.session.runner.utils import _parse_todo_output
 
     call_id = getattr(msg, "tool_call_id", None)
+
     if call_id and call_id in tool_call_parts and call_id not in handled_blocked_calls:
         tc_info = tool_call_parts[call_id]
         tool_name = tc_info.tool_name

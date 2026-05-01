@@ -36,6 +36,7 @@ def resolve_llm_config(
     slog: Any,
 ) -> "LLMConfig | None":
     import os
+    from pydantic import SecretStr
 
     for provider in _build_providers():
         if provider.id != provider_id:
@@ -53,10 +54,12 @@ def resolve_llm_config(
         if not api_key and provider_id != "ollama":
             slog.warning("api_key_missing", provider=provider_id, env=provider.env)
 
+        # Use SecretStr to preserve case of API key (BaseModelFlexLower applies str_to_lower)
+        # Use the original model_id to preserve case
         return LLMConfig(
             provider=provider_id,
-            model=model.id,
-            api_key=api_key or "not-set",
+            model=model_id,  # Use original model_id to preserve case
+            api_key=SecretStr(api_key) if api_key else SecretStr("not-set"),
             api_base=model.api.url,
         )
 

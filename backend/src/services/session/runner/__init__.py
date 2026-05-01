@@ -44,7 +44,7 @@ async def run_agent_with_events(
     user_id: str,
     prompt_request: Any,
     session_factory: async_sessionmaker[AsyncSession],
-) -> None:
+) -> Any:
     """Run the agent and emit TUI events through the event bus.
 
     This function is meant to run as a background asyncio task,
@@ -108,19 +108,20 @@ async def run_agent_with_events(
             )
 
             backend = None
-            if agent_name == "fosra-coding":
+            project_dir = (
+                getattr(prompt_request, "project_dir", None) or "/home/roccoluxe/FOSRA"
+            )
+            if agent_name == "fosra-coding" or project_dir:
                 from deepagents.backends import FilesystemBackend
 
-                backend = FilesystemBackend(
-                    root_dir=prompt_request.project_dir or "/home/roccoluxe/FOSRA"
-                )
+                backend = FilesystemBackend(root_dir=project_dir)
 
             # build LLMConfig from TUI-selected provider/model
             llm_config = None
             if provider_id and model_id:
                 llm_config = resolve_llm_config(provider_id, model_id, slog)
 
-            agent, result_store = create_fosra_agent(
+            agent, result_store = await create_fosra_agent(
                 user_prefs,
                 backend=backend,
                 checkpointer=global_infra.checkpointer,
@@ -229,11 +230,13 @@ async def run_agent_with_events(
                 slog=slog,
             )
 
+            return result
+
     except asyncio.CancelledError:
         slog.info("task_cancelled")
         if emitter is not None:
             await emitter.emit_session_status(session_id, {"type": "idle"})
-        return
+        return None
 
     except Exception as e:
         slog.opt(exception=e).error("agent_error")

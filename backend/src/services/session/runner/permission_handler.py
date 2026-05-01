@@ -6,6 +6,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from backend.src.api.schemas.tui_control_schemas import (
+    PermissionRequestTool,
+    QuestionRequestTool,
+)
+
 if TYPE_CHECKING:
     from backend.src.services.session.event_emitter import EventEmitter
 
@@ -67,11 +72,9 @@ async def handle_permission_request(
             "messageID": assistant_msg_id,
         },
         always=[],
-        tool={
-            "messageID": assistant_msg_id,
-            "callID": call_id,
-        },
+        tool=PermissionRequestTool(messageID=assistant_msg_id, callID=call_id),
     )
+
     await emitter.emit_permission_asked(request)
     reply = await future
 
@@ -95,10 +98,7 @@ async def handle_question_request(
     request_id, future, request = ask_question(
         session_id=session_id,
         questions=tool_args.get("questions", []),
-        tool={
-            "messageID": assistant_msg_id,
-            "callID": call_id,
-        },
+        tool=QuestionRequestTool(messageID=assistant_msg_id, callID=call_id),
     )
     await emitter.emit_question_asked(request)
     reply = await future

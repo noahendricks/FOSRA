@@ -31,47 +31,6 @@ class ContentDelta:
     reasoning_start_time: int | None = None
 
 
-def parse_additional_kwargs(
-    msg: AIMessageChunk, state: ParseState
-) -> list[ContentDelta]:
-    """parse reasoning content from additional_kwargs.
-
-    some providers (ollama/qwen3) send reasoning via additional_kwargs
-    instead of content blocks.
-    """
-    deltas: list[ContentDelta] = []
-    additional = msg.additional_kwargs or {}
-
-    reasoning_from_kwargs = additional.get("reasoning_content", "") or additional.get(
-        "reasoning_details", ""
-    )
-    if reasoning_from_kwargs:
-        now_ts = int(time.time())
-        if state.reasoning_part_id is None:
-            state.reasoning_part_id = ulid_factory()
-            state.reasoning_start_time = now_ts
-            deltas.append(
-                ContentDelta(
-                    kind="reasoning_start",
-                    content="",
-                    reasoning_part_id=state.reasoning_part_id,
-                    reasoning_start_time=now_ts,
-                )
-            )
-        state.inside_think_block = True
-        state.full_reasoning_text += reasoning_from_kwargs
-        deltas.append(
-            ContentDelta(
-                kind="reasoning_delta",
-                content=reasoning_from_kwargs,
-                reasoning_part_id=state.reasoning_part_id,
-                reasoning_start_time=state.reasoning_start_time,
-            )
-        )
-
-    return deltas
-
-
 def parse_content_blocks(
     blocks: list[dict[str, Any]], state: ParseState
 ) -> list[ContentDelta]:

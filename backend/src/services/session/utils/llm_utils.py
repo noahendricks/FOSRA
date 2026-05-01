@@ -25,7 +25,7 @@ from backend.src.settings import LLMConfig, ScoredRetrieval
 if TYPE_CHECKING:
     pass
 
-litellm.drop_params = True
+litellm.drop_params = False  # Must be False for minimax to include api_key
 
 
 PROVIDER_TO_LITELLM_MAP: dict[str, str] = {
@@ -42,6 +42,8 @@ PROVIDER_TO_LITELLM_MAP: dict[str, str] = {
     "PALM": "palm",
     "OPENROUTER": "openrouter",
     "OLLAMA": "ollama_chat",
+    "MINIMAX": "minimax",
+    "MINIMAX-CODING-PLAN": "minimax",
 }
 
 # =============================================================================
@@ -66,7 +68,13 @@ def _build_model_string(
         logger.debug("Built custom model string: {}", model_string)
         return model_string
 
+    # Special case: MiniMax uses openai-compatible API with minimax/ prefix
     provider_upper = provider.upper()
+    if provider_upper in ("MINIMAX-CODING-PLAN", "MINIMAX"):
+        # litellm expects minimax/ prefix
+        model_string = f"minimax/{model_name}"
+        logger.debug("Built MiniMax model string: {}", model_string)
+        return model_string
 
     if provider_upper == "OPENROUTER":
         model_string = f"openrouter/{model_name}"
@@ -153,10 +161,14 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
             model_name=config.model,
             custom_provider=config.custom_provider,
         )
+        
+        
 
+        api_key_val = config.get_api_key_value()
+        logger.debug("API key prefix: {}", api_key_val[:10] if api_key_val else "None")
         kwargs: dict[str, Any] = {
             "model": model_string,
-            "api_key": config.get_api_key_value(),
+            "api_key": api_key_val,
             "streaming": True,
         }
 
@@ -168,7 +180,7 @@ def build_llm(config: LLMConfig) -> ChatLiteLLM:
 
         llm = ChatLiteLLM(**_filter_none_values(kwargs))  # pyright: ignore
 
-        logger.debug("Created LLM instance: {}", model_string)
+        logger.debug("Created LLM instance: {} with api_base: {}", model_string, kwargs.get("api_base"))
 
         return llm
 
