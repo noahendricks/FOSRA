@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from langchain_core.documents import Document
-from langchain_core.documents.base import Blob
+from loguru import logger
 from ulid import ULID
 
-from backend.src.domain.schemas.doc import Doc, DocMetadata, MDNFile
+from backend.src.domain.schemas.doc import Doc, MDNFile
+from backend.src.services.processing.utils.parse_utils import code_mimes, text_mimes
 
 
 def to_bytes(path: str):
@@ -19,19 +19,10 @@ def ulid_factory() -> str:
     return str(ULID())
 
 
-from loguru import logger
-
-
-# NOTE: issues that remain: hash not implemented, other pdf parser options not available, pdf metadata type is limited to PyMuPDFParser
 class LoaderService:
     @staticmethod
     def _parse_files(files: list[str | Path | MDNFile]) -> list[Doc]:
         from content_types import get_content_type as get_mime
-        from langchain_community.document_loaders.parsers import PyMuPDFParser
-        from langchain_community.document_loaders.parsers.txt import TextParser
-        from langchain_core.document_loaders import Blob
-
-        from backend.src.services.processing.utils.loader import code_mimes
 
         docs = []
 
@@ -47,16 +38,8 @@ class LoaderService:
             else:
                 raise RuntimeError(f"Incorrect File Type at Ingestion: {type(file)}")
 
-            id = ulid_factory()
-
             match mime_type:
                 case "application/pdf":
-                    file_bytes = to_bytes(file)
-                    blob: Blob = Blob.from_data(
-                        file_bytes,
-                        mime_type=mime_type,
-                        path=file,
-                    )
                     from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
@@ -64,6 +47,7 @@ class LoaderService:
 
                     try:
                         d = DoclingLoader.parse_file_sync(file, mime_type=mime_type)
+
                         docs.append(d)
                         logger.debug(
                             "created (docling) {}: {}: {}",
@@ -80,25 +64,59 @@ class LoaderService:
                             file,
                             ex,
                         )
+
+                        # removed fallback, may replace or
                         pass
 
-                    pdf_docs: list[Document] = PyMuPDFParser(mode="single").parse(
-                        blob=blob
-                    )
-                    for lc_doc in pdf_docs:
-                        d = Doc(
-                            id=ulid_factory(),
-                            page_content=lc_doc.page_content,
-                            metadata=DocMetadata(
-                                mime_type=mime_type,
-                                source=file,
-                                doc_id=ulid_factory(),
-                                doc_title=Path(file).name,
-                            ),
-                        )
-                        docs.append(d)
+                case "text/plain":
+                    import tempfile
 
-                case "text/markdown" | "text/plain":
+                    from backend.src.services.processing.docling_loader import (
+                        DoclingLoader,
+                        DoclingParseError,
+                    )
+                    from backend.src.services.processing.utils.docling_regex import (
+                        _clean_md,
+                        _infer_chapters,
+                    )
+
+                    try:
+                        text = Path(file).read_text(encoding="utf-8", errors="replace")
+
+                        text = _infer_chapters(text)
+
+                        text = _clean_md(text)
+
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=".md", delete=False
+                        ) as tmp:
+                            tmp.write(text)
+                            tmp_path = tmp.name
+
+                        try:
+                            d = DoclingLoader.parse_file_sync(
+                                tmp_path, mime_type="text/markdown"
+                            )
+                            # update source to original file
+                            d.metadata.source = file
+                            docs.append(d)
+                            logger.debug(
+                                "created (fast path) {}: {}",
+                                d.metadata.source,
+                                d.id,
+                            )
+                        finally:
+                            Path(tmp_path).unlink(missing_ok=True)
+                        continue
+                    except Exception as ex:
+                        logger.warning(
+                            "Fast path failed for {}, falling back to docling: {}",
+                            file,
+                            ex,
+                        )
+                        # Fall through to docling
+
+                case "text/markdown":
                     from backend.src.services.processing.docling_loader import (
                         DoclingLoader,
                         DoclingParseError,
@@ -118,53 +136,14 @@ class LoaderService:
                         raise
                     except Exception as ex:
                         logger.warning(
-                            "Docling failed for {}, falling back to TextParser: {}",
+                            "Docling failed for {}, file: {}",
                             file,
                             ex,
                         )
 
-                    file_bytes = to_bytes(file)
-                    blob: Blob = Blob.from_data(
-                        file_bytes,
-                        mime_type=mime_type,
-                        path=file,
-                    )
-                    text_docs: list[Document] = TextParser().parse(blob)
-
-                    for lc_doc in text_docs:
-                        d = Doc(
-                            id=ulid_factory(),
-                            page_content=lc_doc.page_content,
-                            metadata=DocMetadata(
-                                mime_type=mime_type,
-                                source=file,
-                                doc_id=ulid_factory(),
-                                doc_title=Path(file).name,
-                            ),
-                        )
-                        docs.append(d)
-
                 case _ if mime_type in code_mimes:
-                    file_bytes = to_bytes(file)
-                    blob: Blob = Blob.from_data(
-                        file_bytes,
-                        mime_type=mime_type,
-                        path=file,
-                    )
-                    text_docs: list[Document] = TextParser().parse(blob)
-
-                    for lc_doc in text_docs:
-                        d = Doc(
-                            id=ulid_factory(),
-                            page_content=lc_doc.page_content,
-                            metadata=DocMetadata(
-                                mime_type=mime_type,
-                                source=file,
-                                doc_id=ulid_factory(),
-                                doc_title=Path(file).name,
-                            ),
-                        )
-                        docs.append(d)
+                    # NOTE: TextParser undefined - placeholder for future implementation
+                    pass
 
                 case _:
                     pass
@@ -201,7 +180,7 @@ class LoaderService:
 
     # public method
     @staticmethod
-    def parse_user_paths(user_paths: list[str]):
+    def parse_user_paths(user_paths: list[str]) -> list[Doc]:
         files_as_docs = []
         loose_files = []
         for path in user_paths:
@@ -209,24 +188,14 @@ class LoaderService:
             if p.is_dir():
                 logger.info("Processing directory: {}", p.as_posix())
 
-                dir_files_list = LoaderService()._parse_directory(dir_path=p)
+                dir_files_list: list[Doc] = LoaderService()._parse_directory(dir_path=p)
 
                 files_as_docs.append(dir_files_list)
             if p.is_file():
-                file_as_doc = loose_files.append(p)
+                loose_files.append(p)
 
         if loose_files:
             files_as_docs.append(LoaderService()._parse_files(loose_files))
 
         logger.debug("Returning {} docs", len(files_as_docs))
         return files_as_docs
-
-    @staticmethod
-    def parse_pdf():
-        from docling.document_converter import DocumentConverter
-
-        # NOTE: Will complete later, not important now
-        source = ""
-        converter = DocumentConverter()
-        result = converter.convert(source)
-        logger.debug("PDF parse result: {}", result.document.export_to_markdown())

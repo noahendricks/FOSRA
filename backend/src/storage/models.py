@@ -246,3 +246,78 @@ class SessionStateORM(Base):
     metadata_: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSONB, nullable=True
     )
+
+
+class MessageV2ORM(Base):
+    __tablename__ = "messages_v2"
+    __table_args__ = (
+        Index("ix_messages_v2_session_created", "session_id", "created_at"),
+    )
+
+    message_id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, index=True, default=ulid_factory
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(26),
+        ForeignKey("sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("messages_v2.message_id"), nullable=True
+    )
+    root_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("messages_v2.message_id"), nullable=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    message_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSONB)
+    )
+
+    parts: Mapped[list["PartORM"]] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('user', 'assistant', 'system', 'tool')",
+            name="check_valid_role_v2",
+        ),
+    )
+
+
+class PartORM(Base):
+    __tablename__ = "parts"
+    __table_args__ = (
+        Index("ix_parts_message_id", "message_id"),
+        Index("ix_parts_session_id", "session_id"),
+    )
+
+    part_id: Mapped[str] = mapped_column(
+        String(26), primary_key=True, default=ulid_factory
+    )
+    message_id: Mapped[str] = mapped_column(
+        String(26),
+        ForeignKey("messages_v2.message_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(26),
+        ForeignKey("sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    part_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSONB))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    message: Mapped["MessageV2ORM"] = relationship(back_populates="parts")

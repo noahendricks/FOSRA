@@ -43,16 +43,6 @@ async def maybe_generate_title(
     emitter: EventEmitter,
     slog: Any,
 ) -> None:
-    """Generate title from user_text if session title is still 'New Session'.
-
-    Retrieves the session, checks if title == 'New Session', generates
-    a title from the first 6 non-filler words, updates the DB, and emits
-    a session_updated event.
-
-    Does nothing if:
-    - user_text is empty
-    - session already has a non-default title
-    """
     if not user_text:
         return
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from langchain_core.messages import AIMessageChunk, ToolMessage
+
     from backend.src.services.session.runner.event_formatter import EventFormatter
 
 
@@ -19,8 +20,6 @@ class ToolCallRecord:
     start: float
 
 
-# Shared state needed across stream_consumer functions
-# These are passed in rather than global
 session_todos: dict[str, list[dict[str, Any]]] = {}
 
 
@@ -40,18 +39,11 @@ async def handle_tool_calls(
     tool_call_parts: dict[str, ToolCallRecord],
     handled_blocked_calls: set[str],
 ) -> bool:
-    """Process tool_calls from an AIMessageChunk.
-
-    Emits tool_start events via formatter, handles permission/question requests
-    via permission_handler. Returns True if stream should abort.
-
-    from: stream_consumer.py lines 240-302
-    """
-    from backend.src.storage.utils.converters import ulid_factory
     from backend.src.services.session.runner.permission_handler import (
         handle_permission_request,
         handle_question_request,
     )
+    from backend.src.storage.utils.converters import ulid_factory
 
     for tc in msg.tool_calls:
         call_id = None
@@ -117,16 +109,10 @@ async def handle_tool_result(
     tool_call_parts: dict[str, ToolCallRecord],
     handled_blocked_calls: set[str],
 ) -> None:
-    """Process a ToolMessage result (tool execution completed).
-
-    Emits tool_end via formatter. Special handling for todowrite tool
-    (parses todos and emits todo_updated event).
-
-    from: stream_consumer.py lines 304-334
-    """
     from backend.src.services.session.runner.utils import _parse_todo_output
 
     call_id = getattr(msg, "tool_call_id", None)
+
     if call_id and call_id in tool_call_parts and call_id not in handled_blocked_calls:
         tc_info = tool_call_parts[call_id]
         tool_name = tc_info.tool_name

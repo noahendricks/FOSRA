@@ -9,7 +9,7 @@ from qdrant_client.models import ScoredPoint
 
 from backend.src.api.schemas.base import BaseModelFlex
 from backend.src.domain.enums import RetrievalMode, VectorStoreType
-from backend.src.domain.schemas.doc import Chunk
+from backend.src.domain.schemas.doc import Subsection
 from backend.src.services.processing.embedder_service import EmbedderService
 from backend.src.settings import EmbedderConfig, VectorStoreConfig
 
@@ -86,11 +86,21 @@ class VectorService:
                 field_name="chunk_id",
                 field_schema=models.PayloadSchemaType.KEYWORD,
             )
+            await client.create_payload_index(
+                collection_name=CHUNKS_COLLECTION,
+                field_name="section_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+            await client.create_payload_index(
+                collection_name=CHUNKS_COLLECTION,
+                field_name="parent_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
 
     @staticmethod
     async def upsert_chunks(
         client: AsyncQdrantClient,
-        chunks: list[Chunk],
+        chunks: list[Subsection],
         embed_config: EmbedderConfig,
     ) -> list[models.PointStruct]:
         points = await VectorService.build_points(chunks, embed_config)
@@ -255,7 +265,9 @@ class VectorService:
             r.payload.get("doc_id", "") for r in results if r.payload.get("doc_id")
         }
 
-        merged_text = VectorService.auto_merge(results, token_budget, merge_threshold)
+        merged_text = await VectorService.auto_merge(
+            client, results, token_budget, merge_threshold
+        )
 
         return results, file_ids, merged_text
 
@@ -317,7 +329,9 @@ class VectorService:
 
     @staticmethod
     async def upsert(
-        config: VectorStoreConfig, embed_config: EmbedderConfig, chunks: list[Chunk]
+        config: VectorStoreConfig,
+        embed_config: EmbedderConfig,
+        chunks: list[Subsection],
     ) -> list[models.PointStruct] | None:
         store = VectorService._get_store(config, embed_config)
 
@@ -473,51 +487,42 @@ class VectorService:
 
     @staticmethod
     async def build_points(
-        chunks: list[Chunk], embed_config: EmbedderConfig
+        chunks: list[Subsection], embed_config: EmbedderConfig
     ) -> list[models.PointStruct]:
-        points = []
-        try:
-            for chunk in chunks:
-                parent = chunk.metadata.parent
-
-                points.append(
-                    models.PointStruct(
-                        id=str(uuid4()),
-                        vector={
-                            "dense": chunk.metadata.dense_embedding,
-                            "sparse": chunk.metadata.sparse_embedding,
-                        },
-                        payload={
-                            "text": chunk.text,
-                            "doc_id": chunk.metadata.doc_id,
-                            "doc_title": chunk.metadata.doc_title,
-                            "chunk_id": chunk.metadata.chunk_id,
-                            "token_count": chunk.metadata.token_count,
-                            "start_char": chunk.metadata.start_char,
-                            "end_char": chunk.metadata.end_char,
-                            "parent_text": parent.text if parent else None,
-                            "parent_token_count": parent.token_count if parent else 0,
-                            "parent_start_char": parent.start_char if parent else None,
-                            "parent_end_char": parent.end_char if parent else None,
-                            "parent_level": parent.level if parent else None,
-                            "parent_id": f"{chunk.metadata.doc_id}:{parent.start_char}:{parent.end_char}"
-                            if parent
-                            else None,
-                        },
-                    )
+        points: list[models.PointStruct] = []
+        for chunk in chunks:
+            points.append(
+                models.PointStruct(
+                    id=str(uuid4()),
+                    vector={
+                        "dense": chunk.metadata.dense_embedding,
+                        "sparse": chunk.metadata.sparse_embedding,
+                    },
+                    payload={
+                        "text": chunk.text,
+                        "section_id": chunk.metadata.section_id,
+                        "parent_id": chunk.metadata.parent_id,
+                        "doc_id": chunk.metadata.doc_id,
+                        "doc_title": chunk.metadata.doc_title,
+                        "token_count": chunk.metadata.token_count,
+                        "start_char": chunk.metadata.start_char,
+                        "end_char": chunk.metadata.end_char,
+                        "section_heading": chunk.metadata.section_heading,
+                        "heading_level": chunk.metadata.heading_level,
+                        "heading_path": chunk.metadata.heading_path,
+                    },
                 )
-
-            return points
-        except Exception as e:
-            raise RuntimeError("Fatal Error building points: {e}")
+            )
+        return points
 
     @staticmethod
-    def auto_merge(
+    @staticmethod
+    async def auto_merge(
+        client: AsyncQdrantClient,
         results: list[RetrievedChunk],
         token_budget: int,
         merge_threshold: float = 0.5,
     ) -> str:
-        logger.debug("Auto-merge called with {} chunks", len(results))
         if not results:
             return ""
 
@@ -538,25 +543,58 @@ class VectorService:
             if tokens_used >= token_budget:
                 break
 
-            parent_text = siblings[0].payload.get("parent_text")
-            parent_tokens = siblings[0].payload.get("parent_token_count", 0)
-            parent_start = siblings[0].payload.get("parent_start_char", 0)
-
             cond1 = len(siblings) >= 2
+            if not cond1:
+                for chunk in siblings:
+                    if tokens_used >= token_budget:
+                        break
+                    node_ret.append((chunk.text, chunk.token_count, chunk.start_char))
+                    tokens_used += chunk.token_count
+                continue
 
             covered_chars = sum(
-                (c.payload["end_char"] - c.payload["start_char"]) for c in siblings
+                c.payload["end_char"] - c.payload["start_char"]
+                for c in siblings
+                if c.payload.get("start_char") is not None
             )
-
-            parent_chars = len(parent_text) if parent_text else 1
-            theta_star = (parent_chars / 3) * (1 + tokens_used / token_budget)
+            parent_tokens_estimate = covered_chars // 4
+            parent_start = siblings[0].payload.get("start_char", 0)
+            parent_chars = covered_chars / merge_threshold
+            theta_star = (parent_chars / 3) * (1 + tokens_used / max(token_budget, 1))
             cond2 = covered_chars >= theta_star
+            cond3 = (token_budget - tokens_used) >= parent_tokens_estimate
 
-            cond3 = (token_budget - tokens_used) >= parent_tokens
+            if cond2 and cond3:
+                records, _ = await client.scroll(
+                    collection_name=CHUNKS_COLLECTION,
+                    scroll_filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="section_id",
+                                match=models.MatchValue(value=pid),
+                            )
+                        ]
+                    ),
+                    with_payload=True,
+                    limit=1,
+                )
+                parent_text: str | None = None
+                for record in records:
+                    if record.payload:
+                        parent_text = dict(record.payload).get("text")
+                        break
 
-            if cond1 and cond2 and cond3 and parent_text:
-                node_ret.append((parent_text, parent_tokens, parent_start))
-                tokens_used += parent_tokens
+                if parent_text:
+                    node_ret.append((parent_text, parent_tokens_estimate, parent_start))
+                    tokens_used += parent_tokens_estimate
+                else:
+                    for chunk in siblings:
+                        if tokens_used >= token_budget:
+                            break
+                        node_ret.append(
+                            (chunk.text, chunk.token_count, chunk.start_char)
+                        )
+                        tokens_used += chunk.token_count
             else:
                 for chunk in siblings:
                     if tokens_used >= token_budget:
@@ -570,15 +608,14 @@ class VectorService:
             node_ret.append((chunk.text, chunk.token_count, chunk.start_char))
             tokens_used += chunk.token_count
 
-        seen = set()
-        unique = []
+        seen: set[str] = set()
+        unique: list[tuple[str, int, int]] = []
         for text, tokens, start in node_ret:
             if text not in seen:
                 seen.add(text)
                 unique.append((text, tokens, start))
 
         unique.sort(key=lambda x: x[2])
-
         return "\n\n".join(text for text, _, _ in unique)
 
     @staticmethod

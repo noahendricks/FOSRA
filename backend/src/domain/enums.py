@@ -127,14 +127,6 @@ class FileSourceType(StrEnum):
     DOC = "doc"
 
 
-class GraphNodeType(StrEnum):
-    """Node types in FalkorDB code graph."""
-
-    FILE = "File"
-    MODULE = "Module"
-    FUNCTION = "Function"
-    CLASS = "Class"
-    METHOD = "Method"
 
 
 class SerpType(StrEnum):

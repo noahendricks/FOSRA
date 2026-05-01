@@ -161,7 +161,7 @@ class Model(BaseModel):
     status: Literal["alpha", "beta", "deprecated", "active"]
     options: dict[str, Any]
     headers: dict[str, Any]
-    releaseDate: str
+    releaseDate: str | None = None
     variants: dict[str, dict[str, Any]] | None = None
 
 

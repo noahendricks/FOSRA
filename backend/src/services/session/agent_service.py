@@ -1,21 +1,3 @@
-"""FOSRA agent creation using DeepAgents.
-
-Creates a DeepAgent wrapping the user's configured LLM with the
-``search_knowledge_base`` retrieval tool.  Built-in deepagents
-middleware (FilesystemMiddleware, TodoListMiddleware, Summarization)
-is always applied automatically.
-
-Usage::
-
-    agent, result_store = create_fosra_agent(user_prefs)
-    async for msg, meta in agent.astream(
-        {"messages": lc_messages},
-        stream_mode="messages",
-    ):
-        ...
-    # After streaming, result_store.chunks has the retrieved chunks.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,8 +6,10 @@ from typing import TYPE_CHECKING, Any
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from falkordb import FalkorDB
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from loguru import logger
 
+from backend.src.services.session.langgraph_graph import _get_checkpointer
 from backend.src.services.session.tools import (
     RetrievalResultStore,
     create_graph_tool,
@@ -36,46 +20,25 @@ from backend.src.settings import LLMConfig, settings
 from backend.src.settings.config import EmbedderConfig, VectorStoreConfig
 from backend.src.settings.fosra_paths import fosra_paths
 
+# from langchain.agents.middleware import
+
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
     from backend.src.settings.config import UserPreferences
 
 
-def create_fosra_agent(
+async def create_fosra_agent(
     user_prefs: UserPreferences,
     system_prompt: str | None = None,
     backend: Any | None = None,
     checkpointer: Any | None = None,
     llm_config: LLMConfig | None = None,
+    enable_ingest_tools: bool = True,
+    session_factory: Any | None = None,
+    falkordb_client: Any | None = None,
+    interrupt_on: dict[str, bool | dict[str, Any]] | None = None,
 ) -> tuple[CompiledStateGraph[Any, Any, Any, Any], RetrievalResultStore]:
-    """Create a FOSRA agent with retrieval capabilities.
-
-    Parameters
-    ----------
-    user_prefs:
-        The current user's preferences (LLM configs, embedder, vector
-        store, reranker settings).
-    system_prompt:
-        Custom system prompt.  If ``None``, uses
-        ``FOSRA_AGENT_SYSTEM_PROMPT`` from prompts module.
-    backend:
-        Optional filesystem backend for coding mode. When provided,
-        the agent gets read/write/edit/grep/glob tools.
-    llm_config:
-        Explicit LLM configuration. When provided, takes priority over
-        user_prefs chain. Used when the TUI sends providerID/modelID.
-
-    Returns
-    -------
-    tuple[CompiledStateGraph, RetrievalResultStore]
-        The compiled agent and a mutable store that the retrieval tool
-        populates with chunks.  The caller can read
-        ``result_store.chunks`` after the agent finishes to build
-        source-group SSE events.
-    """
-
-    # -- Resolve prompt ------------------------------------------------
     if system_prompt is None:
         from backend.src.services.session.utils.prompts import (
             FOSRA_AGENT_SYSTEM_PROMPT,
@@ -83,8 +46,7 @@ def create_fosra_agent(
 
         system_prompt = FOSRA_AGENT_SYSTEM_PROMPT
 
-    # -- Resolve LLM ---------------------------------------------------
-    # explicit config from TUI prompt request takes priority
+    ...
     if llm_config is None:
         for cfg in (
             user_prefs.llm_default,
@@ -102,9 +64,10 @@ def create_fosra_agent(
                 api_key="not-needed",
                 api_base=settings.agent.fallback_api_base,
             )
+    ...
+
     llm = build_llm(llm_config)
 
-    # -- Build retrieval tool ------------------------------------------
     result_store = RetrievalResultStore()
 
     retrieval_tool = create_retrieval_tool(
@@ -117,35 +80,101 @@ def create_fosra_agent(
         result_store=result_store,
     )
 
+    ...
+
     graph_tool = create_graph_tool(
         FalkorDB(host=settings.falkordb.host, port=settings.falkordb.port),
         user_prefs.embedder or EmbedderConfig(),
     )
 
-    # -- Create agent --------------------------------------------------
-    #
-    # We pass the ChatLiteLLM instance directly as the model.
-    # deepagents accepts any BaseChatModel and will bind tools to it.
-    #
-    # Built-in middleware (TodoList, Filesystem, Summarization, etc.)
-    # is applied automatically — we get read_file, ls, glob, grep
-    # for free.  The only custom tool we add is retrieval.
-    #
+    all_tools: list[Any] = [retrieval_tool]
+
+    ...
+
+    # allow direct injection of infra deps (for debug/testing) or fall back to global_infra
+    if enable_ingest_tools:
+        ...
+        from backend.src.api.lifecycle import global_infra
+        from backend.src.services.session.tools import (
+            create_ingest_codebase_tool,
+            create_ingest_file_tool,
+        )
+        from backend.src.settings import ChunkerConfig
+
+        ...
+
+        sf = session_factory or global_infra.session_factory
+
+        fb = falkordb_client or global_infra.falkordb_client
+
+        ...
+
+        print(f"[sf] exists: {sf}")
+        print(f"[fb] exists: {fb}")
+
+        if sf is not None and fb is not None:
+            embed_cfg = user_prefs.embedder or EmbedderConfig()
+            chunker_cfg = user_prefs.chunker if user_prefs.chunker else ChunkerConfig()
+            vector_cfg = (
+                user_prefs.vector_store
+                if user_prefs.vector_store
+                else VectorStoreConfig()
+            )
+
+            ingest_codebase_tool = create_ingest_codebase_tool(
+                session_factory=sf,
+                falkordb_client=fb,
+                embedder_config=embed_cfg,
+            )
+
+            ingest_file_tool = create_ingest_file_tool(
+                session_factory=sf,
+                embedder_config=embed_cfg,
+                vector_config=vector_cfg,
+                chunker_config=chunker_cfg,
+            )
+
+            all_tools.extend([ingest_codebase_tool, ingest_file_tool])
+            logger.info("Ingestion tools enabled in agent")
+        else:
+            logger.warning("Infra not available; ingestion tools disabled")
+
     logger.info(
-        "Creating FOSRA agent with model={}/{} backend={}",
+        "Creating FOSRA agent with model={}/{} backend={} tools={}",
         llm_config.provider,
         llm_config.model,
         type(backend).__name__ if backend else "none",
+        len(all_tools),
     )
 
     mw_backend = FilesystemBackend(root_dir=fosra_paths.data_dir)
+
+    # Build the litellm model string for subagents
+    from backend.src.services.session.utils.llm_utils import _build_model_string
+
+    subagent_model_string = _build_model_string(llm_config.provider, llm_config.model)
+
+    # Create a ChatLiteLLM instance for subagents with the correct api_base
+    from langchain_community.chat_models.litellm import ChatLiteLLM
+
+    # For MiniMax, use custom_llm_provider to ensure litellm routes correctly
+    extra_kwargs = {}
+    if llm_config.provider.upper() in ("MINIMAX", "MINIMAX-CODING-PLAN"):
+        extra_kwargs["custom_llm_provider"] = "openai"
+
+    subagent_llm = ChatLiteLLM(
+        model=subagent_model_string,
+        api_key=llm_config.get_api_key_value(),
+        api_base=llm_config.api_base,
+        **extra_kwargs,
+    )
 
     research_subagent = dict(
         name="Research",
         description="Performs deep research on a topic using web search and fetch tools. Use for fact-checking, background research, and information gathering.",
         system_prompt="You are a research assistant. Your role is to gather comprehensive, accurate information on a given topic using available tools. Be thorough and cite sources where possible.",
         tools=[],
-        model=f"{llm_config.provider}:{llm_config.model}",
+        model=subagent_llm,  # Use ChatLiteLLM instance instead of string
     )
 
     code_analysis_subagent = dict(
@@ -153,14 +182,12 @@ def create_fosra_agent(
         description="Analyzes code structure, call chains, and relationships. Use for understanding codebases, finding functions, tracing dependencies, and refactoring planning.",
         system_prompt="You are a code analysis specialist. Your role is to analyze code structure, find functions, trace call chains, and help understand codebases. Use code graph tools to explore.",
         tools=[graph_tool],
-        model=f"{llm_config.provider}:{llm_config.model}",
+        model=subagent_llm,  # Use ChatLiteLLM instance instead of string
     )
 
-    # use create_deep_agent's dedicated params instead of manual middleware
-    # to avoid duplicates (it auto-creates Summarization, Skills, SubAgent, etc.)
     kwargs: dict[str, Any] = {
         "model": llm,
-        "tools": [retrieval_tool],
+        "tools": all_tools,
         "system_prompt": system_prompt,
         "backend": backend or mw_backend,
         "memory": [
@@ -169,9 +196,28 @@ def create_fosra_agent(
         "skills": [str(fosra_paths.skills_dir)],
         "subagents": [research_subagent, code_analysis_subagent],
     }
+
+    checkpointer = _get_checkpointer()
+
     if checkpointer is not None:
         kwargs["checkpointer"] = checkpointer
+    else:
+        print("[ENTERED FALLBACK]")
+        conn_string = "host=localhost port=5432 dbname=postgres user=postgres"
+        saver_ctx = AsyncPostgresSaver.from_conn_string(conn_string)
+        async with saver_ctx as saver:
+            await saver.setup()
+            kwargs["checkpointer"] = saver
 
-    agent = create_deep_agent(**kwargs)
+    if interrupt_on is not None:
+        kwargs["interrupt_on"] = interrupt_on
+
+    print("checkpoint exists:")
+    print(kwargs["checkpointer"] is not None)
+
+    agent = create_deep_agent(
+        debug=False,
+        **kwargs,
+    )
 
     return agent, result_store

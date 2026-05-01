@@ -77,7 +77,7 @@ class EmbeddingSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="EMBEDDING_")
 
     model_type: EmbedderType = Field(default=EmbedderType.FASTEMBED)
-    model_name: str = Field(default="BAAI/bge-m3")
+    model_name: str = Field(default="BAAI/bge-large-en-v1.5")
     batch_size: int = Field(default=32, ge=1, le=256)
     normalize: bool = Field(default=True)
 
@@ -162,11 +162,11 @@ class AgentSettings(BaseSettings):
     max_retrieval_iterations: int = Field(default=3, ge=1, le=10)
     token_budget: int = Field(default=4096, ge=512, le=16384)
     fallback_model: str = Field(
-        default="Qwen3.5-35B-A3B-Q4_K_M.gguf",
+        default="MiniMax-M2.5",
         description="Fallback model when no user preferences are configured",
     )
     fallback_api_base: str = Field(
-        default="http://localhost:8045/v1",
+        default="https://api.minimax.io/v1",
         description="API base for fallback model",
     )
 

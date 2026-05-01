@@ -69,7 +69,7 @@ class SessionMetadataModel(BaseModel):
 
 
 class Session(BaseModel):
-    id: str
+    session_id: str
     user_id: str | None = None
     directory: str
     parent_id: str | None = None

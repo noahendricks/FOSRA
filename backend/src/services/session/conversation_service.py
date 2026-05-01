@@ -15,9 +15,9 @@ from backend.src.api.schemas.message_schemas import (
     AssistantMessageTime,
     AssistantMessageTokens,
     AssistantMessageTokensCache,
+    MessageWithParts,
     Part,
     TextPart,
-    UIMessageFull,
     UserMessage,
     UserMessageModel,
     UserMessageTime,
@@ -31,12 +31,8 @@ from backend.src.api.schemas.session_api_schemas import (
     SessionTime,
     SessionUpdateRequest,
 )
-from backend.src.api.schemas.tui_control_schemas import (
-    TextPart as LegacyTextPart,
-)
-from backend.src.api.schemas.tui_control_schemas import (
-    UIMessage,
-)
+from backend.src.api.schemas.tui_control_schemas import TextPart as LegacyTextPart
+from backend.src.api.schemas.tui_control_schemas import UIMessage
 from backend.src.api.schemas.tui_schemas import (
     DEFAULT_MODEL_ID,
     DEFAULT_PROVIDER_ID,
@@ -67,12 +63,13 @@ def _session_time_to_dts(time_obj) -> tuple[datetime, datetime]:
     return _ts_to_dt(created), _ts_to_dt(updated)
 
 
-def _build_tui_message(msg: Message, session_id: str) -> UIMessageFull:
+def _build_tui_message(msg: Message, session_id: str) -> MessageWithParts:
     role_val = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
     ts = int(msg.timestamp.timestamp()) if msg.timestamp else 0
     msg_id = msg.message_id or ""
 
     parts: list[Part] = []
+
     if role_val == "user":
         message_part = UserMessage(
             id=msg_id,
@@ -91,11 +88,9 @@ def _build_tui_message(msg: Message, session_id: str) -> UIMessageFull:
               tui and backend don't currently have support to send or store other types
               storage and transformation of both is necessary
         """
-        if msg.text:
-            parts.append(TextPart(text=msg.text, type="text"))
 
-        # TODO: change UIMessageFull naming
-        message = UIMessageFull(info=message_part, parts=parts)
+        # TODO: change MessageWithParts naming
+        message = MessageWithParts(info=message_part, parts=parts)
         return message
     else:
         message_part = AssistantMessage(
@@ -119,9 +114,7 @@ def _build_tui_message(msg: Message, session_id: str) -> UIMessageFull:
             finish="stop",
         )
 
-        if msg.text:
-            parts.append(TextPart(text=msg.text, type="text"))
-        message = UIMessageFull(info=message_part, parts=parts)
+        message = MessageWithParts(info=message_part, parts=parts)
 
         return message
 
@@ -364,6 +357,11 @@ class SessionService:
         logger.bind(_structured={"backend message": msg.to_dict()}).debug(
             "[BACKEND MESSAGE]"
         )
+        from icecream import ic as ic
+        from rich.pretty import pprint as pp
+
+        ic(msg)
+        pp(msg)
         _: MessageORM = await SessionRepo.add_message(
             session=session,
             new_message=msg,

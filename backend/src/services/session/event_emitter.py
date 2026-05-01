@@ -1,19 +1,16 @@
-"""
-Typed event emitter wrapping the global event_bus.
-
-Provides:
-- subscribe(session_id) / unsubscribe(sub_id) — proxy to event_bus
-- emit(type, properties) — raw emit for ad-hoc events
-- Typed emit methods for each known event type (e.g. emit_message_updated(info), emit_session_status(...))
-"""
-
 from __future__ import annotations
 
 import asyncio
 from typing import Any, cast
 
 from loguru import logger
+
 from backend.src.api.events import BusEvent, BusEventProperties, EventBus, event_bus
+from backend.src.api.schemas.tui_control_schemas import (
+    PermissionRequest,
+    PermissionRequestTool,
+    QuestionRequest,
+)
 from backend.src.api.schemas.tui_event_schemas import TUIEvent
 
 MAX_QUEUE_SIZE = 1000
@@ -128,8 +125,8 @@ class EventEmitter:
             error = {"message": error, "type": "unknown"}
         await self.emit("session.error", {"sessionID": session_id, "error": error})
 
-    async def emit_permission_asked(self, permission: dict[str, Any]) -> None:
-        await self.emit("permission.asked", permission)
+    async def emit_permission_asked(self, permission: PermissionRequest) -> None:
+        await self.emit("permission.asked", permission.model_dump())
 
     async def emit_permission_replied(
         self, session_id: str, request_id: str, reply: str
@@ -143,8 +140,8 @@ class EventEmitter:
             },
         )
 
-    async def emit_question_asked(self, question: dict[str, Any]) -> None:
-        await self.emit("question.asked", question)
+    async def emit_question_asked(self, question: QuestionRequest) -> None:
+        await self.emit("question.asked", question.model_dump())
 
     async def emit_question_replied(
         self, session_id: str, request_id: str, answers: Any

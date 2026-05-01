@@ -241,11 +241,11 @@ class EmbedderConfig(BaseModelFlex):
 
     embedder_type: EmbedderType = EmbedderType.FASTEMBED
 
-    dense_model: str = "BAAI/bge-m3"
+    dense_model: str = "BAAI/bge-large-en-v1.5"
     dense_dimensions: int = 1024
 
     sparse_enabled: bool = True
-    sparse_model: str | None = "BAAI/bge-m3"
+    sparse_model: str | None = "Qdrant/bm25"
 
     late_enabled: bool = False
     late_model: str | None = None

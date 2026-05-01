@@ -6,13 +6,13 @@ from flashrank import Ranker, RerankRequest
 from loguru import logger
 
 if TYPE_CHECKING:
-    from backend.src.settings import RerankerConfig
-    from backend.src.services.retrieval.vector_service import RetrievedChunk
     from FlagEmbedding import FlagReranker
+
+    from backend.src.services.retrieval.vector_service import RetrievedChunk
+    from backend.src.settings import RerankerConfig
 
 from backend.src.domain.enums import RerankerType
 from backend.src.domain.schemas.graph import CodeNode
-
 
 # =============================================================================
 # FlashRank reranker
@@ -131,24 +131,6 @@ class RerankerService:
         top_k: int | None = None,
         score_threshold: float | None = None,
     ) -> list[RetrievedChunk]:
-        """Rerank *chunks* against *query* using the configured backend.
-
-        Parameters
-        ----------
-        query:
-            The user query (or reformulated query).
-        chunks:
-            Retrieved chunks from vector search.
-        top_k:
-            Maximum number of results to return.
-        score_threshold:
-            Minimum reranker score to keep.
-
-        Returns
-        -------
-        list[RetrievedChunk]
-            Reranked chunks sorted by descending reranker score.
-        """
         if not chunks:
             return []
 
@@ -186,10 +168,6 @@ class RerankerService:
         top_k: int | None = None,
         score_threshold: float | None = None,
     ) -> list[CodeNode]:
-        """Rerank code graph nodes against a query.
-
-        Adapts CodeNode → RetrievedChunk, reranks, returns reranked CodeNodes.
-        """
         from backend.src.services.retrieval.vector_service import RetrievedChunk
 
         if not nodes:

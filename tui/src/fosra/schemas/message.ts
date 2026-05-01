@@ -96,9 +96,9 @@ export const MessageSchema = z.discriminatedUnion("role", [
   AssistantMessageSchema,
 ]);
 
-export type ValidatedUserMessage = z.infer<typeof UserMessageSchema>;
-export type ValidatedAssistantMessage = z.infer<typeof AssistantMessageSchema>;
-export type ValidatedMessage = z.infer<typeof MessageSchema>;
+export type ValidUserMessage = z.infer<typeof UserMessageSchema>;
+export type ValidAssistantMessage = z.infer<typeof AssistantMessageSchema>;
+export type ValidMessag = z.infer<typeof MessageSchema>;
 
 const TextPartTimeSchema = z.object({
   start: z.number(),
@@ -357,7 +357,7 @@ export function parseMessages(raw: unknown[]): ValidatedMessageWithParts[] {
   for (const item of raw) {
     // Try MessageWithParts first (nested structure)
     let parsed = MessageWithPartsSchema.safeParse(item);
-    
+
     // If that fails, try plain Message (flat structure being sent)
     if (!parsed.success) {
       const messageParsed = MessageSchema.safeParse(item);
@@ -371,7 +371,7 @@ export function parseMessages(raw: unknown[]): ValidatedMessageWithParts[] {
         };
       }
     }
-    
+
     if (parsed.success) {
       result.push(parsed.data);
     } else {

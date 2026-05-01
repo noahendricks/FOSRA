@@ -9,7 +9,7 @@ dependencies = [
   "aiosqlite>=0.21.0",
   "anyio>=4.11.0",
   "asyncpg>=0.30.0",
-  "chonkie[all,genie,st,viz]>=1.4.0",
+  "chonkie[st,viz,neural,semantic]>=1.4.0",
   "docling[chunking]>=2.59.0",
   "docling-core[chunking]>=2.50.0",
   "elasticsearch>=9.1.1",
@@ -24,6 +24,7 @@ dependencies = [
   "github3-py==4.0.1",
   "google-api-python-client>=2.156.0",
   "httpx>=0.28.1",
+  "grpcio>=1.78.0",
   "langchain[exa,huggingface,litellm,ollama,unstructured]>=1.0.5",
   "langchain-community>=0.4.1",
   "langgraph>=0.3.29",
@@ -58,7 +59,7 @@ dependencies = [
   "rich>=13.0.0",
   "ruff>=0.14.4",
   "sentence-transformers>=5.1.1",
-  "spacy>=3.8.7",
+  "spacy>=3.8.7,<3.8.14",
   "sqlalchemy>=2.0.43",
   "strenum>=0.4.15",
   "structlog>=24.0.0",
@@ -130,13 +131,27 @@ dependencies = [
   "tree-sitter-rust>=0.23.2",
   "icecream>=2.1.10",
   "langchain-openai>=1.1.12",
+  "vulture>=2.16",
+  "pulp>=3.3.0",
+  "optuna>=4.8.0",
+  "semchunk>=2.2.2",
+  "astchunk>=0.1.0",
+  "pdf-oxide>=0.3.30",
+  "docling-hierarchical-pdf>=0.1.6",
+  "pyright>=1.1.408",
+  "langgraph-cli>=0.4.24",
+  "langgraph-api>=0.8.1",
+  "backoff>=2.2.1",
+  "langsmith>=0.7.37",
 ]
 
 [project.scripts]
+fosra = "backend.src.app:run"
 
 [dependency-groups]
 dev = [
     "basedpyright>=1.37.2",
+    "diskcache>=5.6.3",
     "isort>=8.0.0",
     "mcpydoc>=1.4.0",
     "py2puml>=0.10.0",

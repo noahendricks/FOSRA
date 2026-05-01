@@ -90,7 +90,6 @@ class AssistantMessage(BaseModel):
     structured: Any | None = None
     variant: str | None = None
     finish: str | None = None
-    parts: list[Part] | None = None
 
 
 # ---- PART TYPES ----
@@ -311,7 +310,6 @@ ToolState = Annotated[
 ]
 
 
-
 class ToolPart(BaseModel):
     id: str
     sessionID: str
@@ -339,3 +337,8 @@ Part = (
     | ToolPart
     | CompactionPart
 )
+
+
+class MessageWithParts(BaseModel):
+    info: Message
+    parts: list[Part]

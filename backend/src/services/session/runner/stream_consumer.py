@@ -37,11 +37,6 @@ class StreamResult:
 
 
 def extract_ai_message(chunk_tuple: Any) -> Any:
-    """Extract AIMessageChunk from a stream chunk tuple.
-
-    stream_mode="messages" yields tuples of (AIMessageChunk, metadata) or similar.
-    Actual structure: ((), (AIMessageChunk(...),)) - AIMessageChunk at chunk_tuple[1][0]
-    """
     if isinstance(chunk_tuple, (list, tuple)) and len(chunk_tuple) > 0:
         msg = None
         for item in chunk_tuple:

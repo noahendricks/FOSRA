@@ -4,7 +4,11 @@ from typing import Any
 from pydantic import Field
 
 from backend.src.api.schemas.base import BaseModelFlex
-from backend.src.api.schemas.message_schemas import AssistantMessage, UserMessage
+from backend.src.api.schemas.message_schemas import (
+    AssistantMessage,
+    MessageWithParts,
+    UserMessage,
+)
 from backend.src.api.schemas.session_schemas import (
     SessionMetadataModel,
     SessionRevert,
@@ -179,7 +183,7 @@ class SessionFullResponse(SessionRequestBase):
         description="All sources for this chat",
     )
 
-    messages: list[UserMessage | AssistantMessage] = Field(default_factory=list)
+    messages: list[UserMessage | AssistantMessage | MessageWithParts] = Field(default_factory=list)
 
 
 class MessageUpdateRequest(BaseModelFlex):

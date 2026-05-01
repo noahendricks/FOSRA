@@ -420,7 +420,7 @@ Neo4j exposes vector indexes queryable via `db.index.vector.queryNodes`. After s
 
 # Available Vector Indexes
 - `function-signature-embeddings` — best for: "find a function that does X", specific‑behaviour queries
-- `function-summary-embeddings`   — best for: "find code related to X concept", broader semantic queries  
+- `function-summary-embeddings`   — best for: "find code related to X concept", broader semantic queries
 - `file-summary-embeddings`       — best for: "find files related to X", module‑level questions
 
 # Node Properties Returned Per Index
@@ -441,7 +441,7 @@ Neo4j exposes vector indexes queryable via `db.index.vector.queryNodes`. After s
 "CALLS", "IMPORTS", "INHERITS_FROM", "CONTAINS", "DEFINED_IN"
 
 # Output Format
-{{ 
+{{
   "index_name": string,
   "query_text": string,
   "k": int,
@@ -455,7 +455,7 @@ Neo4j exposes vector indexes queryable via `db.index.vector.queryNodes`. After s
 ## Example 1
 **Query**: "find functions that handle user authentication and session creation"
 **Output**:
-{{ 
+{{
   "index_name": "function-summary-embeddings",
   "query_text": "user authentication session creation login credential validation token generation",
   "k": 10,
@@ -468,7 +468,7 @@ Neo4j exposes vector indexes queryable via `db.index.vector.queryNodes`. After s
 ## Example 2
 **Query**: "which Python files are responsible for data ingestion and transformation"
 **Output**:
-{{ 
+{{
   "index_name": "file-summary-embeddings",
   "query_text": "data ingestion transformation pipeline processing ETL Python module",
   "k": 10,
@@ -481,7 +481,7 @@ Neo4j exposes vector indexes queryable via `db.index.vector.queryNodes`. After s
 ## Example 3
 **Query**: "find the function with a signature that takes a queryKey and updater and returns void"
 **Output**:
-{{ 
+{{
   "index_name": "function-signature-embeddings",
   "query_text": "function accepting queryKey updater parameter returning void cache mutation",
   "k": 10,
@@ -494,7 +494,7 @@ Neo4j exposes vector indexes queryable via `db.index.vector.queryNodes`. After s
 ## Example 4
 **Query**: "find all classes that inherit from a base validator"
 **Output**:
-{{ 
+{{
   "index_name": "function-summary-embeddings",
   "query_text": "class extending base validator abstract validation interface inheritance",
   "k": 15,
@@ -585,7 +585,7 @@ SPLIT_SUBQUERIES_PROMPT = PromptTemplate(
     template=SPLIT_SUBQUERIES_PROMPT_TEMPLATE, input_variables=["user_query"]
 )
 
-COVERAGE_CHECK_PROMPT_TEMPLATE = """ 
+COVERAGE_CHECK_PROMPT_TEMPLATE = """
 # Role
 You are a retrieval coverage assessor.
 
@@ -598,13 +598,13 @@ Given a list of sub-queries and a block of retrieved context, determine which su
 3. Be strict — partial mentions do not count as covered.
 
 # Output Format
-{
-  "coverage": {
+{{
+  "coverage": {{
     "<sub-query verbatim>": true | false
-  },
+  }},
   "covered_count": int,
   "total_count": int
-}
+}}
 
 # Input
 **Sub-queries**: {{sub_queries}}

@@ -1,15 +1,16 @@
 from typing import Any
 
+from falkordb import FalkorDB
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from falkordb import FalkorDB
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from backend.src.settings import settings
 from backend.src.storage.models import Base
 
 
 class Infrastructure:
-    """Holds heavy singletons. Initialized ONCE at startup."""
+    """holds heavy singletons. initialized ONCE at startup."""
 
     def __init__(self, settings: Any) -> None:  # type: ignore[reportExplicitAny]
         self.qdrant_client: AsyncQdrantClient | None = None
@@ -19,7 +20,7 @@ class Infrastructure:
         self.falkordb_graph: Any = None  # type: ignore[reportExplicitAny]
         self.model_registry: Any = None  # type: ignore[reportExplicitAny]
         self._tables_created = False
-        self.checkpointer: Any = None  # type: ignore[reportExplicitAny]
+        self.checkpointer: Any = None
 
     def init(self):
         from backend.src.settings.fosra_paths import fosra_paths
@@ -127,6 +128,7 @@ class Infrastructure:
 
             manager = await SessionStateManager.get_instance()
             manager.set_session_factory(self.session_factory)
+
             logger.info("SessionStateManager initialized with database persistence.")
         except Exception as e:
             logger.warning(
@@ -136,18 +138,11 @@ class Infrastructure:
 
     async def _init_checkpointer(self):
         try:
-            from psycopg import AsyncConnection
-            from psycopg.rows import dict_row
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-            conn_string = settings.database.url
-            conn_string = conn_string.replace("+asyncpg", "").replace("+psycopg2", "")
-            conn = await AsyncConnection.connect(
-                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-            )
-            saver = AsyncPostgresSaver(conn=conn)
-            await saver.setup()
-            self.checkpointer = saver
+            conn_string = "host=localhost port=5432 dbname=postgres user=postgres"
+            async with AsyncPostgresSaver.from_conn_string(conn_string) as saver:
+                self.checkpointer = saver
             logger.info("LangGraph Postgres checkpointer initialized.")
         except Exception as e:
             logger.warning(
@@ -178,6 +173,10 @@ class Infrastructure:
                 logger.warning("Error closing FalkorDB client: {}", e)
 
         logger.info("Infrastructure cleanup complete.")
+
+    # Alias for close()
+    async def cleanup(self):
+        return await self.close()
 
 
 global_infra = Infrastructure(settings)

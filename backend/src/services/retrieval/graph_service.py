@@ -5,21 +5,27 @@ from typing import TYPE_CHECKING, Any
 from falkordb import FalkorDB, Node
 from loguru import logger
 
+from backend.src.domain.schemas.treesitter_types import (
+    GraphNodeType,
+    ImportNode,
+)
+
 if TYPE_CHECKING:
     from falkordb import Graph
 
     from backend.src.settings import EmbedderConfig
 
-from backend.src.domain.enums import GraphNodeType
 from backend.src.domain.schemas.doc import Chunk, ChunkMetadata
 from backend.src.domain.schemas.graph import (
     CallEdge,
+    ClassMetadata,
     CodeNode,
+    FunctionMetadata,
     GraphQueryResult,
     GraphResult,
+    ImportMetadata,
     InheritanceEdge,
     MethodEdge,
-    ResolvedImport,
     Signature,
 )
 from backend.src.services.processing.embedder_service import EmbedderService
@@ -61,25 +67,36 @@ class GraphService:
 
         node_embeddings = await self._embed_nodes(graph_result.nodes, embedder_config)
 
+        # Create or update the File node first
+        self._upsert_file_node(graph, graph_result)
+        stats["nodes_created"] += 1
+
         for node in graph_result.nodes:
             self._upsert_node(graph, node, node_embeddings.get(node.qualified_name))
+            self._upsert_contains_edge(graph, node)
             stats["nodes_created"] += 1
+            stats["edges_created"] += 1  # CONTAINS edge for each node
 
         for edge in graph_result.call_edges:
-            self._upsert_call_edge(graph, edge)
-            stats["edges_created"] += 1
-
-        for edge in graph_result.inheritance_edges:
-            self._upsert_inheritance_edge(graph, edge)
+            self.upsert_call_edge(graph, edge)
             stats["edges_created"] += 1
 
         for edge in graph_result.method_edges:
-            self._upsert_method_edge(graph, edge)
+            self.upsert_method_edge(graph, edge)
             stats["edges_created"] += 1
 
-        for imp in graph_result.imports:
-            if imp.target_file_id:
-                self._upsert_import_edge(graph, imp)
+        for edge in graph_result.inheritance_edges:
+            self.upsert_inheritance_edge(graph, edge)
+            stats["edges_created"] += 1
+
+        # extract imports (after full upsers)
+        resolved_stats = await self.resolve_imports(
+            imports=[n for n in graph_result.imports if not n.target_file_id]
+        )
+
+        for resolved_imp in graph_result.imports:
+            if resolved_imp.target_file_id:
+                self._upsert_import_edge(graph, resolved_imp)
                 stats["edges_created"] += 1
 
         logger.bind(_structured={"file_path": graph_result.file_path, **stats}).info(
@@ -87,54 +104,10 @@ class GraphService:
         )
         return stats
 
-    async def resolve_imports(
-        self,
-        imports: list[ResolvedImport],
-    ) -> dict[str, Any]:
-        graph = self._get_graph()
-        stats = {"resolved": 0, "edges_created": 0, "failed": 0}
-
-        unresolved = [imp for imp in imports if not imp.target_file_id]
-        if not unresolved:
-            return stats
-
-        for imp in unresolved:
-            module_path = imp.imported_names[0] if imp.imported_names else ""
-            if not module_path:
-                stats["failed"] += 1
-                continue
-
-            file_path_pattern = module_path.replace(".", "/")
-            query = """
-            MATCH (f:File)
-            WHERE f.file_path CONTAINS $pattern
-            RETURN f.file_id, f.file_path
-            LIMIT 1
-            """
-            result = graph.query(query, params={"pattern": file_path_pattern})
-            rows = result.result_set
-
-            if rows and rows[0]:
-                imp.target_file_id = str(rows[0][0])
-                imp.target_file_path = str(rows[0][1])
-                stats["resolved"] += 1
-                self._upsert_import_edge(graph, imp)
-                stats["edges_created"] += 1
-            else:
-                stats["failed"] += 1
-
-        logger.info(
-            "Resolved {} imports ({} edges created, {} failed)",
-            stats["resolved"],
-            stats["edges_created"],
-            stats["failed"],
-        )
-        return stats
-
-    def _upsert_import_edge(self, graph: "Graph", imp: ResolvedImport) -> None:
+    def _upsert_import_edge(self, graph: "Graph", imp: ImportNode) -> None:
         query = """
         MATCH (source:File {file_id: $source_file_id})
-        MERGE (target:File {file_id: $target_file_id})
+        MATCH (target:File {file_id: $target_file_id})
         MERGE (source)-[r:IMPORTS]->(target)
         SET r.names = $names,
             r.line_number = $line_number
@@ -142,18 +115,79 @@ class GraphService:
         _ = graph.query(
             query,
             params={
-                "source_file_id": imp.source_file_id,
+                "source_file_id": imp.file_id,
                 "target_file_id": imp.target_file_id,
-                "names": imp.imported_names,
+                "names": imp.import_dotted_names,
                 "line_number": imp.line_number,
             },
         )
 
-    def _upsert_call_edge(self, graph: "Graph", edge: CallEdge) -> None:
-        """Create a CALLS relationship between functions."""
+    def _upsert_uses_edges(
+        self,
+        graph: "Graph",
+        source_file_id: str,
+        target_file_id: str,
+        imported_names: list[str],
+        line_number: int | None,
+    ) -> int:
+        """create USES edges from File to items in target file."""
+        if not imported_names or not target_file_id:
+            return 0
+
+        edges_created = 0
+
+        for name in imported_names:
+            # look for this name in the target file (Class, Function, Constant)
+            for label in ["Class", "Function", "Constant"]:
+                query = f"""
+                MATCH (source:File {{file_id: $source_file_id}})
+                MATCH (target:{label} {{file_id: $target_file_id, name: $name}})
+                MERGE (source)-[r:USES]->(target)
+                SET r.imported_names = $imported_names,
+                    r.line_number = $line_number
+                """
+                result = graph.query(
+                    query,
+                    params={
+                        "source_file_id": source_file_id,
+                        "target_file_id": target_file_id,
+                        "name": name,
+                        "imported_names": imported_names,
+                        "line_number": line_number or 0,
+                    },
+                )
+                if result.result_set:
+                    edges_created += 1
+
+        return edges_created
+
+    def upsert_method_edge(self, graph: "Graph", edge: MethodEdge) -> None:
+        """create a DEFINES_METHOD relationship between a class and its method."""
         query = """
-        MATCH (caller:Function {qualified_name: $caller_qualified})
-        MERGE (callee:Function {qualified_name: $callee_qualified})
+        MATCH (cls:Class {qualified_name: $class_qualified})
+        MERGE (method:Method {qualified_name: $method_qualified})
+        ON CREATE SET method.name = $method_name,
+            method.file_id = $method_file_id,
+            method.inferred = true
+        MERGE (cls)-[r:DEFINES_METHOD]->(method)
+        """
+        _ = graph.query(
+            query,
+            params={
+                "class_qualified": edge.class_qualified,
+                "method_name": edge.method_name,
+                "method_qualified": edge.method_qualified or edge.method_name,
+                "method_file_id": edge.method_file_id or "",
+            },
+        )
+
+    def upsert_call_edge(self, graph: "Graph", edge: CallEdge) -> None:
+        """Create a CALLS relationship between functions/methods."""
+        # try to match both Function and Method nodes for caller/callee
+        query = """
+        MATCH (caller)
+        WHERE (caller:Function OR caller:Method) AND caller.qualified_name = $caller_qualified
+        MERGE (callee {qualified_name: $callee_qualified})
         ON CREATE SET callee.name = $callee_name,
             callee.file_id = $callee_file_id,
             callee.inferred = true
@@ -163,6 +197,9 @@ class GraphService:
             r.confidence = $confidence,
             r.is_cross_file = $is_cross_file
         """
+        # only create the edge if we have a callee_qualified (don't create for built-ins)
+        if not edge.callee_qualified:
+            return
         _ = graph.query(
             query,
             params={
@@ -207,7 +244,6 @@ class GraphService:
                 text=text,
                 metadata=ChunkMetadata(
                     doc_id=str(node.file_id),
-                    chunk_id=node.qualified_name,
                 ),
             )
             chunks.append(chunk)
@@ -221,16 +257,11 @@ class GraphService:
         return embeddings
 
     def _build_embedding_text(self, node: CodeNode) -> str:
-        """build the text to embed for a code node.
-
-        For methods: prepend containing class context so the full method body
-        is embedded with class semantics. Full body is embedded since Nomic
-        handles 8192 tokens.
-        """
+        """build the text to embed for a code node."""
         parts = []
 
-        containing_class = node.metadata.get("containing_class")
-        if containing_class:
+        if isinstance(node.metadata, FunctionMetadata):
+            containing_class = node.metadata.containing_class
             parts.append(f"class {containing_class}:")
 
         if node.signature:
@@ -243,6 +274,7 @@ class GraphService:
                 line_start=node.line_start,
                 line_end=node.line_end,
                 signature=node.signature,
+                metadata=node.metadata,
             )
             parts.append(sig_node._signature_to_string())
 
@@ -287,20 +319,14 @@ class GraphService:
                 line_start=node.line_start,
                 line_end=node.line_end,
                 signature=node.signature,
+                metadata=node.metadata,
             )
             props["signature_str"] = sig_node._signature_to_string()
             props["is_async"] = node.signature.is_async
             sig_dict = {
-                "parameters": [
-                    {
-                        "name": p.name,
-                        "type_annotation": p.type_annotation,
-                        "default_value": p.default_value,
-                        "is_variadic": p.is_variadic,
-                        "is_keyword": p.is_keyword,
-                    }
-                    for p in node.signature.parameters
-                ],
+                "parameters": node.signature.parameters.to_dict()
+                if node.signature.parameters
+                else {},
                 "return_type": node.signature.return_type,
                 "is_async": node.signature.is_async,
                 "is_method": node.signature.is_method,
@@ -312,25 +338,49 @@ class GraphService:
         if node.source_code:
             props["source_code"] = node.source_code
 
-        if embedding:
-            props["embedding"] = embedding
+        # store metadata for Import nodes
+        if node.node_type == GraphNodeType.IMPORT and isinstance(
+            node.metadata, ImportMetadata
+        ):
+            metadata_dict = {}
+            if node.metadata.imported_names:
+                metadata_dict["imported_names"] = node.metadata.imported_names
+            if node.metadata.aliased:
+                metadata_dict["aliased"] = node.metadata.aliased
+            if node.metadata.is_relative:
+                metadata_dict["is_relative"] = node.metadata.is_relative
+            if node.metadata.is_wildcard:
+                metadata_dict["is_wildcard"] = node.metadata.is_wildcard
+            if metadata_dict:
+                props["imported_names"] = node.metadata.imported_names
 
-        query = f"""
-        MERGE (n:{label} {{qualified_name: $qualified_name}})
-        SET n += $props
-        RETURN n
-        """
-        _ = graph.query(
-            query, params={"qualified_name": node.qualified_name, "props": props}
-        )
+        if embedding:
+            # store embedding using vecf32() for FalkorDB vector index
+            import json
+
+            emb_str = json.dumps(embedding)
+
+            emb_query = f"""
+            WITH $qualified_name as qn, $props as p, vecf32({emb_str}) as vec
+            MERGE (n:{label} {{qualified_name: qn}})
+            SET n += p,
+                n.embedding = vec
+            """
+            _ = graph.query(
+                emb_query,
+                params={"qualified_name": node.qualified_name, "props": props},
+            )
+            return
 
     def _upsert_contains_edge(
         self,
         graph: "Graph",
         node: CodeNode,
     ) -> None:
-        query = """
-        MATCH (file:File {file_id: $file_id})
+        label = node.node_type.value
+        query = f"""
+        MATCH (file:File {{file_id: $file_id}})
+        MERGE (n:{label} {{qualified_name: $qualified_name}})
         MERGE (file)-[r:CONTAINS]->(n)
         """
         _ = graph.query(
@@ -338,7 +388,28 @@ class GraphService:
             params={
                 "file_id": node.file_id,
                 "qualified_name": node.qualified_name,
-                "node_label": node.node_type.value,
+            },
+        )
+
+    def _upsert_file_node(
+        self,
+        graph: "Graph",
+        graph_result: GraphResult,
+    ) -> None:
+        """create or update the File node for a graph result."""
+        query = """
+        MERGE (file:File {file_id: $file_id})
+        SET file.name = $name,
+            file.path = $path,
+            file.language = $language
+        """
+        _ = graph.query(
+            query,
+            params={
+                "file_id": graph_result.file_id,
+                "name": graph_result.file_path.split("/")[-1],
+                "path": graph_result.file_path,
+                "language": graph_result.language,
             },
         )
 
@@ -350,56 +421,86 @@ class GraphService:
         limit: int = 20,
     ) -> GraphQueryResult:
         """
-        Search for nodes by embedding similarity.
-
-        Since FalkorDB's db.idx.vector.queryNodes has compatibility issues with
-        vecf32 parameter passing in this version, we fetch nodes with embeddings
-        and compute cosine similarity in Python.
+        search for nodes by embedding similarity using FalkorDB vector index.
         """
         graph = self._get_graph()
-        import numpy as np
+        import json
 
-        labels = []
         if node_types:
             labels = [nt.value for nt in node_types]
         else:
             labels = ["Function", "Method", "Class"]
 
         results = []
-        q_emb = np.array(query_embedding, dtype=np.float32)
-        q_norm = np.linalg.norm(q_emb)
-        if q_norm == 0:
-            q_norm: float = 1.0
 
-        label_placeholders = ",".join(f"'{lbl}'" for lbl in labels)
-        query = f"""
-        MATCH (n)
-        WHERE labels(n)[0] IN [{label_placeholders}]
-        AND n.embedding IS NOT NULL
-        RETURN n, n.embedding
-        LIMIT 200
-        """
-        result = graph.query(query)
+        # Build vecf32 query vector
+        emb_str = json.dumps(query_embedding)
 
-        for row in result.result_set:
-            if not row or not row[0]:
-                continue
-            node_data = row[0]
-            emb_list = row[1]
-            if not emb_list or len(emb_list) == 0:
-                continue
+        # Try using vector index first, fall back to brute force
+        for label in labels:
+            try:
+                # Use FalkorDB's vector index for ANN search
+                query = f"""
+                CALL db.idx.vector.queryNodes($label, 'embedding', $k, vecf32({emb_str}))
+                YIELD node, score
+                RETURN node, score
+                """
+                result = graph.query(
+                    query,
+                    params={"label": label, "k": limit * 2},
+                )
 
-            code_node = self._node_to_code_node(node_data)
-            if file_ids is not None and code_node.file_id not in {
-                str(fid) for fid in file_ids
-            }:
-                continue
+                for row in result.result_set:
+                    if not row or len(row) < 2:
+                        continue
+                    node_data = row[0]
+                    vector_score = row[1]  # Already similarity score from vector index
 
-            node_emb = np.array(emb_list, dtype=np.float32)
-            score = float(
-                np.dot(q_emb, node_emb) / (q_norm * np.linalg.norm(node_emb) + 1e-8)
-            )
-            results.append((code_node, score))
+                    code_node = self._node_to_code_node(node_data)
+                    if file_ids is not None and code_node.file_id not in {
+                        str(fid) for fid in file_ids
+                    }:
+                        continue
+
+                    results.append((code_node, vector_score))
+            except Exception:
+                # Fall back to brute force if vector index fails
+                try:
+                    import numpy as np
+
+                    query = f"""
+                    MATCH (n:{label})
+                    WHERE n.embedding IS NOT NULL
+                    RETURN n, n.embedding
+                    LIMIT 200
+                    """
+                    result = graph.query(query)
+
+                    q_emb = np.array(query_embedding, dtype=np.float32)
+                    q_norm = np.linalg.norm(q_emb)
+                    if q_norm == 0:
+                        q_norm = 1.0
+
+                    for row in result.result_set:
+                        if not row or not row[0] or not row[1]:
+                            continue
+                        node_data = row[0]
+                        emb_list = row[1]
+
+                        code_node = self._node_to_code_node(node_data)
+                        if file_ids is not None and code_node.file_id not in {
+                            str(fid) for fid in file_ids
+                        }:
+                            continue
+
+                        node_emb = np.array(emb_list, dtype=np.float32)
+                        score = float(
+                            np.dot(q_emb, node_emb)
+                            / (q_norm * np.linalg.norm(node_emb) + 1e-8)
+                        )
+                        results.append((code_node, score))
+                except Exception:
+                    pass  # Skip this label if both fail
 
         results.sort(key=lambda x: x[1], reverse=True)
         top_results = results[:limit]
@@ -417,11 +518,7 @@ class GraphService:
         file_ids: list[int] | None = None,
         limit: int = 20,
     ) -> list[tuple[CodeNode, float]]:
-        """Full-text keyword search on Function/Method/Class nodes.
-
-        Uses FalkorDB's db.idx.fulltext.queryNodes with RediSearch syntax.
-        Returns nodes with TF-IDF scores (normalized to 0-1 by dividing by max).
-        """
+        """full-text keyword search on Function/Method/Class nodes."""
         graph = self._get_graph()
 
         labels = []
@@ -471,14 +568,6 @@ class GraphService:
         file_ids: list[int] | None,
         limit: int = 20,
     ) -> list[CodeNode]:
-        """Expand seed nodes via graph edges.
-
-        Adaptive hop depth:
-          N < 5  -> 2 hops
-          5 <= N < 15 -> 1 hop
-          N >= 15 -> no expansion
-        Follows CALLS, DEFINES_METHOD, INHERITS edges.
-        """
         if len(seed_nodes) >= 15:
             return []
         depth = 2 if len(seed_nodes) < 5 else 1
@@ -501,7 +590,7 @@ class GraphService:
             cypher = f"""
             MATCH (n) WHERE n.qualified_name IN $qns
             UNWIND [{",".join(f"'{et}'" for et in edge_types)}] AS etype
-            MATCH (n)-[r]->(m) WHERE type(r) = etype
+           MATCH (n)-[r]->(m) WHERE type(r) = etype
             RETURN DISTINCT m, n.qualified_name AS via
             LIMIT {limit}
             """
@@ -535,10 +624,7 @@ class GraphService:
         limit: int = 20,
         expand: bool = True,
     ) -> GraphQueryResult:
-        """Hybrid search: dense vector + full-text keyword, RRF fused.
-
-        Adaptive graph expansion is applied after initial results if expand=True.
-        """
+        """hybrid search: dense vector + full-text keyword, RRF fused."""
         RRF_K = 60
         dense_results = await self.semantic_search(
             query_embedding=query_embedding,
@@ -611,8 +697,8 @@ class GraphService:
 
         if query_type == "callers" and name:
             query = """
-            MATCH (caller:Function)-[:CALLS]->(f:Function)
-            WHERE f.name = $name OR f.qualified_name = $name
+            MATCH (caller)-[:CALLS]->(f)
+            WHERE (f:Function OR f:Method) AND (f.name = $name OR f.qualified_name = $name)
             RETURN caller
             LIMIT $limit
             """
@@ -622,7 +708,8 @@ class GraphService:
 
         elif query_type == "callees" and name:
             query = """
-            MATCH (f:Function {name: $name})-[:CALLS]->(callee:Function)
+            MATCH (f)-[:CALLS]->(callee)
+            WHERE (f:Function OR f:Method) AND f.name = $name
             RETURN callee
             LIMIT $limit
             """
@@ -632,7 +719,8 @@ class GraphService:
 
         elif query_type == "call_chain" and name:
             query = f"""
-            MATCH path = (f:Function {{name: $name}})-[:CALLS*1..{depth}]->(dep)
+            MATCH path = (f)-[:CALLS*1..{depth}]->(dep)
+            WHERE (f:Function OR f:Method) AND f.name = $name
             RETURN path
             LIMIT $limit
             """
@@ -693,40 +781,16 @@ class GraphService:
         if hasattr(node, "labels") and node.labels:
             label = node.labels[0]
 
-        node_type = GraphNodeType.FUNCTION
-        if label == "Class":
-            node_type = GraphNodeType.CLASS
-        elif label == "Method":
+        if label == "Method":
             node_type = GraphNodeType.METHOD
-        elif label == "File":
-            node_type = GraphNodeType.FILE
-
-        signature: Signature | None = None
-        sig_json = props.get("signature")
-        if sig_json:
-            try:
-                sig_dict = json.loads(sig_json)
-                from backend.src.domain.schemas.graph import Parameter
-
-                signature = Signature(
-                    parameters=[
-                        Parameter(
-                            name=p["name"],
-                            type_annotation=p.get("type_annotation"),
-                            default_value=p.get("default_value"),
-                            is_variadic=p.get("is_variadic", False),
-                            is_keyword=p.get("is_keyword", False),
-                        )
-                        for p in sig_dict.get("parameters", [])
-                    ],
-                    return_type=sig_dict.get("return_type"),
-                    is_async=sig_dict.get("is_async", False),
-                    is_method=sig_dict.get("is_method", False),
-                    receiver=sig_dict.get("receiver"),
-                    decorators=sig_dict.get("decorators", []),
-                )
-            except Exception:
-                pass
+        elif label == "Function":
+            node_type = GraphNodeType.FUNCTION
+        elif label == "Class":
+            node_type = GraphNodeType.CLASS
+        elif label == "Import":
+            node_type = GraphNodeType.IMPORT
+        else:
+            node_type = GraphNodeType.FUNCTION
 
         qualified_name = props.get("qualified_name", "")
         containing_class: str | None = None
@@ -736,9 +800,48 @@ class GraphService:
                 containing_class = (
                     parts[0].rsplit(":", 1)[-1] if ":" in parts[0] else parts[0]
                 )
-            metadata = {"containing_class": containing_class}
+
+        signature = None
+        # Build metadata based on node type
+        if node_type == GraphNodeType.METHOD:
+            metadata = FunctionMetadata(containing_class=containing_class)
+            sig_json = props.get("signature")
+            if sig_json:
+                try:
+                    signature = Signature(**json.loads(props.get("signature", "{}")))
+                except Exception:
+                    signature = None
+            else:
+                signature = None
+        elif node_type == GraphNodeType.FUNCTION:
+            metadata = FunctionMetadata()
+            sig_json = props.get("signature")
+            if sig_json:
+                try:
+                    signature = Signature(**json.loads(props.get("signature", "{}")))
+                except Exception:
+                    signature = None
+            else:
+                signature = None
+        elif node_type == GraphNodeType.CLASS:
+            superclasses = []
+            sig_json = props.get("signature")
+            if sig_json:
+                try:
+                    sig_dict = json.loads(sig_json)
+                    superclasses = sig_dict.get("superclasses", [])
+                    signature = Signature(
+                        **sig_json.loads(props.get("signature", "{}"))
+                    )
+                except Exception:
+                    pass
+            else:
+                signature = None
+            metadata = ClassMetadata(superclasses=superclasses)
+        elif node_type == GraphNodeType.IMPORT:
+            metadata = ImportMetadata()
         else:
-            metadata = {}
+            metadata = FunctionMetadata()
 
         return CodeNode(
             node_type=node_type,
@@ -760,3 +863,90 @@ class GraphService:
         graph = self._get_graph()
         _ = graph.query("MATCH (n) DETACH DELETE n")
         logger.info("Cleared graph '{}'", self._graph_name)
+
+    async def resolve_imports(
+        self,
+        imports: list[ImportNode],
+    ) -> dict[str, Any]:
+        graph = self._get_graph()
+        stats = {"resolved": 0, "edges_created": 0, "failed": 0}
+
+        unresolved = [
+            imp for imp in imports if not imp.target_file_id or not imp.target_file_path
+        ]
+
+        if not unresolved:
+            return stats
+
+        for imp in unresolved:
+            module_parts = imp.from_dotted_names if imp.from_dotted_names else []
+            if not module_parts:
+                stats["failed"] += 1
+                continue
+
+            # build the module path string (e.g., 'backend/src/domain/schemas/graph')
+            file_path_pattern = "/".join(module_parts)
+
+            query = """
+                MATCH (f:File)
+                WHERE f.path CONTAINS $pattern
+                RETURN f.file_id, f.path
+                LIMIT 1
+                """
+
+            result = graph.query(query, params={"pattern": file_path_pattern})
+            rows = result.result_set
+
+            if rows and rows[0]:
+                imp.target_file_id = str(rows[0][0])
+                imp.target_file_path = str(rows[0][1])
+                stats["resolved"] += 1
+                self._upsert_import_edge(graph, imp)
+                stats["edges_created"] += 1
+
+                # Create USES edges to specific imported items
+                uses_edges = self._upsert_uses_edges(
+                    graph,
+                    source_file_id=imp.file_id,
+                    target_file_id=imp.target_file_id,
+                    imported_names=imp.import_dotted_names or [],
+                    line_number=imp.line_number,
+                )
+                stats["edges_created"] += uses_edges
+            else:
+                stats["failed"] += 1
+
+        logger.info(
+            "Resolved {} imports ({} edges created, {} failed)",
+            stats["resolved"],
+            stats["edges_created"],
+            stats["failed"],
+        )
+        return stats
+
+    def upsert_inheritance_edge(self, graph: "Graph", edge: InheritanceEdge) -> None:
+        """Create an EXTENDS relationship between classes."""
+        query = """
+        MATCH (child)
+        WHERE child:Class AND child.qualified_name = $child_qualified
+        MERGE (parent {qualified_name: $parent_qualified})
+        ON CREATE SET parent.name = $parent_name,
+            parent.file_id = $parent_file_id,
+            parent.inferred = true
+        MERGE (child)-[r:EXTENDS]->(parent)
+        SET r.inheritance_type = $inheritance_type
+        """
+        # only create the edge if we have a child_qualified
+        if not edge.child_qualified:
+            return
+        _ = graph.query(
+            query,
+            params={
+                "child_qualified": edge.child_qualified,
+                "child_name": edge.child_name,
+                "parent_name": edge.parent_name,
+                "parent_qualified": edge.parent_qualified or edge.parent_name,
+                "parent_file_id": edge.parent_file_id or "",
+                "inheritance_type": edge.inheritance_type,
+            },
+        )

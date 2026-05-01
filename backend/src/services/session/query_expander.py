@@ -1,12 +1,3 @@
-"""Query expansion service for the evolved retrieval pipeline.
-
-Generates:
-    - rewritten_query: A cleaned, deambiguated query for retrieval
-    - checklist: 4-5 structured sub-questions covering all query nuance
-
-Uses LLM tool calling / structured output for reliable JSON emission.
-"""
-
 from __future__ import annotations
 
 import json
@@ -38,17 +29,6 @@ class QueryExpander:
         llm_config: LLMConfig,
         chat_history: str | None = None,
     ) -> QueryExpansion:
-        """Expand a user query into rewritten form + checklist.
-
-        Args:
-            user_query: The original user query
-            llm_config: LLM configuration for the expansion
-            chat_history: Optional conversation history for context resolution
-
-        Returns:
-            QueryExpansion with rewritten_query and checklist
-        """
-
         llm: BaseChatModel = build_llm(llm_config)
 
         history_str = chat_history if chat_history else "No conversation history."

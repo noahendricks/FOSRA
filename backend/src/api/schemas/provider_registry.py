@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-
-from loguru import logger as _loguru
 import os
 from pathlib import Path
 from typing import Any
 
 import httpx
+from loguru import logger as _loguru
 
 from backend.src.api.schemas.tui_schemas import (
     Model,
@@ -154,7 +153,7 @@ def _start_models_refresh_task() -> None:
 
 
 # first provider is the default when no selection is persisted
-PRIORITY_PROVIDERS = ["ollama", "local", "ollama-cloud"]
+PRIORITY_PROVIDERS = ["ollama", "minimax-coding-plan", "local", "ollama-cloud"]
 
 
 def _modalities_to_bools(
