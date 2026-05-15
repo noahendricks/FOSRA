@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "rust-analyzer": {
+      "command": "rust-analyzer",
+      "fileTypes": [".rs"],
+      "rootMarkers": ["Cargo.toml", "rust-analyzer.toml"]
+    }
+  }
+}

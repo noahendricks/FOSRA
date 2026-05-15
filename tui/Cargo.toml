@@ -1,0 +1,18 @@
+[package]
+name = "fosra-tui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+fosra = { path = "../core" }
+
+color-eyre = { workspace = true }
+crossterm = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+pulldown-cmark = { workspace = true }
+ratatui = { workspace = true }
+serde = { workspace = true }
+signal-hook = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }

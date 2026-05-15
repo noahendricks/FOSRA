@@ -1,6 +1,0 @@
-[pytest]
-asyncio_debug = true
-pythonpath = ["."]
-addopts = ["-v", "--tb=short"]
-testpaths = ["backend/tests", "chat/tests"]
-anyio_mode = "strict"

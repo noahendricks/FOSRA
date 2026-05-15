@@ -1,0 +1,8 @@
+[package]
+name = "fosra-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+fosra = { path = "../core" }
+tokio = { workspace = true }

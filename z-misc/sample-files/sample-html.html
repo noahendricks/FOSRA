@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>HTML Calibration Sample</title>
+    </head>
+    <body>
+        <h1>Heading Level 1</h1>
+        <h2>Heading Level 2</h2>
+        <h3>Heading Level 3</h3>
+        <h4>Heading Level 4</h4>
+
+        <p>
+            Lorem ipsum dolor sit amet, <strong>bold text here</strong>, and some
+            <em>italic text here</em>, and even <strong><em>bold italic</em></strong
+            >. Here is <code>inline code</code> and a <a href="https://example.com">hyperlink</a>.
+            Also a <a href="https://example.com" title="With title">link with a title attribute</a>.
+        </p>
+
+        <p>
+            Second paragraph with <s>strikethrough text</s>, <u>underlined text</u>, a
+            <sup>superscript</sup>, and a <sub>subscript</sub>. Trailing with a hard break:<br />line
+            continued after break.
+        </p>
+
+        <hr />
+
+        <h2>Lists</h2>
+
+        <h3>Unordered List</h3>
+        <ul>
+            <li>First item</li>
+            <li>Second item with <strong>bold</strong></li>
+            <li>
+                Third item
+                <ul>
+                    <li>Nested item one</li>
+                    <li>Nested item two</li>
+                </ul>
+            </li>
+            <li>Fourth item</li>
+        </ul>
+
+        <h3>Ordered List</h3>
+        <ol>
+            <li>Step one</li>
+            <li>Step two</li>
+            <li>
+                Step three
+                <ol>
+                    <li>Sub-step A</li>
+                    <li>Sub-step B</li>
+                </ol>
+            </li>
+        </ol>
+
+        <h3>Definition List</h3>
+        <dl>
+            <dt>Term One</dt>
+            <dd>Definition of term one.</dd>
+            <dt>Term Two</dt>
+            <dd>Definition of term two.</dd>
+        </dl>
+
+        <hr />
+
+        <h2>Blockquote and Code</h2>
+
+        <blockquote>
+            <p>
+                This is a blockquote. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                Nested below:
+            </p>
+            <blockquote>
+                <p>A nested blockquote for good measure.</p>
+            </blockquote>
+        </blockquote>
+
+        <pre><code>// Fenced code block
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+console.log(greet("World"));</code></pre>
+
+        <hr />
+
+        <h2>Table</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Alice</td>
+                    <td>Engineer</td>
+                    <td>Active</td>
+                    <td>92</td>
+                </tr>
+                <tr>
+                    <td>Bob</td>
+                    <td>Designer</td>
+                    <td>Inactive</td>
+                    <td>78</td>
+                </tr>
+                <tr>
+                    <td>Carol</td>
+                    <td>Manager</td>
+                    <td>Active</td>
+                    <td>88</td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3">Average</td>
+                    <td>86</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <hr />
+
+        <h2>Image</h2>
+
+        <img
+            src="https://via.placeholder.com/400x200"
+            alt="Placeholder image"
+            width="400"
+            height="200"
+        />
+
+        <figure>
+            <img src="https://via.placeholder.com/300x150" alt="Figure image" />
+            <figcaption>Figure 1: A placeholder image with a caption.</figcaption>
+        </figure>
+
+        <hr />
+
+        <h2>Inline HTML &amp; Entities</h2>
+
+        <p>
+            Common entities: &amp; ampersand, &lt; less-than, &gt; greater-than, &quot; quote,
+            &copy; copyright, &mdash; em dash, &hellip; ellipsis, &nbsp; non-breaking space.
+        </p>
+
+        <p>
+            A <span style="color: red">red span</span> and a <mark>highlighted mark</mark> inline.
+        </p>
+
+        <hr />
+
+        <h2>Details / Summary</h2>
+
+        <details>
+            <summary>Click to expand</summary>
+            <p>Hidden content revealed on expansion. Lorem ipsum dolor sit amet.</p>
+        </details>
+
+        <hr />
+
+        <h2>Miscellaneous Block Elements</h2>
+
+        <div>
+            <p>A paragraph inside a div. Divs are generic containers with no semantic meaning.</p>
+        </div>
+
+        <section>
+            <p>A paragraph inside a section element.</p>
+        </section>
+
+        <article>
+            <h3>Article Heading</h3>
+            <p>
+                Content inside an article element. Lorem ipsum dolor sit amet, consectetur
+                adipiscing elit.
+            </p>
+        </article>
+
+        <aside>
+            <p>Aside content — supplementary material, like a sidebar note.</p>
+        </aside>
+
+        <footer>
+            <p>&copy; 2026 Calibration Corp. All rights reserved.</p>
+        </footer>
+    </body>
+</html>

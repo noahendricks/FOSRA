@@ -57,6 +57,9 @@ ENV/
 env.bak/
 venv.bak/
 
+target/*
+
+Cargo.lock
 
 .ruff_cache/
 

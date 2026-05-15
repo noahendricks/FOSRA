@@ -1,0 +1,38 @@
+[package]
+name = "fosra"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+inspect = { workspace = true }
+serde = { workspace = true }
+tree-sitter = "0.26.8"
+tree-sitter-rust = "0.24.2"
+tree-sitter-python = "0.25.0"
+tree-sitter-language = "0.1.7"
+tree-sitter-typescript = "0.23.2"
+ulid = "1.2.1"
+strum = { version = "0.28.0", features = ["derive"] }
+thiserror = "2.0.18"
+dbg-pls = { version = "0.4.3", features = ["colors", "derive"] }
+treemd = "0.5.11"
+pdf_oxide = "0.3.47"
+kuchikiki = "0.8.2"
+tf-idf-vectorizer = "0.10.5"
+ort = "2.0.0-rc.12"
+rake = "0.3.6"
+pulldown-cmark.workspace = true
+half = "2.7.1"
+regex = "1.11"
+oxidize-pdf = "2.8.0"
+
+[dev-dependencies]
+syn = "2"
+prettyplease = "0.1"
+
+[profile.dev]
+opt-level = 0
+debug = true
