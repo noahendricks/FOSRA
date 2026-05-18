@@ -1,5 +1,3 @@
-//! Tree-sitter debug / dev playground.
-//!
 //! Usage:
 //!   cargo run --package fosra --example play -- <file> [--lang rust|python|typescript|tsx]
 //!
@@ -15,7 +13,7 @@ fn main() {
 
     // Parse arguments
     let mut file_path: Option<String> =
-        Some("/home/roccoluxe/fosra-rust/core/examples/play-debug.rs".to_string());
+        Some("/home/roccoluxe/FOSRA/core/examples/play-debug.rs".to_string());
     let mut lang: Option<String> = None;
 
     let mut i = 1;
@@ -93,6 +91,9 @@ fn main() {
 
     let tree = parser.parse(&source_code, None).expect("Parse failed");
 
+    // let block = source_code.get(1084..2558);
+    // println!("{:#?}", block);
+
     let root = tree.root_node();
 
     // ── Section 1: Summary ──────────────────────────────────────────
@@ -104,16 +105,10 @@ fn main() {
     println!("Root has_error: {}", root.has_error());
     println!("Root is_named: {}", root.is_named());
     println!("Root child_count: {}", root.child_count());
-    println!("Root named_child_count: {} \n", root.named_child_count());
+    println!("Root named_child_count: {}", root.named_child_count());
+    println!();
 
-    let cursor = root.walk();
-
-    // ── Section 2: S-expression ─────────────────────────────────────
-    // println!("=== S-expression ===");
-    // println!("{}", root.to_sexp());
-    // println!();
-
-    // ── Section 3: Full tree walk (field-aware) ─────────────────────
+    // ── Section 2: Full tree walk (field-aware) ─────────────────────
     println!("=== Full Tree Walk ===");
     writeln!(std::io::stdout(), "# `{}`", root.kind()).ok();
 
@@ -124,19 +119,19 @@ fn main() {
                 &mut std::io::stdout(),
                 child,
                 &source_code,
-                cursor.clone(),
+                &mut root.walk(),
                 1,
                 child_field,
             );
         }
     }
 
-    // ── Section 4: Cursor-based traversal ───────────────────────────
+    // ── Section 3: Cursor-based traversal ────────────────────────────
     println!("=== Cursor Traversal ===");
     cursor_walk(&mut std::io::stdout(), &tree, &source_code);
     println!();
 
-    // ── Section 6: Named node index ─────────────────────────────────
+    // ── Section 4: Named node index ──────────────────────────────────
     println!("=== Named Nodes (by depth) ===");
     print_named_index(&mut std::io::stdout(), root, &source_code, 0);
 }
@@ -145,61 +140,42 @@ fn print_tree_markdown(
     out: &mut impl Write,
     node: tree_sitter::Node,
     source_code: &str,
-    cursor: TreeCursor,
+    cursor: &mut TreeCursor,
     depth: usize,
     parent_field: &str,
 ) {
-    let node_id = node.id();
-    let byte_range = node.byte_range();
-    let start = node.start_position();
-    let end = node.end_position();
-    let named_flag = if node.is_named() { "" } else { " (anonymous)" };
-    let error_flag = if node.has_error() { " [!]" } else { "" };
+    let indent = "  ".repeat(depth);
     let field_info = if parent_field.is_empty() {
         String::new()
     } else {
         format!("**{}:** ", parent_field)
     };
-    let indent = "  ".repeat(depth);
-
-    let node_name = if node.grammar_name() == "identifier" {
-        node.utf8_text(source_code.as_bytes()).unwrap_or("default")
-    } else {
-        "no name"
-    };
-
-    let node_text = node.utf8_text(source_code.as_bytes()).unwrap();
+    // let node_text = node.utf8_text(source_code.as_bytes()).unwrap_or("?");
+    let named_flag = if node.is_named() { "" } else { " (anonymous)" };
+    let error_flag = if node.has_error() { " [!]" } else { "" };
 
     writeln!(
         out,
-        "{}- {}{} {} `{}` (id={}, bytes={}-{}, ({},{})-({},{}){}){} ",
+        "{}- {}{} {} (id={}, bytes={}-{}, row={}, col={}-{},{}){}{}",
         indent,
         field_info,
         node.kind(),
         node.grammar_name(),
-        node_id,
-        byte_range.start,
-        byte_range.end,
-        start.row,
-        start.column,
-        end.row,
-        end.column,
+        node.id(),
+        node.start_byte(),
+        node.end_byte(),
+        node.start_position().row,
+        node.start_position().column,
+        node.end_position().row,
+        node.end_position().column,
         named_flag,
         error_flag,
-        node_text
+        // node_text
     )
     .ok();
 
     for child in node.named_children(&mut cursor.clone()) {
-        let child_field = node.kind();
-        print_tree_markdown(
-            out,
-            child,
-            source_code,
-            cursor.clone(),
-            depth + 1,
-            child_field,
-        );
+        print_tree_markdown(out, child, source_code, cursor, depth + 1, node.kind());
     }
 }
 

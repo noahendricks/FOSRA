@@ -1,173 +1,62 @@
-use std::{env, ffi::OsStr, io::Error, path::PathBuf, result::Result, str::FromStr};
+use std::{env, path::PathBuf};
 
-use fosra::types::{
-    AttributePosition, BlockInfo, BlockType, CodeBlock, ImportGroup, LANGUAGE_MAPPING, LangSyntax,
-    PARSER_MAPPING, ScopePath, ScopeSegment, SupportedLanguage,
-};
-use tree_sitter::{Node, Parser, Tree};
-use tree_sitter_rust;
-
-struct CodeFile {
-    //file
-    source_text: String,
-    syntax: &'static LangSyntax,
-    path: PathBuf,
-    tree: Tree,
-    language: SupportedLanguage,
-
-    // blocks
-    blocks: Vec<CodeBlock>,
-    imports: ImportGroup,
-
-    //buffers
-    scope_stack: ScopePath,
-    comment_buffer: Vec<CodeBlock>,
-    statement_buffer: Vec<String>,
-    attribute_buffer: Vec<ScopeSegment>,
-
-    last_byte: usize,
-    next_id: usize,
-}
-
-struct CommentBuffer {
-    items: Vec<CodeBlock>,
-    pending_blank_line: bool,
-}
-
-impl Default for CommentBuffer {
-    fn default() -> Self {
-        Self {
-            items: vec![],
-            pending_blank_line: false,
-        }
-    }
-}
-
-impl CodeFile {
-    pub fn new(path: &PathBuf) -> Result<CodeFile, std::io::Error> {
-        let ext = &path
-            .extension()
-            .and_then(OsStr::to_str)
-            .ok_or(Error::last_os_error())?;
-
-        let module_name = &path.file_stem().and_then(OsStr::to_str).unwrap_or("");
-
-        let lang = SupportedLanguage::from_str(ext).map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid extension")
-        })?;
-
-        let source_code = std::fs::read_to_string(&path).map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "File could not be read")
-        })?;
-
-        let syntax = LANGUAGE_MAPPING.get(&lang).unwrap();
-
-        // create parser
-        let mut parser = Parser::new();
-
-        let _ = parser.set_language(PARSER_MAPPING.get(&lang).unwrap());
-
-        //get tree and root
-        let tree = parser.parse(&source_code, None).unwrap();
-        let root = tree.root_node();
-
-        // create and push module block to list
-        let first_byte = root.range().start_byte;
-
-        Ok(Self {
-            source_text: source_code,
-            syntax: syntax,
-            tree: tree,
-            path: path.clone(),
-            language: lang,
-            attribute_buffer: vec![],
-            blocks: vec![],
-            comment_buffer: vec![],
-            imports: ImportGroup::new(),
-            scope_stack: ScopePath::from_module(module_name),
-            statement_buffer: vec![],
-            last_byte: first_byte,
-            next_id: 0,
-        })
-    }
-
-    //parent passes module id
-    fn _walk(&mut self, node: Node, parent: CodeBlock, src: &[u8]) {
-        let mut cursor = self.tree.walk();
-        for child in node.named_children(&mut cursor) {
-            let child_kind = child.kind();
-            let block_info = self.syntax.block_types.get(child_kind).unwrap();
-            let (block_type, node_type) = block_info;
-
-            // block type for category -> node kind for semantics
-            match block_type {
-                //comment - added to comment buffer
-                BlockType::Comment => {
-                    // rust  python  ts
-                    self.comment_buffer.push(CodeBlock::from_comment(
-                        child,
-                        &self.scope_stack,
-                        block_info,
-                        src,
-                    ));
-                }
-
-                // solo imports  | comments drained in
-                BlockType::Import => {}
-
-                BlockType::Statement => {
-                    // list type imports as containers
-
-                    // single import
-                    ////  parse origin
-
-                    // group import - container -> recurse w/ _walk -> added to import group
-                    //// create import group  -> parse origin until exhausted -> push to buffer
-
-                    // raw imports as statements
-                }
-
-                // decorator / derive like node
-                BlockType::Attribute => {
-                    if self.syntax.attribute_position == AttributePosition::PrecedingSibling {}
-                }
-
-                // self contained blocks
-                BlockType::Atomic => {}
-
-                // contain
-                BlockType::Container => {}
-            }
-        }
-    }
-
-    // fn merge_ranges(&self, nodes: &[Node]) -> Range {
-    //     let start = nodes.first().map(|n| n.start_byte()).unwrap_or(0);
-    //     let end = nodes.last().map(|n| n.end_byte());
-    // }
-
-    // public parse method
-    pub fn parse(&self, file_path: PathBuf) {
-        // file details
-
-        // init module node
-    }
-}
+use fosra::types::CodeSource;
 
 fn main() {
-    let code_file = env::current_dir()
-        .unwrap()
-        .join("core")
-        .join("examples")
-        .join("ingest.rs");
+    let args: Vec<String> = env::args().collect();
+    let file_path = if args.len() > 1 {
+        PathBuf::from(&args[1])
+    } else {
+        env::current_dir()
+            .unwrap()
+            .join("core")
+            .join("examples")
+            .join("ingest.rs")
+    };
 
-    let code_text = code_file.to_str().unwrap();
+    let code_source = match CodeSource::parse(file_path) {
+        Ok(cs) => cs,
+        Err(e) => {
+            eprintln!("{}", e);
+            return;
+        }
+    };
 
-    let mut rust_parser = tree_sitter::Parser::new();
+    println!("=== Blocks ===");
+    for block in &code_source.blocks {
+        println!(
+            "  block_id={:?} range={:?} lines={}-{} symbol={:?} used={:?}",
+            block.block_id,
+            block.range,
+            block.line_start,
+            block.line_end,
+            block.symbol.iter().map(|s| &s.name).collect::<Vec<_>>(),
+            block.used_symbols.iter().map(|s| &s.name).collect::<Vec<_>>(),
+        );
+    }
 
-    rust_parser
-        .set_language(&tree_sitter_rust::LANGUAGE.into())
-        .expect("Error loading Rust grammar");
+    println!("\n=== Imports ===");
+    for group in &code_source.imports {
+        for imp in &group.imports {
+            println!("  base_module={:?} imports={:?}", imp.base_module, imp.imports);
+        }
+    }
 
-    let mut tree = rust_parser.parse(code_text, None).unwrap();
+    println!("\n=== File-level symbol rollups ===");
+    println!("  declared: {:?}", code_source.declared_symbols().iter().map(|s| &s.name).collect::<Vec<_>>());
+    println!("  used:     {:?}", code_source.used_symbols().iter().map(|s| &s.name).collect::<Vec<_>>());
+    println!("  imported: {:?}", code_source.imported_symbols());
+    println!("\n=== Inline Imports (scoped-path) ===");
+    if code_source.inline_imports.is_empty() {
+        println!("  (none)");
+    } else {
+        for (module, symbols) in &code_source.inline_imports {
+            println!("  {:?}: {:?}", module, symbols);
+        }
+    }
+    println!("\n=== All Dependencies (combined) ===");
+    for dep in &code_source.all_dependencies() {
+        println!("  {dep}");
+    }
+    println!("  content_hash: {}", code_source.content_hash);
 }

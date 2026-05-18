@@ -1,10 +1,3 @@
-//! Tree-sitter node type inspector.
-//!
-//! Usage:
-//!   cargo run --package fosra --example play-debug -- <file> [--lang rust|python|typescript|tsx]
-//!
-//! Outputs the full `dbg_pls` representation of one representative node per unique node kind.
-//! This lets you see all available fields for each node type in the grammar.
 use std::io::{self, Read};
 
 use dbg_pls::{DebugPls, color};
