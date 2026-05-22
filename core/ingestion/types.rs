@@ -1,6 +1,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::LazyLock;
 use std::{collections::HashMap, ffi::OsStr, path::PathBuf, str::FromStr};
+use treemd::{self, HeadingNode, parse_markdown};
 
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display, EnumString};
@@ -898,11 +899,106 @@ pub enum Role {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
     pub id: String,
-    pub content: String,
+    pub content: Vec<Section>,
     pub metadata: DocumentMetadata,
+    pub embedding: Vec<f32>,
+    pub content_hash: u64,
+}
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub chunks: Option<Vec<Chunk>>,
+impl Document {
+    pub fn walk_md(path: PathBuf) -> Result<Document, String> {
+        let doc_str =
+            std::fs::read_to_string(&path).map_err(|e| format!("Error reading file: {}", e))?;
+        let doc_bytes = doc_str.as_bytes();
+
+        let tree = parse_markdown(&doc_str).build_tree();
+
+        fn walk_children(
+            heading: HeadingNode,
+            parent_path: &String,
+            doc: &[u8],
+            sibling_end: &usize,
+        ) -> Vec<Section> {
+            let mut sections: Vec<Section> = Vec::new();
+
+            let updated_path = format!(
+                "H{}::{}::{}",
+                heading.heading.level.to_string().as_str(),
+                &heading.heading.text,
+                parent_path.clone(),
+            );
+
+            let start = *sibling_end;
+            let end = heading.heading.offset;
+
+            let curr = Section {
+                path: updated_path,
+                level: heading.heading.level,
+                text: String::from_utf8(doc[start..end].to_vec()).unwrap(),
+                start,
+                end,
+                p_path: parent_path.clone(),
+                embedding: None,
+                keywords: Vec::new(),
+            };
+
+            sections.push(curr.clone());
+
+            if !heading.children.is_empty() {
+                for child in heading.children {
+                    let walk_out = walk_children(
+                        child,
+                        &curr.path,
+                        doc,
+                        &sections.last().unwrap_or(&curr).end,
+                    );
+                    sections.extend(walk_out);
+                }
+            }
+            sections
+        }
+
+        let sections = walk_children(tree[0].clone(), &tree[0].heading.text, doc_bytes, &0);
+
+        let id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("document")
+            .to_string();
+
+        // Compute content hash from whitespace-normalized text
+        let cleaned: String = doc_str
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut hasher = std::hash::DefaultHasher::new();
+        use std::hash::Hash;
+        cleaned.hash(&mut hasher);
+        let content_hash = hasher.finish();
+
+        Ok(Document {
+            id,
+            content: sections,
+            metadata: DocumentMetadata {
+                path: Some(path),
+                ..Default::default()
+            },
+            embedding: Vec::new(),
+            content_hash,
+        })
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Section {
+    pub path: String,
+    pub level: usize,
+    pub text: String,
+    pub start: usize,
+    pub end: usize,
+
+    pub p_path: String,
+    pub embedding: Option<Vec<f32>>,
+    pub keywords: Vec<Keyword>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -954,43 +1050,12 @@ pub struct DocumentMetadata {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub document_version: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_format: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Keyword {
     pub text: String,
     pub score: f32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Chunk {
-    pub content: String,
-    pub embedding: Option<Vec<f32>>,
-    pub metadata: ChunkMetadata,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ChunkMetadata {
-    pub byte_start: usize,
-    pub byte_end: usize,
-    pub token_count: Option<usize>,
-    pub chunk_index: usize,
-    pub total_chunks: usize,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub first_page: Option<usize>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_page: Option<usize>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub heading_context: Option<HeadingContext>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1083,7 +1148,7 @@ pub struct CodeBlock {
     pub signature: Option<Signature>,
     pub attributes: Vec<String>,
     pub comments: Option<String>,
-    pub embedding: Option<f32>,
+    pub embedding: Option<Vec<f32>>,
     pub line_start: usize,
     pub line_end: usize,
 }
@@ -1749,9 +1814,7 @@ fn collect_inline_imports(
         }
         false
     };
-    result.retain(|(module, _)| {
-        module.first().map_or(false, |head| !skip_module_head(head))
-    });
+    result.retain(|(module, _)| module.first().map_or(false, |head| !skip_module_head(head)));
 
     // Group by module path: accumulate all symbols per module
     let mut map: HashMap<Vec<String>, Vec<String>> = HashMap::new();
@@ -1779,21 +1842,29 @@ impl CodeSource {
 
         let lang = SupportedLanguage::from_str(ext)
             .map_err(|_| format!("Unsupported language '{}'", ext))?;
+
         let lang_for_ii = lang.clone();
+
         let module_name = path
             .file_stem()
             .and_then(OsStr::to_str)
             .unwrap_or("")
             .to_string();
         let syntax = LANGUAGE_MAPPING.get(&lang).unwrap().clone();
+
         let mut parser = Parser::new();
         let _ = parser.set_language(PARSER_MAPPING.get(&lang).unwrap());
+
         let tree = parser
             .parse(&source_text, None)
             .ok_or("Parse returned None".to_string())?;
+
         let root = tree.root_node();
         let src = source_text.as_bytes();
-        let mut code_parser = CodeParser::new(path.clone(), lang, syntax, src.to_vec(), module_name);
+
+        let mut code_parser =
+            CodeParser::new(path.clone(), lang, syntax, src.to_vec(), module_name);
+
         code_parser._walk(root, src);
 
         // post-walk: collect used symbols (matched by byte range, not block_id)
@@ -1817,38 +1888,67 @@ impl CodeSource {
             block.used_symbols.sort_by(|a, b| a.name.cmp(&b.name));
             block.used_symbols.dedup_by(|a, b| a.name == b.name);
         }
-        let imported_symbols = code_parser.imports.iter()
+
+        let imported_symbols = code_parser
+            .imports
+            .iter()
             .flat_map(|g| g.imports.iter())
             .flat_map(|b| {
                 let base = &b.base_module;
-                b.imports.values()
+                b.imports
+                    .values()
                     .flat_map(|v| v.iter().cloned())
-                    .map(move |name| if base.is_empty() { name } else { format!("{base}::{name}") })
+                    .map(move |name| {
+                        if base.is_empty() {
+                            name
+                        } else {
+                            format!("{base}::{name}")
+                        }
+                    })
             })
             .collect::<Vec<String>>();
-        let imported_modules: Vec<String> = code_parser.imports.iter()
+
+        let imported_modules: Vec<String> = code_parser
+            .imports
+            .iter()
             .flat_map(|g| g.imports.iter())
             .flat_map(|b| b.imports.keys().filter_map(|k| k.last().cloned()))
             .collect();
-        let inline_imports = collect_inline_imports(root, src, &imported_symbols, &imported_modules, lang_for_ii);
+
+        let inline_imports =
+            collect_inline_imports(root, src, &imported_symbols, &imported_modules, lang_for_ii);
+
         // Filter: used_symbols should only reference symbols known to this file
         // (declared, imported, or referenced via inline :: paths).
         let known: Vec<String> = {
-            let mut k: Vec<String> = code_parser.blocks.iter()
+            let mut k: Vec<String> = code_parser
+                .blocks
+                .iter()
                 .flat_map(|b| b.symbol.iter().map(|s| s.name.clone()))
                 .collect();
             for syms in inline_imports.values() {
                 k.extend(syms.iter().cloned());
             }
-            k.extend(code_parser.imports.iter()
-                .flat_map(|g| g.imports.iter())
-                .flat_map(|b| {
-                    let base = &b.base_module;
-                    b.imports.values()
-                        .flat_map(|v| v.iter().cloned())
-                        .map(move |name| if base.is_empty() { name } else { format!("{base}::{name}") })
-                        .collect::<Vec<_>>()
-                }));
+            k.extend(
+                code_parser
+                    .imports
+                    .iter()
+                    .flat_map(|g| g.imports.iter())
+                    .flat_map(|b| {
+                        let base = &b.base_module;
+                        b.imports
+                            .values()
+                            .flat_map(|v| v.iter().cloned())
+                            .map(move |name| {
+                                if base.is_empty() {
+                                    name
+                                } else {
+                                    format!("{base}::{name}")
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    }),
+            );
             k.sort();
             k.dedup();
             k
@@ -1948,7 +2048,8 @@ impl CodeSource {
             .ok_or("Parse returned None".to_string())?;
         let root = tree.root_node();
         let src = source_text.as_bytes();
-        let mut code_parser = CodeParser::new(path.clone(), lang, syntax, src.to_vec(), module_name);
+        let mut code_parser =
+            CodeParser::new(path.clone(), lang, syntax, src.to_vec(), module_name);
         code_parser._walk(root, src);
         let used = collect_used_symbols(&code_parser.blocks, root, src);
         for block in &mut code_parser.blocks {
@@ -1967,20 +2068,32 @@ impl CodeSource {
             block.used_symbols.sort_by(|a, b| a.name.cmp(&b.name));
             block.used_symbols.dedup_by(|a, b| a.name == b.name);
         }
-        let imported_symbols = code_parser.imports.iter()
+        let imported_symbols = code_parser
+            .imports
+            .iter()
             .flat_map(|g| g.imports.iter())
             .flat_map(|b| {
                 let base = &b.base_module;
-                b.imports.values()
+                b.imports
+                    .values()
                     .flat_map(|v| v.iter().cloned())
-                    .map(move |name| if base.is_empty() { name } else { format!("{base}::{name}") })
+                    .map(move |name| {
+                        if base.is_empty() {
+                            name
+                        } else {
+                            format!("{base}::{name}")
+                        }
+                    })
             })
             .collect::<Vec<String>>();
-        let imported_modules: Vec<String> = code_parser.imports.iter()
+        let imported_modules: Vec<String> = code_parser
+            .imports
+            .iter()
             .flat_map(|g| g.imports.iter())
             .flat_map(|b| b.imports.keys().filter_map(|k| k.last().cloned()))
             .collect();
-        let inline_imports = collect_inline_imports(root, src, &imported_symbols, &imported_modules, lang_for_ii);
+        let inline_imports =
+            collect_inline_imports(root, src, &imported_symbols, &imported_modules, lang_for_ii);
         let mut hasher = DefaultHasher::new();
         source_text.hash(&mut hasher);
         let content_hash = hasher.finish();
@@ -2001,7 +2114,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-#[test]
+    #[test]
     fn test_rust_declared_symbols() {
         let source = r#"
 fn foo() {}

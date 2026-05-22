@@ -31,20 +31,41 @@ fn main() {
             block.line_start,
             block.line_end,
             block.symbol.iter().map(|s| &s.name).collect::<Vec<_>>(),
-            block.used_symbols.iter().map(|s| &s.name).collect::<Vec<_>>(),
+            block
+                .used_symbols
+                .iter()
+                .map(|s| &s.name)
+                .collect::<Vec<_>>(),
         );
     }
 
     println!("\n=== Imports ===");
     for group in &code_source.imports {
         for imp in &group.imports {
-            println!("  base_module={:?} imports={:?}", imp.base_module, imp.imports);
+            println!(
+                "  base_module={:?} imports={:?}",
+                imp.base_module, imp.imports
+            );
         }
     }
 
     println!("\n=== File-level symbol rollups ===");
-    println!("  declared: {:?}", code_source.declared_symbols().iter().map(|s| &s.name).collect::<Vec<_>>());
-    println!("  used:     {:?}", code_source.used_symbols().iter().map(|s| &s.name).collect::<Vec<_>>());
+    println!(
+        "  declared: {:?}",
+        code_source
+            .declared_symbols()
+            .iter()
+            .map(|s| &s.name)
+            .collect::<Vec<_>>()
+    );
+    println!(
+        "  used:     {:?}",
+        code_source
+            .used_symbols()
+            .iter()
+            .map(|s| &s.name)
+            .collect::<Vec<_>>()
+    );
     println!("  imported: {:?}", code_source.imported_symbols());
     println!("\n=== Inline Imports (scoped-path) ===");
     if code_source.inline_imports.is_empty() {

@@ -5,6 +5,8 @@ use tf_idf_vectorizer::{
     Corpus, SimilarityAlgorithm, TFIDFVectorizer, TermFrequency, vectorizer::evaluate::query::Query,
 };
 
+use rake;
+
 fn main() {
     // build corpus
     let corpus = Arc::new(Corpus::new());
@@ -12,6 +14,7 @@ fn main() {
     // make term frequencies
     let mut freq1 = TermFrequency::new();
     freq1.add_terms(&["rust", "高速", "並列", "rust"]);
+
     let mut freq2 = TermFrequency::new();
     freq2.add_terms(&["rust", "柔軟", "安全", "rust"]);
 

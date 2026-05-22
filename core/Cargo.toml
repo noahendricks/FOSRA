@@ -10,6 +10,7 @@ path = "lib.rs"
 inspect = { workspace = true }
 serde = { workspace = true }
 tree-sitter = "0.26.8"
+fastembed = "5"
 tree-sitter-rust = "0.24.2"
 tree-sitter-python = "0.25.0"
 tree-sitter-language = "0.1.7"
@@ -22,12 +23,23 @@ treemd = "0.5.11"
 pdf_oxide = "0.3.47"
 kuchikiki = "0.8.2"
 tf-idf-vectorizer = "0.10.5"
-ort = "2.0.0-rc.12"
+ort = { version =  "2.0.0-rc.12", features = ["cuda"] }
 rake = "0.3.6"
-pulldown-cmark.workspace = true
+pulldown-cmark = "0.13"
+markdown-ast = "0.1.1"
 half = "2.7.1"
 regex = "1.11"
 oxidize-pdf = "2.8.0"
+console = "0.16.3"
+tokenizers = "0.23.1"
+tracing-subscriber = {version = "0.3.23", features = ["env-filter"]}
+ndarray = "0.17.2"
+pretty_assertions = "1.4.1"
+owo-colors = "4.3.0"
+markdown = "1.0.0"
+codive-lsp = "0.1.0"
+serde_json = "1.0.150"
+
 
 [dev-dependencies]
 syn = "2"
