@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use fosra::ingestion::types::Document;
 use fosra::processing::corpus::Corpus;
-use fosra::processing::embedding::EmbeddingEngine;
+use fosra::processing::embedding::{EmbeddingEngine, cosine_similarity};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Paths
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .iter()
     .collect();
 
-    // 1. Ingest document
+    // 1. ingest document
     println!("Ingesting: {}", md_path.display());
     let mut doc = Document::walk_md(md_path)?;
     println!("  {} sections loaded", doc.content.len());
@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Populate keywords on each section
     println!("Computing keywords...");
     corpus.populate_keywords(&mut doc, 15);
+
     for section in &doc.content {
         println!(
             "  Section '{}': {} keywords",
@@ -65,18 +66,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for i in 0..embeddings.len() {
         for j in (i + 1)..embeddings.len() {
-            let dot: f32 = embeddings[i]
-                .iter()
-                .zip(embeddings[j].iter())
-                .map(|(a, b)| a * b)
-                .sum();
-            let norm_i = embeddings[i].iter().map(|x| x * x).sum::<f32>().sqrt();
-            let norm_j = embeddings[j].iter().map(|x| x * x).sum::<f32>().sqrt();
-            let cos_sim = dot / (norm_i * norm_j).max(f32::EPSILON);
-            println!(
-                "  Cos sim [{}] vs [{}]: {:.4}",
-                i, j, cos_sim
-            );
+            let cos_sim = cosine_similarity(embeddings[i], embeddings[j]);
+            println!("  Cos sim [{}] vs [{}]: {:.4}", i, j, cos_sim);
         }
     }
 

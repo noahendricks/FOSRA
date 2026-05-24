@@ -9,6 +9,7 @@ path = "lib.rs"
 [dependencies]
 inspect = { workspace = true }
 serde = { workspace = true }
+strum = {workspace = true}
 tree-sitter = "0.26.8"
 fastembed = "5"
 tree-sitter-rust = "0.24.2"
@@ -16,7 +17,6 @@ tree-sitter-python = "0.25.0"
 tree-sitter-language = "0.1.7"
 tree-sitter-typescript = "0.23.2"
 ulid = "1.2.1"
-strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.18"
 dbg-pls = { version = "0.4.3", features = ["colors", "derive"] }
 treemd = "0.5.11"
@@ -39,6 +39,7 @@ owo-colors = "4.3.0"
 markdown = "1.0.0"
 codive-lsp = "0.1.0"
 serde_json = "1.0.150"
+rand = "0.10.1"
 
 
 [dev-dependencies]

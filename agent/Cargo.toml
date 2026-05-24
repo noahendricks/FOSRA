@@ -1,0 +1,21 @@
+[package]
+name = "fosra-agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true, features = ["rt"] }
+uuid = { workspace = true }
+serde = { workspace = true }
+postcard = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+rig-core = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+strum = {workspace = true}
+parking_lot = {version =  "0.12.5"}
+rand = "0.10.1"

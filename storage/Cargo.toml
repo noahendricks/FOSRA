@@ -1,0 +1,17 @@
+[package]
+name = "fosra-storage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+fosra-agent = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+postcard = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+surrealdb = { workspace = true }
