@@ -1,219 +1,168 @@
-use std::collections::HashMap;
+use crate::{Document, IngestionError, Keyword};
+use owo_colors::OwoColorize;
+use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
+use tf_idf_vectorizer::{Corpus, TFIDFVectorizer, TermFrequency};
 
-use serde::{Deserialize, Serialize};
+use anyhow::{Context, Result, anyhow};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Corpus {
-    documents: HashMap<String, HashMap<String, usize>>,
-    // document frequency per term / how many documents contain this term
-    df: HashMap<String, usize>,
-    // number of documents in corpus
-    n_docs: usize,
-    /// Stop words loaded from file.
-    stopwords: Vec<String>,
+const STOPWORD_PATH: &str = "/home/roccoluxe/FOSRA/z-misc/resources/stopwords.txt";
+
+pub fn parse_keywords(doc_path: &str, corpus: Option<Arc<Corpus>>) -> Result<Vec<Keyword>> {
+    let corpus = corpus.unwrap_or_else(|| Arc::new(Corpus::new()));
+
+    // pull in stopwords
+    let sw_string: String = std::fs::read_to_string(STOPWORD_PATH)
+        .map_err(|e| format!("Failed to read stopwords file: {e}"))
+        .unwrap();
+    let stopwords: HashSet<String> = sw_string
+        .lines()
+        .into_iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.trim().to_lowercase())
+        .collect();
+
+    // parse doc to string
+    let doc: String = std::fs::read_to_string(doc_path).unwrap();
+    let doc_name = String::from(Path::new(doc_path).file_name().unwrap().to_str().unwrap());
+
+    // to markdown
+    let doc_md = Document::walk_md(doc_path.into()).unwrap();
+
+    // remove inflected variants
+    fn is_inflected(word: &str) -> bool {
+        if word.len() <= 2 {
+            return false;
+        }
+
+        word.ends_with("ing")
+            || word.ends_with("ies")
+            || word.ends_with("ally")
+            || word.ends_with('s') && word.len() > 3
+    }
+
+    // split doc to unique words minus stopwords + inflected
+    let mut doc_split: Vec<String> = doc
+        .split_whitespace()
+        .filter(|s| !s.is_empty() && s.chars().all(char::is_alphanumeric))
+        .map(|s| s.to_lowercase())
+        .collect::<Vec<String>>();
+    doc_split.retain(|s| !stopwords.contains(s));
+    doc_split.retain(|w| !is_inflected(w));
+
+    // extract headings
+    let headings = doc_md
+        .content
+        .iter()
+        .map(|s| &s.path)
+        .collect::<Vec<&String>>();
+
+    // unique words in headings
+    let mut heading_tokens: Vec<&str> = headings
+        .iter()
+        .flat_map(|h| h.split("::"))
+        .flat_map(|p| p.split_whitespace())
+        .filter(|&t| !t.contains(".") && !t.chars().any(|c| !c.is_alphabetic()))
+        .collect();
+    // remove stopwords
+    heading_tokens.retain(|s| !stopwords.contains(s.to_lowercase().as_str()));
+
+    // // make term frequencies
+    let mut freq1 = TermFrequency::new();
+    let mut freq2 = TermFrequency::new();
+    freq1.add_terms(&doc_split);
+    freq2.add_terms(&heading_tokens);
+
+    // get list for both
+
+    let doc_kw: Vec<(String, u64)> = freq1
+        .sorted_frequency_vector()
+        .into_iter()
+        .filter(|kw| kw.1 >= 7)
+        .take(15)
+        .collect();
+
+    let heading_kw: Vec<(String, u64)> = freq2
+        .sorted_frequency_vector()
+        .into_iter()
+        .filter(|kw| kw.1 >= 6)
+        .take(15)
+        .collect();
+
+    // merge for return
+    let mut all_kw: Vec<Keyword> = doc_kw.iter().map(|kw| Keyword::new(kw.clone())).collect();
+    let mut seen: HashSet<Keyword> = HashSet::from_iter(all_kw.clone());
+
+    for kw in heading_kw {
+        let key = Keyword::new(kw);
+        if seen.insert(key.clone()) {
+            all_kw.push(key)
+        }
+    }
+
+    // add to corpus together
+
+    let mut vectorizer: TFIDFVectorizer = TFIDFVectorizer::new(corpus);
+
+    vectorizer.add_doc(doc_name.clone(), &freq2);
+    vectorizer.add_doc(doc_name, &freq1);
+
+    Ok(all_kw)
 }
 
-/// serializable for data-only (no stopwords)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CorpusData {
-    // per-document term frequencies: doc_id -> term -> count.
-    pub documents: HashMap<String, HashMap<String, usize>>,
-    // document frequency / how many documents contain this term.
-    pub df: HashMap<String, usize>,
-    // total number of documents in corpus
-    pub n_docs: usize,
-}
+//TODO: Parse to SURREALDB
 
-impl Corpus {
-    fn load_stopwords(path: &Path) -> Result<Vec<String>, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read stopwords file: {e}"))?;
+// pub fn save(corpus: Arc<Corpus>) -> Result<(), String> {
+//     let json = serde_json::to_string_pretty(self)
+//         .map_err(|e| format!("Failed to serialize corpus: {e}"))?;
 
-        Ok(content
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .map(|l| l.trim().to_lowercase())
-            .collect())
-    }
+//     std::fs::write(path, json).map_err(|e| format!("Failed to write corpus: {e}"))
+// }
 
-    pub fn new(stopwords_path: &Path) -> Result<Self, String> {
-        let stopwords = Self::load_stopwords(stopwords_path)?;
-        Ok(Self {
-            documents: HashMap::new(),
-            df: HashMap::new(),
-            n_docs: 0,
-            stopwords,
-        })
-    }
+// pub fn load(path: &Path) -> Result<Self, String> {
+//     let json =
+//         std::fs::read_to_string(path).map_err(|e| format!("Failed to read corpus file: {e}"))?;
 
-    pub fn stopwords(&self) -> &[String] {
-        &self.stopwords
-    }
+//     serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize corpus: {e}"))
+// }
 
-    fn tokenize(text: &str, stopwords: &[String]) -> Vec<String> {
-        text.split(|c: char| !c.is_alphanumeric())
-            .map(|w| w.to_lowercase())
-            .filter(|w| w.len() >= 3 && !stopwords.contains(w))
-            .collect()
-    }
+// pub fn to_data(&self) -> CorpusData {
+//     CorpusData {
+//         documents: self.documents.clone(),
+//         df: self.df.clone(),
+//         n_docs: self.n_docs,
+//     }
+// }
 
-    pub fn add_doc(&mut self, id: String, text: &str) {
-        let tokens = Self::tokenize(text, &self.stopwords);
+// pub fn from_data(data: CorpusData, stopwords: Vec<String>) -> Self {
+//     Self {
+//         documents: data.documents,
+//         df: data.df,
+//         n_docs: data.n_docs,
+//         stopwords,
+//     }
+// }
 
-        let mut tf: HashMap<String, usize> = HashMap::new();
+// // -> JSON
+// pub fn save_data(&self, path: &Path) -> Result<(), String> {
+//     let data = self.to_data();
 
-        for token in &tokens {
-            *tf.entry(token.clone()).or_default() += 1;
-        }
+//     let json = serde_json::to_string_pretty(&data)
+//         .map_err(|e| format!("Failed to serialize corpus data: {e}"))?;
 
-        for term in tf.keys() {
-            *self.df.entry(term.clone()).or_insert(0) += 1;
-        }
+//     std::fs::write(path, json).map_err(|e| format!("Failed to write corpus data: {e}"))
+// }
 
-        self.documents.insert(id, tf);
-        self.n_docs += 1;
-    }
+// // <- JSON + Stopwords
+// pub fn load_data(path: &Path, stopwords_path: &Path) -> Result<Self, String> {
+//     let json = std::fs::read_to_string(path)
+//         .map_err(|e| format!("Failed to read corpus data file: {e}"))?;
 
-    pub fn add_document(&mut self, doc: &crate::Document) {
-        for section in &doc.content {
-            let id = format!("{}::{}", doc.id, section.path);
+//     let data: CorpusData = serde_json::from_str(&json)
+//         .map_err(|e| format!("Failed to deserialize corpus data: {e}"))?;
 
-            self.add_doc(id, &section.text);
-        }
-    }
+//     let stopwords = Corpus::load_stopwords(stopwords_path)?;
 
-    pub fn remove_doc(&mut self, id: &str) -> bool {
-        if let Some(tf) = self.documents.remove(id) {
-            for term in tf.keys() {
-                if let Some(count) = self.df.get_mut(term) {
-                    *count -= 1;
-
-                    if *count == 0 {
-                        self.df.remove(term);
-                    }
-                }
-            }
-
-            self.n_docs -= 1;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn remove_document(&mut self, doc: &crate::Document) {
-        for section in &doc.content {
-            let id = format!("{}::{}", doc.id, section.path);
-
-            self.remove_doc(&id);
-        }
-    }
-
-    pub fn contains(&self, id: &str) -> bool {
-        self.documents.contains_key(id)
-    }
-
-    pub fn term_freq(&self, id: &str) -> Option<&HashMap<String, usize>> {
-        self.documents.get(id)
-    }
-
-    pub fn len(&self) -> usize {
-        self.n_docs
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.n_docs == 0
-    }
-
-    fn tfidf_scores(&self, id: &str) -> Vec<(String, f32)> {
-        let tf = match self.documents.get(id) {
-            Some(tf) => tf,
-            None => return Vec::new(),
-        };
-
-        let n = self.n_docs as f32;
-        let mut scores: Vec<(String, f32)> = Vec::with_capacity(tf.len());
-
-        for (term, count) in tf {
-            let tf_val = *count as f32;
-            let df = *self.df.get(term).unwrap_or(&1) as f32;
-            let idf = (n / df).ln() + 1.0;
-
-            scores.push((term.clone(), tf_val * idf));
-        }
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        return scores;
-    }
-
-    pub fn keywords(&self, id: &str, max: usize) -> Vec<crate::Keyword> {
-        self.tfidf_scores(id)
-            .into_iter()
-            .take(max)
-            .map(|(text, score)| crate::Keyword { text, score })
-            .collect()
-    }
-
-    pub fn populate_keywords(&self, doc: &mut crate::Document, max: usize) {
-        for section in &mut doc.content {
-            let id = format!("{}::{}", doc.id, section.path);
-
-            section.keywords = self.keywords(&id, max);
-        }
-    }
-
-    pub fn save(&self, path: &Path) -> Result<(), String> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("Failed to serialize corpus: {e}"))?;
-
-        std::fs::write(path, json).map_err(|e| format!("Failed to write corpus: {e}"))
-    }
-
-    pub fn load(path: &Path) -> Result<Self, String> {
-        let json = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read corpus file: {e}"))?;
-
-        serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize corpus: {e}"))
-    }
-
-    pub fn to_data(&self) -> CorpusData {
-        CorpusData {
-            documents: self.documents.clone(),
-            df: self.df.clone(),
-            n_docs: self.n_docs,
-        }
-    }
-
-    pub fn from_data(data: CorpusData, stopwords: Vec<String>) -> Self {
-        Self {
-            documents: data.documents,
-            df: data.df,
-            n_docs: data.n_docs,
-            stopwords,
-        }
-    }
-
-    // -> JSON
-    pub fn save_data(&self, path: &Path) -> Result<(), String> {
-        let data = self.to_data();
-
-        let json = serde_json::to_string_pretty(&data)
-            .map_err(|e| format!("Failed to serialize corpus data: {e}"))?;
-
-        std::fs::write(path, json).map_err(|e| format!("Failed to write corpus data: {e}"))
-    }
-
-    // <- JSON + Stopwords
-    pub fn load_data(path: &Path, stopwords_path: &Path) -> Result<Self, String> {
-        let json = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read corpus data file: {e}"))?;
-
-        let data: CorpusData = serde_json::from_str(&json)
-            .map_err(|e| format!("Failed to deserialize corpus data: {e}"))?;
-
-        let stopwords = Corpus::load_stopwords(stopwords_path)?;
-
-        Ok(Self::from_data(data, stopwords))
-    }
-}
+//     Ok(Self::from_data(data, stopwords))
+// }

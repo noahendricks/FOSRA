@@ -1,4 +1,6 @@
-use serde::{Serialize, Deserialize};
+// semantically paper
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIRIntent {

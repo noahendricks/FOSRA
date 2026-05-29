@@ -1,4 +1,7 @@
-use crate::core::error::StepError;
+use crate::{
+    core::error::StepError,
+    session::{memory::MemoryEntry, traces::Lesson},
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -11,9 +14,9 @@ pub struct Checkpoint<S> {
     pub thread_id: String,
     pub label: String,
     pub state: S,
-    pub sml: Vec<crate::MemoryEntry>,
-    pub lml: Vec<crate::MemoryEntry>,
-    pub hllm_lessons: Vec<crate::HLLMLesson>,
+    pub sml: Vec<MemoryEntry>,
+    pub lml: Vec<MemoryEntry>,
+    pub lessons: Vec<Lesson>,
     pub skill_scores: HashMap<String, f64>,
     pub parent_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,

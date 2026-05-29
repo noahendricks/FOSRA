@@ -1,8 +1,11 @@
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+// tracecoder paper
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+// llm created lesson for reference later
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HLLMLesson {
+pub struct Lesson {
     pub error_type: String,
     pub root_cause_location: String,
     pub why_previous_fixes_failed: String,
@@ -14,7 +17,7 @@ pub struct HLLMLesson {
 pub struct DebugResult {
     pub repaired_code: Vec<u8>,
     pub trace: Vec<u8>,
-    pub hllm_lessons_used: Vec<HLLMLesson>,
+    pub hllm_lessons_used: Vec<Lesson>,
     pub rollback_count: u32,
     pub final_status: DebugStatus,
 }

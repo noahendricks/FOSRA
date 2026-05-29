@@ -1,13 +1,14 @@
+// fademem paper
+
+use crate::core::tracer;
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::core::tracer::MemoryLayer;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryEntry {
     pub content: Vec<u8>,
     pub importance: f64,
-    pub layer: MemoryLayer,
     pub created_at: DateTime<Utc>,
     pub last_accessed: DateTime<Utc>,
     pub decay_rate: f64,

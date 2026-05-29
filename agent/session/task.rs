@@ -1,5 +1,8 @@
-use serde::{Serialize, Deserialize};
-use crate::ValidationStatus;
+// dalia paper
+
+use serde::{Deserialize, Serialize};
+
+use crate::core::tracer::ValidationStatus;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Capability {

@@ -1,11 +1,33 @@
-use owo_colors::OwoColorize;
+use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
-use std::{fs::read_to_string, path::PathBuf};
-use treemd::{self, HeadingNode, parse_markdown};
+use anyhow::{Result, anyhow};
+use fosra::ingestion::doc_types::Document;
 
-use fosra::ingestion::types::Document;
+use fosra::processing::embedding::EmbeddingEngine;
 
-use tf_idf_vectorizer;
+use fosra::processing::corpus::parse_keywords;
 
-pub fn main() {}
+fn main() -> Result<()> {
+    let doc_path = PathBuf::from("/home/roccoluxe/FOSRA/z-misc/sample-files/sample-md1.md");
+    let mut doc = Document::walk_md(doc_path.clone())?;
+
+    let kw = parse_keywords(doc_path.to_str().unwrap_or("invalid doc path {}"), None)?;
+
+    let model_dir = "/home/roccoluxe/models/embedding/onnx";
+
+    let mut embedder = EmbeddingEngine::new(model_dir.into()).map_err(|e| {
+        anyhow!(
+            "failed because model dir incorrect or invalid: {}",
+            model_dir
+        )
+    })?;
+
+    // embed sections in place
+    _ = doc.embed_document_mut(&mut embedder, 896, doc.content.len());
+
+    doc.metadata.extracted_keywords = Some(kw);
+
+    dbg!(&doc);
+
+    Ok(())
+}

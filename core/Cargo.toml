@@ -9,7 +9,12 @@ path = "lib.rs"
 [dependencies]
 inspect = { workspace = true }
 serde = { workspace = true }
+anyhow = {workspace = true}
 strum = {workspace = true}
+surrealdb = { workspace = true, features = ["kv-mem", "protocol-ws"] }
+postcard = {workspace = true}
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+uuid = {workspace = true}
 tree-sitter = "0.26.8"
 fastembed = "5"
 tree-sitter-rust = "0.24.2"

@@ -1,11 +1,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use anyhow::{Error, Result, anyhow};
 use fastembed::{
     InitOptionsUserDefined, Pooling, QuantizationMode, TextEmbedding, TokenizerFiles,
     UserDefinedEmbeddingModel,
 };
+use ndarray::AssignElem;
 use serde::{Deserialize, Serialize};
+
+use crate::{Section, ingestion::IsSection};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptPair {
@@ -74,24 +78,72 @@ impl EmbeddingEngine {
         Ok(Self { model: engine })
     }
 
-    pub fn embed(&mut self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, String> {
+    pub fn embed(
+        &mut self,
+        texts: Vec<String>,
+        batch_size: Option<usize>,
+    ) -> Result<Vec<Vec<f32>>, String> {
         self.model
-            .embed(texts, None)
+            .embed(texts, batch_size)
             .map_err(|e| format!("Embedding failed: {e}"))
     }
 
-    pub fn embed_with_dims(
+    /// Embeds sections in-place
+    /// ```
+    /// Section.embedding //<- mutated for each
+    /// ```
+    pub fn embed_sections_mut<T>(
         &mut self,
-        texts: Vec<String>,
+        sections: T,
         dims: usize,
-    ) -> Result<Vec<Vec<f32>>, String> {
-        let mut result = self.embed(texts)?;
-        for vec in &mut result {
+        batch_size: usize,
+    ) -> Result<Vec<f32>>
+    where
+        T: IntoIterator,
+        T::Item: IsSection,
+    {
+        let texts: Vec<String> = sections
+            .iter()
+            .filter_map(|s| {
+                if !s.text.is_empty() {
+                    Some(s.text.clone())
+                } else {
+                    Some(String::new())
+                }
+            })
+            .collect();
+
+        let mut embeddings = self
+            .embed(texts, Some(batch_size))
+            .map_err(|e| anyhow!("failed because {e}"))?;
+
+        for vec in &mut embeddings {
             if vec.len() > dims {
                 vec.truncate(dims);
             }
         }
-        Ok(result)
+
+        // place embeddings
+        for (i, section) in sections.iter_mut().enumerate() {
+            section.embedding = Some(embeddings[i].clone());
+        }
+
+        // document level embedding from N section vectors
+        let n = embeddings.len() as f32;
+        let mut doc_embedding = vec![0.0; dims];
+
+        // consolidate onto single embedding
+        for emb in embeddings.as_slice() {
+            for (out, &val) in doc_embedding.iter_mut().zip(emb.iter()) {
+                *out += val;
+            }
+        }
+        // normalize by N vectors
+        for val in doc_embedding.iter_mut() {
+            *val /= n;
+        }
+
+        Ok(doc_embedding)
     }
 
     /// embed a single text the task-specific query prompt from `spec.prompts` (e.g. `"nl2code"`, `"qa"`).
@@ -108,7 +160,7 @@ impl EmbeddingEngine {
 
         let prefixed = format!("{}{}", pair.query, query);
 
-        let mut results = self.embed(vec![prefixed])?;
+        let mut results = self.embed(vec![prefixed], None)?;
 
         results
             .pop()
@@ -132,7 +184,7 @@ impl EmbeddingEngine {
             .map(|d| format!("{}{}", pair.document, d))
             .collect();
 
-        self.embed(prefixed)
+        self.embed(prefixed, Some(documents.len()))
     }
 
     // generic embed tasks - passed directly
@@ -148,39 +200,16 @@ impl EmbeddingEngine {
         Ok((q, d))
     }
 
-    /// vectors assigned in-place - no kw extraction
-    pub fn embed_document(&mut self, doc: &mut crate::Document) -> Result<(), String> {
-        let texts: Vec<String> = doc.content.iter().map(|s| s.text.clone()).collect();
-        let embeddings = self.embed(texts)?;
-        for (section, emb) in doc.content.iter_mut().zip(embeddings) {
-            section.embedding = Some(emb);
-        }
-        // document-level mean pool section embeddings
-        if !doc.content.is_empty() {
-            let dim = doc.content[0].embedding.as_ref().map_or(0, |e| e.len());
-            if dim > 0 {
-                let mut pooled = vec![0.0f32; dim];
-                for section in &doc.content {
-                    if let Some(ref emb) = section.embedding {
-                        for (p, e) in pooled.iter_mut().zip(emb.iter()) {
-                            *p += e;
-                        }
-                    }
-                }
-                let n = doc.content.len() as f32;
-                for p in pooled.iter_mut() {
-                    *p /= n;
-                }
-                doc.embedding = pooled;
-            }
-        }
-        Ok(())
-    }
-
     /// embed all code blocks, assigning vectors in-place.
-    pub fn embed_code_blocks(&mut self, blocks: &mut [crate::CodeBlock]) -> Result<(), String> {
+    pub fn embed_code_blocks(
+        &mut self,
+        blocks: &mut [crate::CodeBlock],
+        dims: usize,
+    ) -> Result<(), String> {
         let texts: Vec<String> = blocks.iter().map(|b| b.text.clone()).collect();
-        let embeddings = self.embed(texts)?;
+
+        let embeddings = self.embed(texts, Some(texts.len()))?;
+
         for (block, emb) in blocks.iter_mut().zip(embeddings) {
             block.embedding = Some(emb);
         }

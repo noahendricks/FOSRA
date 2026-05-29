@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 
-use fosra::types::CodeSource;
+use fosra::ingestion::code_types::CodeSource;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

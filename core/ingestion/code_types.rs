@@ -1,8 +1,12 @@
+use crate::ingestion::IsSection;
+use crate::processing::embedding::EmbeddingEngine;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::LazyLock;
 use std::{collections::HashMap, ffi::OsStr, path::PathBuf, str::FromStr};
+use surrealdb::types::SurrealValue;
 use treemd::{self, HeadingNode, parse_markdown};
 
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display, EnumString};
 use tree_sitter::{Language, Node, Parser, TreeCursor};
@@ -896,179 +900,6 @@ pub enum Role {
     Assistant,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Document {
-    pub id: String,
-    pub content: Vec<Section>,
-    pub metadata: DocumentMetadata,
-    pub embedding: Vec<f32>,
-    pub content_hash: u64,
-}
-
-impl Document {
-    pub fn walk_md(path: PathBuf) -> Result<Document, String> {
-        let doc_str =
-            std::fs::read_to_string(&path).map_err(|e| format!("Error reading file: {}", e))?;
-        let doc_bytes = doc_str.as_bytes();
-
-        let tree = parse_markdown(&doc_str).build_tree();
-
-        fn walk_children(
-            heading: HeadingNode,
-            parent_path: &String,
-            doc: &[u8],
-            sibling_end: &usize,
-        ) -> Vec<Section> {
-            let mut sections: Vec<Section> = Vec::new();
-
-            let updated_path = format!(
-                "H{}::{}::{}",
-                heading.heading.level.to_string().as_str(),
-                &heading.heading.text,
-                parent_path.clone(),
-            );
-
-            let start = *sibling_end;
-            let end = heading.heading.offset;
-
-            let curr = Section {
-                path: updated_path,
-                level: heading.heading.level,
-                text: String::from_utf8(doc[start..end].to_vec()).unwrap(),
-                start,
-                end,
-                p_path: parent_path.clone(),
-                embedding: None,
-                keywords: Vec::new(),
-            };
-
-            sections.push(curr.clone());
-
-            if !heading.children.is_empty() {
-                for child in heading.children {
-                    let walk_out = walk_children(
-                        child,
-                        &curr.path,
-                        doc,
-                        &sections.last().unwrap_or(&curr).end,
-                    );
-                    sections.extend(walk_out);
-                }
-            }
-            sections
-        }
-
-        let sections = walk_children(tree[0].clone(), &tree[0].heading.text, doc_bytes, &0);
-
-        let id = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("document")
-            .to_string();
-
-        // Compute content hash from whitespace-normalized text
-        let cleaned: String = doc_str
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        let mut hasher = std::hash::DefaultHasher::new();
-        use std::hash::Hash;
-        cleaned.hash(&mut hasher);
-        let content_hash = hasher.finish();
-
-        Ok(Document {
-            id,
-            content: sections,
-            metadata: DocumentMetadata {
-                path: Some(path),
-                ..Default::default()
-            },
-            embedding: Vec::new(),
-            content_hash,
-        })
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Section {
-    pub path: String,
-    pub level: usize,
-    pub text: String,
-    pub start: usize,
-    pub end: usize,
-
-    pub p_path: String,
-    pub embedding: Option<Vec<f32>>,
-    pub keywords: Vec<Keyword>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DocumentMetadata {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<PathBuf>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub subject: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub authors: Option<Vec<String>>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub keywords: Option<Vec<String>>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub language: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extension: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mime: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub modified_at: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extracted_keywords: Option<Vec<Keyword>>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub modified_by: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extraction_duration_ms: Option<u64>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub category: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<Vec<String>>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Keyword {
-    pub text: String,
-    pub score: f32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct HeadingContext {
-    pub headings: Vec<HeadingLevel>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct HeadingLevel {
-    pub level: u8,
-    pub text: String,
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ScopePath {
     pub segments: Vec<ScopeSegment>,
@@ -1209,6 +1040,11 @@ impl CodeBlock {
     }
 }
 
+impl IsSection for CodeBlock {
+    fn text(&self) -> &str {
+        &self.text
+    }
+}
 pub struct CodeSource {
     pub path: PathBuf,
     pub language: SupportedLanguage,
@@ -2106,6 +1942,49 @@ impl CodeSource {
             imports: code_parser.imports,
             blocks: code_parser.blocks,
         })
+    }
+    /// Embeds sections in-place
+    /// ```
+    /// Section.embedding //<- mutated for each
+    /// ```
+    pub fn embed_blocks_mut(
+        &mut self,
+        dims: usize,
+        batch_size: usize,
+        embedder: EmbeddingsE,
+    ) -> Result<Vec<f32>> {
+        let mut embeddings = self
+            .model
+            .embed(texts, Some(batch_size))
+            .map_err(|e| anyhow!("failed because {e}"))?;
+
+        for vec in &mut embeddings {
+            if vec.len() > dims {
+                vec.truncate(dims);
+            }
+        }
+
+        // place embeddings
+        for (i, section) in sections.iter_mut().enumerate() {
+            section.embedding = Some(embeddings[i].clone());
+        }
+
+        // document level embedding from N section vectors
+        let n = embeddings.len() as f32;
+        let mut doc_embedding = vec![0.0; dims];
+
+        // consolidate onto single embedding
+        for emb in embeddings.as_slice() {
+            for (out, &val) in doc_embedding.iter_mut().zip(emb.iter()) {
+                *out += val;
+            }
+        }
+        // normalize by N vectors
+        for val in doc_embedding.iter_mut() {
+            *val /= n;
+        }
+
+        Ok(doc_embedding)
     }
 }
 

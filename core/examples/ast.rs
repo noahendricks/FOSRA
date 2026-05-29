@@ -13,7 +13,7 @@ use std::str::FromStr;
 use console::{Term, measure_text_width};
 use tree_sitter::{Node, Parser};
 
-use fosra::{ImportBlock, LANGUAGE_MAPPING, SupportedLanguage, types::flatten_import_container};
+use fosra::{ImportBlock, LANGUAGE_MAPPING, SupportedLanguage, flatten_import_container};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
