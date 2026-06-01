@@ -5,6 +5,7 @@
 //! print_node_tree!(node, source);
 //! ```
 
+use owo_colors::OwoColorize;
 use tree_sitter::Node;
 
 /// Print the full recursive subtree of `node` to stdout.
@@ -20,9 +21,10 @@ pub fn print_subtree(node: &Node, source: &str) {
         let conn = if last { "└── " } else { "├── " };
         let child_pre = if last { "    " } else { "│   " };
 
-        let field_annot = field.map_or(String::new(), |f| format!("{f}: "));
+        let field_annot = field.map_or(String::new(), |f| format!("{}: ", f.bold().bright_cyan()));
 
         let mut flags = String::new();
+
         if !node.is_named() {
             flags.push_str(" [anon]");
         }
@@ -36,11 +38,12 @@ pub fn print_subtree(node: &Node, source: &str) {
 
         println!(
             "{prefix}{conn}{field_annot}{kind}{flags} \"{text}\" ({r}:{c}..{re}:{ce})",
-            kind = node.kind(),
-            r = s.row,
-            c = s.column,
-            re = e.row,
-            ce = e.column,
+            text = text.bold().bright_white(),
+            kind = node.kind().bold().yellow(),
+            r = s.row.blue(),
+            c = s.column.red(),
+            re = e.row.bright_blue(),
+            ce = e.column.green(),
         );
 
         let mut cur = node.walk();

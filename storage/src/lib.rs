@@ -1,7 +1,7 @@
 pub mod checkpoint;
-pub mod tracer;
-pub mod surrealdb;
 pub mod error;
+pub mod surrealdb;
+pub mod tracer;
 
-pub use checkpoint::{InMemoryCheckpointStore, SqliteCheckpointStore};
-pub use tracer::{NoOpTracer, StdoutTracer, InMemoryTracer};
+// pub use checkpoint::{InMemoryCheckpointStore, SqliteCheckpointStore};
+// pub use tracer::{NoOpTracer, StdoutTracer, InMemoryTracer};

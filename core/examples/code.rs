@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 
-use fosra::ingestion::code_types::CodeSource;
+use fosra::code::CodeSource;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -14,7 +14,7 @@ fn main() {
             .join("ingest.rs")
     };
 
-    let code_source = match CodeSource::parse(file_path) {
+    let code_source = match CodeSource::parse(file_path.to_string_lossy().to_string()) {
         Ok(cs) => cs,
         Err(e) => {
             eprintln!("{}", e);
@@ -72,7 +72,7 @@ fn main() {
         println!("  (none)");
     } else {
         for (module, symbols) in &code_source.inline_imports {
-            println!("  {:?}: {:?}", module, symbols);
+            println!("  {module}: {symbols:?}");
         }
     }
     println!("\n=== All Dependencies (combined) ===");

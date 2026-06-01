@@ -1,4 +1,4 @@
-use crate::{Document, IngestionError, Keyword};
+use crate::{Document, IngestionError, Keyword, Section};
 use owo_colors::OwoColorize;
 use std::collections::HashSet;
 use std::path::Path;
@@ -52,11 +52,13 @@ pub fn parse_keywords(doc_path: &str, corpus: Option<Arc<Corpus>>) -> Result<Vec
     doc_split.retain(|w| !is_inflected(w));
 
     // extract headings
-    let headings = doc_md
+
+    let headings: Vec<&str> = doc_md
         .content
         .iter()
-        .map(|s| &s.path)
-        .collect::<Vec<&String>>();
+        .flat_map(|v| v.iter())
+        .map(|s| s.path.as_str())
+        .collect();
 
     // unique words in headings
     let mut heading_tokens: Vec<&str> = headings

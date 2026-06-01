@@ -9,7 +9,7 @@ use fastembed::{
 use ndarray::AssignElem;
 use serde::{Deserialize, Serialize};
 
-use crate::{Section, ingestion::IsSection};
+use crate::{Section, languages::CodeBlock};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptPair {
@@ -92,16 +92,12 @@ impl EmbeddingEngine {
     /// ```
     /// Section.embedding //<- mutated for each
     /// ```
-    pub fn embed_sections_mut<T>(
+    pub fn embed_doc_mut(
         &mut self,
-        sections: T,
+        sections: &mut Vec<Section>,
         dims: usize,
         batch_size: usize,
-    ) -> Result<Vec<f32>>
-    where
-        T: IntoIterator,
-        T::Item: IsSection,
-    {
+    ) -> Result<Vec<f32>> {
         let texts: Vec<String> = sections
             .iter()
             .filter_map(|s| {
@@ -201,19 +197,59 @@ impl EmbeddingEngine {
     }
 
     /// embed all code blocks, assigning vectors in-place.
-    pub fn embed_code_blocks(
+    pub fn embed_code_blocks_mut(
         &mut self,
-        blocks: &mut [crate::CodeBlock],
+        blocks: &mut Vec<CodeBlock>,
+        batch_size: usize,
         dims: usize,
-    ) -> Result<(), String> {
-        let texts: Vec<String> = blocks.iter().map(|b| b.text.clone()).collect();
-
-        let embeddings = self.embed(texts, Some(texts.len()))?;
-
-        for (block, emb) in blocks.iter_mut().zip(embeddings) {
-            block.embedding = Some(emb);
+    ) -> Result<Vec<f32>> {
+        if blocks.is_empty() {
+            return Ok(vec![0.0; dims]);
         }
-        Ok(())
+        let texts: Vec<String> = blocks.iter()
+            .filter_map(|b| {
+                if !b.text.is_empty() {
+                    Some(b.text.clone())
+                } else {
+                    Some(String::new())
+                }
+            })
+            .collect();
+        if texts.is_empty() {
+            return Ok(vec![0.0; dims]);
+        }
+
+        let mut embeddings = self
+            .embed(texts, Some(batch_size))
+            .map_err(|e| anyhow!("failed because {e}"))?;
+
+        for vec in &mut embeddings {
+            if vec.len() > dims {
+                vec.truncate(dims);
+            }
+        }
+
+        // place embeddings
+        for (i, section) in blocks.iter_mut().enumerate() {
+            section.embedding = Some(embeddings[i].clone());
+        }
+
+        // document level embedding from N section vectors
+        let n = embeddings.len() as f32;
+        let mut doc_embedding = vec![0.0; dims];
+
+        // consolidate onto single embedding
+        for emb in embeddings.as_slice() {
+            for (out, &val) in doc_embedding.iter_mut().zip(emb.iter()) {
+                *out += val;
+            }
+        }
+        // normalize by N vectors
+        for val in doc_embedding.iter_mut() {
+            *val /= n;
+        }
+
+        Ok(doc_embedding)
     }
 }
 

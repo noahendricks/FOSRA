@@ -4,5 +4,6 @@ pub mod print_tree;
 pub mod processing;
 
 pub use error::*;
-pub use ingestion::code_types::*;
-pub use ingestion::doc_types::*;
+pub use ingestion::code::languages;
+pub use ingestion::code::*;
+pub use ingestion::doc::*;

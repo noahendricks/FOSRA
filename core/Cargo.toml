@@ -45,6 +45,8 @@ markdown = "1.0.0"
 codive-lsp = "0.1.0"
 serde_json = "1.0.150"
 rand = "0.10.1"
+ignore = "0.4.25"
+chrono.workspace = true
 
 
 [dev-dependencies]
